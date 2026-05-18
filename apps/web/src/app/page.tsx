@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 
 const metrics = [
   { label: "Eventos ativos", value: "32" },
@@ -14,41 +15,46 @@ const metrics = [
   { label: "Empresas", value: "28" },
 ];
 
-const events = [
-  ["Festival de Verão", "24/05/2026", "120 profissionais"],
-  ["Show Japiassú", "26/05/2026", "85 profissionais"],
-  ["Evento Corporativo", "28/05/2026", "60 profissionais"],
+const features = [
+  [
+    "Conexão",
+    "Empresas encontram profissionais por especialidade, localização e disponibilidade.",
+  ],
+  [
+    "Segurança",
+    "Convites, contratos e pagamentos ficam registrados na plataforma.",
+  ],
+  [
+    "Gestão",
+    "Agenda, histórico, avaliações e relatórios em uma única operação.",
+  ],
 ];
 
 export default function Home() {
   return (
-    <main className="shell">
+    <main className="shell landing-shell">
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">N</span>
           <span>nexus</span>
         </div>
         <nav className="nav">
-          <a className="active">
+          <Link className="active" href="/">
             <CalendarDays size={18} />
-            Dashboard
-          </a>
-          <a>
-            <CalendarDays size={18} />
-            Eventos
-          </a>
-          <a>
-            <UsersRound size={18} />
-            Profissionais
-          </a>
-          <a>
-            <CreditCard size={18} />
-            Pagamentos
-          </a>
-          <a>
+            Início
+          </Link>
+          <Link href="/login">
             <ShieldCheck size={18} />
-            Verificações
-          </a>
+            Login
+          </Link>
+          <Link href="/cadastro/empresa">
+            <UsersRound size={18} />
+            Empresas
+          </Link>
+          <Link href="/cadastro/freelancer">
+            <CreditCard size={18} />
+            Freelancers
+          </Link>
         </nav>
       </aside>
 
@@ -58,10 +64,15 @@ export default function Home() {
             <p className="eyebrow">Marketplace + Fintech para eventos</p>
             <h1>A nova forma de fazer eventos.</h1>
           </div>
-          <button className="primary-button">
-            <Search size={18} />
-            Buscar profissionais
-          </button>
+          <div className="button-row">
+            <Link className="secondary-button" href="/cadastro/freelancer">
+              Sou freelancer
+            </Link>
+            <Link className="primary-button" href="/cadastro/empresa">
+              <Search size={18} />
+              Contratar profissionais
+            </Link>
+          </div>
         </header>
 
         <section className="metrics">
@@ -76,17 +87,14 @@ export default function Home() {
         <section className="grid">
           <article className="panel">
             <div className="panel-header">
-              <h2>Próximos eventos</h2>
+              <h2>Operação centralizada</h2>
               <BadgeCheck size={18} />
             </div>
-            <div className="event-list">
-              {events.map(([name, date, count]) => (
-                <div className="event-row" key={name}>
-                  <div>
-                    <strong>{name}</strong>
-                    <span>{date}</span>
-                  </div>
-                  <small>{count}</small>
+            <div className="feature-list">
+              {features.map(([title, text]) => (
+                <div className="feature-row" key={title}>
+                  <strong>{title}</strong>
+                  <span>{text}</span>
                 </div>
               ))}
             </div>
@@ -94,20 +102,15 @@ export default function Home() {
 
           <article className="panel payment-panel">
             <div className="panel-header">
-              <h2>Pagamentos</h2>
-              <span className="period">Maio 2026</span>
+              <h2>Fluxo do MVP</h2>
+              <span className="period">API pronta</span>
             </div>
-            <div className="chart" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
-            <strong className="total">R$ 218.400</strong>
-            <p>Total pago no período</p>
+            <ol className="flow-list">
+              <li>Empresa cria evento</li>
+              <li>Busca freelancers disponíveis</li>
+              <li>Envia convite e confirma contrato</li>
+              <li>Pagamento simulado e reputação</li>
+            </ol>
           </article>
         </section>
       </section>

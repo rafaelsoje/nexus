@@ -49,7 +49,10 @@ export class ReviewsService {
       throw new NotFoundException("Contract not found");
     }
 
-    if (contract.status !== ContractStatus.COMPLETED && contract.status !== ContractStatus.PAID) {
+    if (
+      contract.status !== ContractStatus.COMPLETED &&
+      contract.status !== ContractStatus.PAID
+    ) {
       throw new BadRequestException(
         "Contract must be completed or paid before review",
       );

@@ -150,6 +150,49 @@ h2 {
   font-weight: 600;
 }
 
+.secondary-button,
+.icon-action,
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0 1rem;
+  background: rgba(20, 26, 42, 0.9);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:hover,
+.icon-action:hover,
+.nav-button:hover {
+  border-color: rgba(0, 191, 255, 0.52);
+  color: var(--white);
+}
+
+.button-row,
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.full {
+  width: 100%;
+}
+
+.nav-button {
+  justify-content: flex-start;
+  width: 100%;
+  color: var(--muted);
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -212,6 +255,40 @@ h2 {
   margin-top: 1.25rem;
 }
 
+.feature-list,
+.list,
+.flow-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.feature-row,
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.9rem;
+  background: var(--surface-soft);
+}
+
+.feature-row {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.feature-row span,
+.list-row span,
+.flow-list,
+.auth-subtitle,
+.empty-state {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .event-row {
   display: flex;
   align-items: center;
@@ -231,6 +308,138 @@ h2 {
 .event-row small {
   color: var(--text);
   white-space: nowrap;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.auth-brand {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+}
+
+.auth-card {
+  width: min(100%, 34rem);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  background: rgba(20, 26, 42, 0.9);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+}
+
+.auth-card h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+.form {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+}
+
+.form.compact {
+  gap: 0.75rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 2.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0 0.8rem;
+  background: #090d18;
+  color: var(--text);
+  font: inherit;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1rem;
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+
+.status-message {
+  border-radius: 0.45rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.88rem;
+}
+
+.status-message.error {
+  border: 1px solid rgba(255, 99, 132, 0.35);
+  background: rgba(255, 99, 132, 0.1);
+  color: #ffb3c0;
+}
+
+.status-message.success {
+  border: 1px solid rgba(0, 191, 255, 0.35);
+  background: rgba(0, 191, 255, 0.1);
+  color: #9ee9ff;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 0.45rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.icon-action {
+  min-height: 2.1rem;
+  padding: 0 0.65rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.icon-action.ghost {
+  color: var(--muted);
+}
+
+.wallet-balance,
+.admin-count {
+  margin-top: 1.25rem;
+  color: var(--white);
+  font-size: 2rem;
+  font-weight: 700;
 }
 
 .chart {
@@ -300,6 +509,10 @@ h2 {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -316,5 +529,18 @@ h2 {
   .event-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .button-row,
+  .form-grid,
+  .list-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .primary-button,
+  .secondary-button {
+    width: 100%;
   }
 }
