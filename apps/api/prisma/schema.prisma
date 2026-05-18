@@ -1,0 +1,355 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  COMPANY
+  FREELANCER
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  INVITING
+  CONFIRMED
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum ContractStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  DISPUTED
+  PAID
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  CHARGEBACK
+  RELEASED_TO_FREELANCER
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+  FEE
+  PAYOUT
+  REFUND
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+model User {
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  passwordHash      String
+  role              UserRole
+  phone             String?
+  refreshTokenHash  String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  companyProfile    CompanyProfile?
+  freelancerProfile FreelancerProfile?
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+}
+
+model CompanyProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName        String
+  document           String?
+  responsibleName    String
+  phone              String?
+  email              String
+  logoUrl            String?
+  city               String?
+  state              String?
+  verificationStatus VerificationStatus @default(PENDING)
+  ratingAverage      Decimal            @default(0) @db.Decimal(3, 2)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  events             Event[]
+  invitations        Invitation[]
+  contracts          Contract[]
+  wallet             Wallet?
+  reviewsGiven       Review[]           @relation("CompanyReviewsGiven")
+  reviewsReceived    Review[]           @relation("CompanyReviewsReceived")
+}
+
+model FreelancerProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName        String?
+  avatarUrl          String?
+  city               String?
+  state              String?
+  tools              String?
+  transportation     String?
+  dailyRateCents     Int?
+  bankData           Json?
+  verificationStatus VerificationStatus @default(PENDING)
+  ratingAverage      Decimal            @default(0) @db.Decimal(3, 2)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  skills             FreelancerSkill[]
+  invitations        Invitation[]
+  contracts          Contract[]
+  availability       Availability[]
+  wallet             Wallet?
+  reviewsGiven       Review[]           @relation("FreelancerReviewsGiven")
+  reviewsReceived    Review[]           @relation("FreelancerReviewsReceived")
+}
+
+model Skill {
+  id           String             @id @default(cuid())
+  name         String             @unique
+  slug         String             @unique
+  description  String?
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  freelancers  FreelancerSkill[]
+  requirements EventRequirement[]
+}
+
+model FreelancerSkill {
+  freelancerId   String
+  skillId        String
+  dailyRateCents Int?
+  createdAt      DateTime          @default(now())
+  freelancer     FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  skill          Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([freelancerId, skillId])
+}
+
+model Event {
+  id                   String             @id @default(cuid())
+  companyId            String
+  company              CompanyProfile     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                 String
+  startsAt             DateTime
+  endsAt               DateTime
+  location             String
+  city                 String?
+  state                String?
+  description          String?
+  eventType            String?
+  desiredProfessionals Int                @default(1)
+  status               EventStatus        @default(DRAFT)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  requirements         EventRequirement[]
+  invitations          Invitation[]
+  contracts            Contract[]
+}
+
+model EventRequirement {
+  id             String @id @default(cuid())
+  eventId        String
+  skillId        String
+  quantity       Int    @default(1)
+  dailyRateCents Int?
+  event          Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  skill          Skill  @relation(fields: [skillId], references: [id])
+}
+
+model Invitation {
+  id           String            @id @default(cuid())
+  eventId      String
+  companyId    String
+  freelancerId String
+  status       InvitationStatus  @default(PENDING)
+  message      String?
+  expiresAt    DateTime
+  respondedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company      CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  contract     Contract?
+}
+
+model Contract {
+  id               String            @id @default(cuid())
+  eventId          String
+  companyId        String
+  freelancerId     String
+  invitationId     String?           @unique
+  status           ContractStatus    @default(PENDING_PAYMENT)
+  amountCents      Int
+  platformFeeCents Int               @default(0)
+  startsAt         DateTime
+  endsAt           DateTime
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company          CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer       FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  invitation       Invitation?       @relation(fields: [invitationId], references: [id])
+  payment          Payment?
+  reviews          Review[]
+  disputes         Dispute[]
+}
+
+model Availability {
+  id           String            @id @default(cuid())
+  freelancerId String
+  startsAt     DateTime
+  endsAt       DateTime
+  isAvailable  Boolean           @default(false)
+  reason       String?
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id                    String         @id @default(cuid())
+  contractId            String         @unique
+  status                PaymentStatus  @default(PENDING)
+  grossAmountCents      Int
+  freelancerAmountCents Int
+  platformFeeCents      Int
+  gatewayTransactionId  String?
+  paidAt                DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  contract              Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  splits                PaymentSplit[]
+}
+
+model PaymentSplit {
+  id                 String  @id @default(cuid())
+  paymentId          String
+  recipientType      String
+  amountCents        Int
+  gatewayRecipientId String?
+  payment            Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+model Wallet {
+  id           String             @id @default(cuid())
+  companyId    String?            @unique
+  freelancerId String?            @unique
+  balanceCents Int                @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  company      CompanyProfile?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer   FreelancerProfile? @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  payouts      Payout[]
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  walletId    String
+  type        TransactionType
+  amountCents Int
+  description String?
+  createdAt   DateTime        @default(now())
+  wallet      Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  id                   String        @id @default(cuid())
+  walletId             String
+  amountCents          Int
+  status               PaymentStatus @default(PENDING)
+  gatewayTransactionId String?
+  createdAt            DateTime      @default(now())
+  wallet               Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id                    String             @id @default(cuid())
+  contractId            String
+  companyReviewerId     String?
+  freelancerReviewerId  String?
+  companyReviewedId     String?
+  freelancerReviewedId  String?
+  punctuality           Int?
+  technicalQuality      Int?
+  professionalPosture   Int?
+  communication         Int?
+  organization          Int?
+  informationClarity    Int?
+  payment               Int?
+  professionalTreatment Int?
+  overallRating         Int
+  comment               String?
+  createdAt             DateTime           @default(now())
+  contract              Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  companyReviewer       CompanyProfile?    @relation("CompanyReviewsGiven", fields: [companyReviewerId], references: [id])
+  freelancerReviewer    FreelancerProfile? @relation("FreelancerReviewsGiven", fields: [freelancerReviewerId], references: [id])
+  companyReviewed       CompanyProfile?    @relation("CompanyReviewsReceived", fields: [companyReviewedId], references: [id])
+  freelancerReviewed    FreelancerProfile? @relation("FreelancerReviewsReceived", fields: [freelancerReviewedId], references: [id])
+}
+
+model Dispute {
+  id         String        @id @default(cuid())
+  contractId String
+  reason     String
+  status     DisputeStatus @default(OPEN)
+  details    String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  contract   Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
