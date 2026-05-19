@@ -190,7 +190,7 @@ Dashboard:
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
 - `/dashboard/disputas`: abertura, histórico e resolução admin de disputas.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.
-- `/dashboard/usuarios`: listagem admin e ativação/desativação de acessos.
+- `/dashboard/usuarios`: listagem admin com filtros e ativação/desativação de acessos.
 - `/dashboard/perfil`: dados de perfil, especialidades e disponibilidade.
 
 ## Fluxos Principais

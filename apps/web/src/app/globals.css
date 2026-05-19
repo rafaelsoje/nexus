@@ -649,6 +649,31 @@ input.compact-checkbox {
   gap: 0.75rem;
 }
 
+.filters-grid {
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.filter-summary {
+  display: grid;
+  gap: 0.4rem;
+  min-height: 2.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  background: var(--surface-soft);
+}
+
+.filter-summary span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.filter-summary strong {
+  color: var(--white);
+}
+
 .requirement-editor {
   display: grid;
   gap: 0.75rem;

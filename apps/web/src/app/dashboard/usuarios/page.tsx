@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { UserCog, UsersRound } from "lucide-react";
+import { Search, UserCog, UsersRound } from "lucide-react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -21,6 +21,9 @@ const roleLabels: Record<AdminUser["role"], string> = {
 export default function UsersPage() {
   const session = useRequiredSession();
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -37,6 +40,23 @@ export default function UsersPage() {
     () => users.filter((user) => user.role === "FREELANCER").length,
     [users],
   );
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" ? user.isActive : !user.isActive);
+      const matchesSearch =
+        !normalizedSearch ||
+        [user.name, user.email, user.phone ?? ""].some((value) =>
+          value.toLowerCase().includes(normalizedSearch),
+        );
+
+      return matchesRole && matchesStatus && matchesSearch;
+    });
+  }, [roleFilter, searchTerm, statusFilter, users]);
 
   useEffect(() => {
     if (!session) {
@@ -124,8 +144,52 @@ export default function UsersPage() {
           </section>
 
           <section className="dashboard-grid">
+            <article className="panel report-panel">
+              <div className="panel-header">
+                <h2>Filtros</h2>
+                <Search size={18} />
+              </div>
+              <div className="form-grid filters-grid">
+                <label className="field">
+                  <span>Buscar</span>
+                  <input
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Nome, e-mail ou telefone"
+                    value={searchTerm}
+                  />
+                </label>
+                <label className="field">
+                  <span>Papel</span>
+                  <select
+                    onChange={(event) => setRoleFilter(event.target.value)}
+                    value={roleFilter}
+                  >
+                    <option value="ALL">Todos</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="COMPANY">Empresa</option>
+                    <option value="FREELANCER">Freelancer</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Status</span>
+                  <select
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    value={statusFilter}
+                  >
+                    <option value="ALL">Todos</option>
+                    <option value="ACTIVE">Ativos</option>
+                    <option value="INACTIVE">Inativos</option>
+                  </select>
+                </label>
+                <div className="filter-summary">
+                  <span>Resultado</span>
+                  <strong>{filteredUsers.length}</strong>
+                </div>
+              </div>
+            </article>
+
             <ListPanel icon={<UsersRound size={18} />} title="Acessos">
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <div
                   className={`list-row ${user.isActive ? "" : "inactive-row"}`}
                   key={user.id}
@@ -144,7 +208,9 @@ export default function UsersPage() {
                   </div>
                   <div className="row-actions">
                     <button
-                      className={user.isActive ? "icon-action ghost" : "icon-action"}
+                      className={
+                        user.isActive ? "icon-action ghost" : "icon-action"
+                      }
                       disabled={user.id === session.user.id && user.isActive}
                       onClick={() => updateUserStatus(user.id, !user.isActive)}
                       type="button"
