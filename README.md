@@ -182,7 +182,7 @@ Site público:
 Dashboard:
 
 - `/dashboard`: visão geral por perfil.
-- `/dashboard/eventos`: criação e listagem de eventos.
+- `/dashboard/eventos`: criação/listagem de eventos para empresas e visão operacional para admin.
 - `/dashboard/profissionais`: busca de profissionais e envio de convites.
 - `/dashboard/convites`: convites enviados e recebidos.
 - `/dashboard/notificacoes`: central de notificações.

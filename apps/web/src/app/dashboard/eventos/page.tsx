@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, Copy, Pencil, Plus, Trash2 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -38,6 +38,19 @@ export default function EventsPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const adminMetrics = useMemo(
+    () => ({
+      total: events.length,
+      open: events.filter((event) => event.status === "OPEN").length,
+      confirmed: events.filter((event) => event.status === "CONFIRMED").length,
+      contracts: events.reduce(
+        (total, event) => total + (event.contracts?.length ?? 0),
+        0,
+      ),
+    }),
+    [events],
+  );
+
   useEffect(() => {
     if (!session) {
       return;
@@ -53,9 +66,11 @@ export default function EventsPage() {
     try {
       const [loadedSkills, loadedEvents] = await Promise.all([
         apiRequest<Skill[]>("/api/skills"),
-        session?.user.role === "COMPANY"
-          ? apiRequest<EventItem[]>("/api/events")
-          : Promise.resolve([]),
+        session?.user.role === "ADMIN"
+          ? apiRequest<EventItem[]>("/api/admin/events")
+          : session?.user.role === "COMPANY"
+            ? apiRequest<EventItem[]>("/api/events")
+            : Promise.resolve([]),
       ]);
       setSkills(loadedSkills);
       setEvents(loadedEvents);
@@ -197,6 +212,27 @@ export default function EventsPage() {
       {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
       {loading ? <EmptyState>Carregando eventos...</EmptyState> : null}
+
+      {session.user.role === "ADMIN" ? (
+        <section className="metrics">
+          <article className="metric">
+            <span>Eventos</span>
+            <strong>{adminMetrics.total}</strong>
+          </article>
+          <article className="metric">
+            <span>Abertos</span>
+            <strong>{adminMetrics.open}</strong>
+          </article>
+          <article className="metric">
+            <span>Confirmados</span>
+            <strong>{adminMetrics.confirmed}</strong>
+          </article>
+          <article className="metric">
+            <span>Contratos</span>
+            <strong>{adminMetrics.contracts}</strong>
+          </article>
+        </section>
+      ) : null}
 
       <section className="dashboard-grid">
         {session.user.role === "COMPANY" ? (
@@ -369,6 +405,13 @@ export default function EventsPage() {
                   {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
                   {item.location}
                 </span>
+                {session.user.role === "ADMIN" ? (
+                  <span>
+                    {item.company?.companyName ?? "Empresa"} -{" "}
+                    {item.invitations?.length ?? 0} convite(s) -{" "}
+                    {item.contracts?.length ?? 0} contrato(s)
+                  </span>
+                ) : null}
                 <span>{formatRequirements(item)}</span>
               </div>
               <div className="row-actions">

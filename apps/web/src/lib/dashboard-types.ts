@@ -14,6 +14,9 @@ export type EventItem = {
   eventType?: string;
   desiredProfessionals?: number;
   status: string;
+  company?: { companyName: string; city?: string; state?: string };
+  invitations?: Array<{ id: string; status: string }>;
+  contracts?: Array<{ id: string; status: string }>;
   requirements?: Array<{
     id?: string;
     skillId: string;
