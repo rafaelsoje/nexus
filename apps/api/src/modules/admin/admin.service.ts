@@ -96,12 +96,35 @@ export class AdminService {
   }
 
   updateDisputeStatus(id: string, status: DisputeStatus) {
-    return this.prisma.dispute.update({
-      where: { id },
-      data: { status },
-      include: {
-        contract: { include: { event: true, company: true, freelancer: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const dispute = await tx.dispute.update({
+        where: { id },
+        data: { status },
+        include: {
+          contract: {
+            include: { event: true, company: true, freelancer: true },
+          },
+        },
+      });
+
+      await tx.notification.createMany({
+        data: [
+          {
+            userId: dispute.contract.company.userId,
+            type: "DISPUTE_STATUS_UPDATED",
+            title: "Disputa atualizada",
+            body: `${dispute.contract.event.name}: status alterado para ${status}.`,
+          },
+          {
+            userId: dispute.contract.freelancer.userId,
+            type: "DISPUTE_STATUS_UPDATED",
+            title: "Disputa atualizada",
+            body: `${dispute.contract.event.name}: status alterado para ${status}.`,
+          },
+        ],
+      });
+
+      return dispute;
     });
   }
 }

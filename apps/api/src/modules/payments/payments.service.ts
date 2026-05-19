@@ -56,7 +56,11 @@ export class PaymentsService {
     const company = await this.findCompanyByUserId(userId);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
-      include: { payment: true, freelancer: { include: { wallet: true } } },
+      include: {
+        event: true,
+        payment: true,
+        freelancer: { include: { wallet: true } },
+      },
     });
 
     if (!contract) {
@@ -104,6 +108,15 @@ export class PaymentsService {
         data: { status: ContractStatus.CONFIRMED },
       });
 
+      await tx.notification.create({
+        data: {
+          userId: contract.freelancer.userId,
+          type: "PAYMENT_CONFIRMED",
+          title: "Pagamento confirmado",
+          body: `${company.companyName} confirmou o pagamento de ${contract.event.name}.`,
+        },
+      });
+
       return payment;
     });
   }
@@ -112,7 +125,13 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
-        contract: { include: { freelancer: { include: { wallet: true } } } },
+        contract: {
+          include: {
+            company: true,
+            event: true,
+            freelancer: { include: { wallet: true } },
+          },
+        },
       },
     });
 
@@ -150,11 +169,30 @@ export class PaymentsService {
         data: { status: ContractStatus.PAID },
       });
 
-      return tx.payment.update({
+      const releasedPayment = await tx.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.RELEASED_TO_FREELANCER },
         include: { splits: true },
       });
+
+      await tx.notification.createMany({
+        data: [
+          {
+            userId: payment.contract.freelancer.userId,
+            type: "PAYMENT_RELEASED",
+            title: "Repasse liberado",
+            body: `O repasse de ${payment.contract.event.name} entrou na sua carteira.`,
+          },
+          {
+            userId: payment.contract.company.userId,
+            type: "PAYMENT_RELEASED",
+            title: "Pagamento liberado",
+            body: `O repasse de ${payment.contract.event.name} foi liberado ao profissional.`,
+          },
+        ],
+      });
+
+      return releasedPayment;
     });
   }
 

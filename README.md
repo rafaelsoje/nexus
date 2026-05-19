@@ -19,7 +19,7 @@ Já implementado:
 - Contratos originados a partir de convites aceitos.
 - Pagamento simulado, split da plataforma e carteira do freelancer.
 - Avaliações pós-contrato com atualização automática da média de reputação.
-- Central de notificações.
+- Central de notificações com avisos automáticos para convites, pagamentos, avaliações e disputas.
 - Abertura e resolução administrativa de disputas.
 - Verificação administrativa de empresas e profissionais.
 - Relatórios operacionais básicos por perfil.
@@ -31,7 +31,7 @@ Ainda pendente para produção:
 - Recuperação de senha real.
 - Upload e validação de documentos/imagens.
 - Testes automatizados dos fluxos principais.
-- Notificações automáticas para mais eventos do sistema.
+- Notificações em tempo real, e-mail ou WhatsApp.
 - Deploy, CI e monitoramento.
 - Políticas completas de saque, chargeback e auditoria.
 

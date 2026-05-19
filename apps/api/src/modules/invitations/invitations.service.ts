@@ -81,20 +81,33 @@ export class InvitationsService {
       );
     }
 
-    return this.prisma.invitation.create({
-      data: {
-        eventId: event.id,
-        companyId: company.id,
-        freelancerId: freelancer.id,
-        expiresAt: new Date(dto.expiresAt),
-        message: dto.message,
-      },
-      include: {
-        event: true,
-        freelancer: {
-          select: { id: true, displayName: true, city: true, state: true },
+    return this.prisma.$transaction(async (tx) => {
+      const invitation = await tx.invitation.create({
+        data: {
+          eventId: event.id,
+          companyId: company.id,
+          freelancerId: freelancer.id,
+          expiresAt: new Date(dto.expiresAt),
+          message: dto.message,
         },
-      },
+        include: {
+          event: true,
+          freelancer: {
+            select: { id: true, displayName: true, city: true, state: true },
+          },
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: freelancer.userId,
+          type: "INVITATION_RECEIVED",
+          title: "Novo convite recebido",
+          body: `${company.companyName} convidou você para ${event.name}.`,
+        },
+      });
+
+      return invitation;
     });
   }
 
@@ -203,6 +216,15 @@ export class InvitationsService {
         },
       });
 
+      await tx.notification.create({
+        data: {
+          userId: invitation.company.userId,
+          type: "INVITATION_ACCEPTED",
+          title: "Convite aceito",
+          body: `${freelancer.displayName ?? "Profissional"} aceitou o convite para ${invitation.event.name}.`,
+        },
+      });
+
       return { invitation: updatedInvitation, contract };
     });
   }
@@ -218,12 +240,25 @@ export class InvitationsService {
       throw new BadRequestException("Invitation is not pending");
     }
 
-    return this.prisma.invitation.update({
-      where: { id: invitation.id },
-      data: {
-        status: InvitationStatus.DECLINED,
-        respondedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updatedInvitation = await tx.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: InvitationStatus.DECLINED,
+          respondedAt: new Date(),
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: invitation.company.userId,
+          type: "INVITATION_DECLINED",
+          title: "Convite recusado",
+          body: `${freelancer.displayName ?? "Profissional"} recusou o convite para ${invitation.event.name}.`,
+        },
+      });
+
+      return updatedInvitation;
     });
   }
 
@@ -233,7 +268,10 @@ export class InvitationsService {
   ) {
     const invitation = await this.prisma.invitation.findFirst({
       where: { id: invitationId, freelancerId },
-      include: { event: { include: { requirements: true } } },
+      include: {
+        company: true,
+        event: { include: { requirements: true } },
+      },
     });
 
     if (!invitation) {

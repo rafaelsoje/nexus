@@ -26,6 +26,7 @@ export class DisputesService {
     const participantWhere = await this.contractParticipantWhere(userId, role);
     const contract = await this.prisma.contract.findFirst({
       where: { id: dto.contractId, ...participantWhere },
+      include: { company: true, event: true, freelancer: true },
     });
 
     if (!contract) {
@@ -38,13 +39,41 @@ export class DisputesService {
         data: { status: ContractStatus.DISPUTED },
       });
 
-      return tx.dispute.create({
+      const dispute = await tx.dispute.create({
         data: {
           contractId: contract.id,
           reason: dto.reason,
           details: dto.details,
         },
       });
+
+      const recipientUserId =
+        role === UserRole.COMPANY
+          ? contract.freelancer.userId
+          : contract.company.userId;
+      const admins = await tx.user.findMany({
+        where: { role: UserRole.ADMIN, isActive: true },
+        select: { id: true },
+      });
+
+      await tx.notification.createMany({
+        data: [
+          {
+            userId: recipientUserId,
+            type: "DISPUTE_OPENED",
+            title: "Disputa aberta",
+            body: `Uma disputa foi aberta no contrato de ${contract.event.name}.`,
+          },
+          ...admins.map((admin) => ({
+            userId: admin.id,
+            type: "DISPUTE_OPENED",
+            title: "Nova disputa para análise",
+            body: `${contract.event.name}: ${dto.reason}.`,
+          })),
+        ],
+      });
+
+      return dispute;
     });
   }
 
