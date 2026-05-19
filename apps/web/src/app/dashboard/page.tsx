@@ -8,6 +8,7 @@ import {
   CreditCard,
   LogOut,
   Search,
+  Settings,
   ShieldCheck,
   Star,
   UsersRound,
@@ -543,6 +544,10 @@ export default function DashboardPage() {
           <Link href="/dashboard/pagamentos">
             <CreditCard size={18} />
             Pagamentos
+          </Link>
+          <Link href="/dashboard/perfil">
+            <Settings size={18} />
+            Perfil
           </Link>
           <button className="nav-button" onClick={logout}>
             <LogOut size={18} />

@@ -6,6 +6,7 @@ import {
   CreditCard,
   LayoutDashboard,
   LogOut,
+  Settings,
   Search,
   UsersRound,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const navItems = [
   },
   { href: "/dashboard/convites", label: "Convites", icon: Bell },
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
+  { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
 ];
 
 export function useRequiredSession() {

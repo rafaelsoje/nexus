@@ -67,6 +67,38 @@ export type WalletData = {
   }>;
 };
 
+export type AvailabilityItem = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  isAvailable: boolean;
+  reason?: string;
+};
+
+export type FreelancerProfile = {
+  id: string;
+  displayName?: string;
+  avatarUrl?: string;
+  city?: string;
+  state?: string;
+  tools?: string;
+  transportation?: string;
+  dailyRateCents?: number;
+  skills: Array<{ skill: Skill; dailyRateCents?: number }>;
+};
+
+export type CompanyProfile = {
+  id: string;
+  companyName: string;
+  document?: string;
+  responsibleName: string;
+  phone?: string;
+  email: string;
+  logoUrl?: string;
+  city?: string;
+  state?: string;
+};
+
 export type ReportSummary = {
   scope: UserRole;
   totals: Record<string, number>;
