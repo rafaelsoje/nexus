@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Copy, Pencil } from "lucide-react";
+import { CalendarDays, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import {
   DashboardShell,
@@ -12,10 +12,27 @@ import { EmptyState, Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
 import type { EventItem, Skill } from "../../../lib/dashboard-types";
 
+type RequirementRow = {
+  key: string;
+  skillId: string;
+  quantity: number;
+  dailyRate: number;
+};
+
+const emptyRequirement: RequirementRow = {
+  key: "requirement-new",
+  skillId: "",
+  quantity: 1,
+  dailyRate: 300,
+};
+
 export default function EventsPage() {
   const session = useRequiredSession();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [requirementRows, setRequirementRows] = useState<RequirementRow[]>([
+    emptyRequirement,
+  ]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -58,6 +75,19 @@ export default function EventsPage() {
     setSuccess("");
 
     try {
+      const requirements = requirementRows
+        .filter((row) => row.skillId)
+        .map((row) => ({
+          skillId: row.skillId,
+          quantity: row.quantity,
+          dailyRateCents: row.dailyRate * 100,
+        }));
+
+      if (!requirements.length) {
+        setError("Informe pelo menos uma especialidade para o evento.");
+        return;
+      }
+
       const payload = {
         name: String(form.get("name")),
         startsAt: String(form.get("startsAt")),
@@ -67,23 +97,23 @@ export default function EventsPage() {
         state: String(form.get("state")),
         description: String(form.get("description")),
         eventType: String(form.get("eventType")),
-        desiredProfessionals: Number(form.get("desiredProfessionals")),
-        requirements: [
-          {
-            skillId: String(form.get("skillId")),
-            quantity: Number(form.get("quantity")),
-            dailyRateCents: Number(form.get("dailyRate")) * 100,
-          },
-        ],
+        desiredProfessionals: requirements.reduce(
+          (total, requirement) => total + requirement.quantity,
+          0,
+        ),
+        requirements,
       };
-      await apiRequest(editingEvent ? `/api/events/${editingEvent.id}` : "/api/events", {
-        method: editingEvent ? "PATCH" : "POST",
-        body: JSON.stringify({
-          ...payload,
-        }),
-      });
+      await apiRequest(
+        editingEvent ? `/api/events/${editingEvent.id}` : "/api/events",
+        {
+          method: editingEvent ? "PATCH" : "POST",
+          body: JSON.stringify({
+            ...payload,
+          }),
+        },
+      );
       event.currentTarget.reset();
-      setEditingEvent(null);
+      resetEventForm();
       setSuccess(editingEvent ? "Evento atualizado." : "Evento criado.");
       await loadEvents();
     } catch (caught) {
@@ -91,6 +121,52 @@ export default function EventsPage() {
         caught instanceof Error ? caught.message : "Erro ao salvar evento.",
       );
     }
+  }
+
+  function addRequirementRow() {
+    setRequirementRows((current) => [...current, createEmptyRequirement()]);
+  }
+
+  function removeRequirementRow(key: string) {
+    setRequirementRows((current) =>
+      current.length === 1 ? current : current.filter((row) => row.key !== key),
+    );
+  }
+
+  function updateRequirementRow(
+    key: string,
+    field: keyof Omit<RequirementRow, "key">,
+    value: string | number,
+  ) {
+    setRequirementRows((current) =>
+      current.map((row) =>
+        row.key === key
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row,
+      ),
+    );
+  }
+
+  function startEditingEvent(item: EventItem) {
+    setEditingEvent(item);
+    setRequirementRows(
+      item.requirements?.length
+        ? item.requirements.map((requirement, index) => ({
+            key: requirement.id ?? `${item.id}-${index}`,
+            skillId: requirement.skillId,
+            quantity: requirement.quantity,
+            dailyRate: (requirement.dailyRateCents ?? 30000) / 100,
+          }))
+        : [createEmptyRequirement()],
+    );
+  }
+
+  function resetEventForm() {
+    setEditingEvent(null);
+    setRequirementRows([createEmptyRequirement()]);
   }
 
   async function handleDuplicateEvent(eventId: string) {
@@ -185,47 +261,84 @@ export default function EventsPage() {
                   placeholder="Briefing, acesso, uniforme, horários..."
                 />
               </Field>
-              <div className="form-grid">
-                <Field label="Especialidade">
-                  <select
-                    defaultValue={editingEvent?.requirements?.[0]?.skillId}
-                    name="skillId"
-                    required
+              <div className="requirement-editor">
+                <div className="panel-header">
+                  <h3>Funções do evento</h3>
+                  <button
+                    className="icon-action"
+                    onClick={addRequirementRow}
+                    type="button"
                   >
-                    {skills.map((skill) => (
-                      <option key={skill.id} value={skill.id}>
-                        {skill.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Qtd.">
-                  <input
-                    name="quantity"
-                    type="number"
-                    defaultValue={editingEvent?.requirements?.[0]?.quantity ?? 1}
-                    min={1}
-                    required
-                  />
-                </Field>
+                    <Plus size={14} />
+                    Adicionar
+                  </button>
+                </div>
+                {requirementRows.map((row) => (
+                  <div className="requirement-row" key={row.key}>
+                    <Field label="Especialidade">
+                      <select
+                        onChange={(event) =>
+                          updateRequirementRow(
+                            row.key,
+                            "skillId",
+                            event.target.value,
+                          )
+                        }
+                        required
+                        value={row.skillId}
+                      >
+                        <option value="" disabled>
+                          Selecione
+                        </option>
+                        {skills.map((skill) => (
+                          <option key={skill.id} value={skill.id}>
+                            {skill.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Qtd.">
+                      <input
+                        min={1}
+                        onChange={(event) =>
+                          updateRequirementRow(
+                            row.key,
+                            "quantity",
+                            Number(event.target.value),
+                          )
+                        }
+                        required
+                        type="number"
+                        value={row.quantity}
+                      />
+                    </Field>
+                    <Field label="Diária">
+                      <input
+                        min={0}
+                        onChange={(event) =>
+                          updateRequirementRow(
+                            row.key,
+                            "dailyRate",
+                            Number(event.target.value),
+                          )
+                        }
+                        required
+                        type="number"
+                        value={row.dailyRate}
+                      />
+                    </Field>
+                    <button
+                      aria-label="Remover função"
+                      className="icon-action ghost"
+                      disabled={requirementRows.length === 1}
+                      onClick={() => removeRequirementRow(row.key)}
+                      type="button"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <Field label="Diária">
-                <input
-                  name="dailyRate"
-                  type="number"
-                  min={0}
-                  defaultValue={
-                    (editingEvent?.requirements?.[0]?.dailyRateCents ?? 30000) /
-                    100
-                  }
-                  required
-                />
-              </Field>
-              <input
-                name="desiredProfessionals"
-                type="hidden"
-                value={editingEvent?.desiredProfessionals ?? 1}
-              />
               <input
                 name="eventType"
                 type="hidden"
@@ -237,7 +350,7 @@ export default function EventsPage() {
               {editingEvent ? (
                 <button
                   className="secondary-button full"
-                  onClick={() => setEditingEvent(null)}
+                  onClick={resetEventForm}
                   type="button"
                 >
                   Cancelar edição
@@ -264,7 +377,7 @@ export default function EventsPage() {
                   <>
                     <button
                       className="icon-action"
-                      onClick={() => setEditingEvent(item)}
+                      onClick={() => startEditingEvent(item)}
                       type="button"
                     >
                       <Pencil size={14} />
@@ -314,4 +427,11 @@ function toDateTimeLocal(value?: string) {
   const date = new Date(value);
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function createEmptyRequirement(): RequirementRow {
+  return {
+    ...emptyRequirement,
+    key: `requirement-${Date.now()}-${Math.random()}`,
+  };
 }
