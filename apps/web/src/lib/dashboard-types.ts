@@ -125,6 +125,35 @@ export type CompanyProfile = {
   state?: string;
 };
 
+export type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
+
+export type AdminCompany = CompanyProfile & {
+  verificationStatus: VerificationStatus;
+  ratingAverage?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    isActive: boolean;
+  };
+  wallet?: { balanceCents: number };
+};
+
+export type AdminFreelancer = Freelancer & {
+  verificationStatus: VerificationStatus;
+  avatarUrl?: string;
+  tools?: string;
+  transportation?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    isActive: boolean;
+  };
+  wallet?: { balanceCents: number };
+};
+
 export type ReportSummary = {
   scope: UserRole;
   totals: Record<string, number>;

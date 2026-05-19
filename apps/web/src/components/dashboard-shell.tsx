@@ -9,6 +9,7 @@ import {
   Settings,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Star,
   UsersRound,
 } from "lucide-react";
@@ -31,6 +32,11 @@ const navItems = [
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
   { href: "/dashboard/disputas", label: "Disputas", icon: ShieldAlert },
+  {
+    href: "/dashboard/verificacoes",
+    label: "Verificações",
+    icon: ShieldCheck,
+  },
   { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
 ];
 

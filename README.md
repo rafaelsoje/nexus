@@ -43,6 +43,7 @@ Web: `http://localhost:3000`
 - `/dashboard/pagamentos`: contratos, pagamentos e carteira
 - `/dashboard/avaliacoes`: reputação e avaliações pós-contrato
 - `/dashboard/disputas`: abertura, histórico e resolução admin de disputas
+- `/dashboard/verificacoes`: aprovação admin de empresas e profissionais
 - `/dashboard/perfil`: perfil, especialidades e agenda
 
 ## Contas demo
