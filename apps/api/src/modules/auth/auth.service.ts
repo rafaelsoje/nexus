@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -7,6 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { User } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
@@ -87,6 +89,70 @@ export class AuthService {
       data: { refreshTokenHash: null },
     });
     return { ok: true };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user?.isActive) {
+      return { ok: true };
+    }
+
+    const resetToken = randomBytes(32).toString("hex");
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetTokenHash: await bcrypt.hash(resetToken, 12),
+        resetTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 30),
+      },
+    });
+
+    return {
+      ok: true,
+      resetToken,
+    };
+  }
+
+  async resetPassword(token: string, password: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        resetTokenHash: { not: null },
+        resetTokenExpiresAt: { gt: new Date() },
+        isActive: true,
+      },
+    });
+    const user = await this.findUserByResetToken(users, token);
+
+    if (!user) {
+      throw new BadRequestException("Invalid or expired reset token");
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(password, 12),
+        refreshTokenHash: null,
+        resetTokenHash: null,
+        resetTokenExpiresAt: null,
+      },
+    });
+
+    return { ok: true };
+  }
+
+  private async findUserByResetToken(users: User[], token: string) {
+    for (const user of users) {
+      if (
+        user.resetTokenHash &&
+        (await bcrypt.compare(token, user.resetTokenHash))
+      ) {
+        return user;
+      }
+    }
+
+    return null;
   }
 
   private async issueTokens(user: User) {

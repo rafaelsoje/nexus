@@ -73,20 +73,22 @@ enum DisputeStatus {
 }
 
 model User {
-  id                String             @id @default(cuid())
-  name              String
-  email             String             @unique
-  passwordHash      String
-  role              UserRole
-  phone             String?
-  refreshTokenHash  String?
-  isActive          Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  companyProfile    CompanyProfile?
-  freelancerProfile FreelancerProfile?
-  notifications     Notification[]
-  auditLogs         AuditLog[]
+  id                  String             @id @default(cuid())
+  name                String
+  email               String             @unique
+  passwordHash        String
+  role                UserRole
+  phone               String?
+  refreshTokenHash    String?
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  companyProfile      CompanyProfile?
+  freelancerProfile   FreelancerProfile?
+  notifications       Notification[]
+  auditLogs           AuditLog[]
 }
 
 model CompanyProfile {

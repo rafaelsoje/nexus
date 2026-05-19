@@ -12,6 +12,7 @@ Já implementado:
 
 - Site público responsivo de apresentação da plataforma.
 - Cadastro e login para empresas, freelancers e admin.
+- Recuperação de senha com token temporário para ambiente local.
 - Dashboard logado separado por perfil.
 - Gestão de eventos.
 - Busca de profissionais disponíveis por cidade, especialidade e agenda.
@@ -29,7 +30,7 @@ Já implementado:
 Ainda pendente para produção:
 
 - Gateway real de pagamento.
-- Recuperação de senha real.
+- Envio de e-mail para recuperação de senha.
 - Upload e validação de documentos/imagens.
 - Testes automatizados dos fluxos principais.
 - Notificações em tempo real, e-mail ou WhatsApp.
@@ -156,7 +157,7 @@ Site público:
 - `/empresas`: página para empresas contratantes.
 - `/freelancers`: página para profissionais.
 - `/login`: entrada de usuários.
-- `/recuperar-senha`: tela visual de recuperação de senha.
+- `/recuperar-senha`: solicitação de token e redefinição de senha.
 - `/cadastro/empresa`: cadastro de empresa.
 - `/cadastro/freelancer`: cadastro de profissional.
 

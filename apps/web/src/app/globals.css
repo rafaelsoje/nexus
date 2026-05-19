@@ -707,6 +707,28 @@ select:focus {
   font-size: 0.9rem;
 }
 
+.dev-token {
+  display: grid;
+  gap: 0.4rem;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(0, 191, 255, 0.28);
+  border-radius: 0.45rem;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(0, 191, 255, 0.08);
+}
+
+.dev-token span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dev-token strong {
+  color: var(--white);
+  font-size: 0.82rem;
+}
+
 .status-message {
   border-radius: 0.45rem;
   margin: 1rem 0 0;
