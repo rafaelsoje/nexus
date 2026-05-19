@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings,
   Search,
+  Star,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +27,7 @@ const navItems = [
   },
   { href: "/dashboard/convites", label: "Convites", icon: Bell },
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
+  { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
   { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
 ];
 

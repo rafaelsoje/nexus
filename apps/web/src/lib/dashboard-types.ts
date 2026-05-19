@@ -57,6 +57,14 @@ export type Payment = {
   contract?: Contract;
 };
 
+export type Review = {
+  id: string;
+  overallRating: number;
+  comment?: string;
+  createdAt: string;
+  contract?: Contract;
+};
+
 export type WalletData = {
   balanceCents: number;
   transactions: Array<{

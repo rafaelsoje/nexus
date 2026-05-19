@@ -545,6 +545,10 @@ export default function DashboardPage() {
             <CreditCard size={18} />
             Pagamentos
           </Link>
+          <Link href="/dashboard/avaliacoes">
+            <Star size={18} />
+            Avaliações
+          </Link>
           <Link href="/dashboard/perfil">
             <Settings size={18} />
             Perfil
