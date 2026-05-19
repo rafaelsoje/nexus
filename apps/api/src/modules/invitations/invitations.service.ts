@@ -7,6 +7,7 @@ import {
 import { ContractStatus, InvitationStatus } from "@prisma/client";
 import { ContractsService } from "../contracts/contracts.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { CreateBulkInvitationDto } from "./dto/create-bulk-invitation.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
 
 @Injectable()
@@ -109,6 +110,42 @@ export class InvitationsService {
 
       return invitation;
     });
+  }
+
+  async createBulk(userId: string, dto: CreateBulkInvitationDto) {
+    const uniqueFreelancerIds = [...new Set(dto.freelancerIds)];
+    const invited = [];
+    const skipped = [];
+
+    for (const freelancerId of uniqueFreelancerIds) {
+      try {
+        const invitation = await this.create(userId, {
+          eventId: dto.eventId,
+          freelancerId,
+          expiresAt: dto.expiresAt,
+          message: dto.message,
+        });
+        invited.push(invitation);
+      } catch (caught) {
+        skipped.push({
+          freelancerId,
+          reason:
+            caught instanceof Error
+              ? caught.message
+              : "Invitation could not be created",
+        });
+      }
+    }
+
+    return {
+      invited,
+      skipped,
+      totals: {
+        requested: uniqueFreelancerIds.length,
+        invited: invited.length,
+        skipped: skipped.length,
+      },
+    };
   }
 
   async listSent(userId: string) {

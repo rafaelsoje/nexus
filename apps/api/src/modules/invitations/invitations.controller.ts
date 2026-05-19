@@ -7,6 +7,7 @@ import {
 import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { CreateBulkInvitationDto } from "./dto/create-bulk-invitation.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
 import { InvitationsService } from "./invitations.service";
 
@@ -22,6 +23,15 @@ export class InvitationsController {
     @Body() dto: CreateInvitationDto,
   ) {
     return this.invitationsService.create(user.sub, dto);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @Post("bulk")
+  createBulk(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateBulkInvitationDto,
+  ) {
+    return this.invitationsService.createBulk(user.sub, dto);
   }
 
   @Roles(UserRole.COMPANY)

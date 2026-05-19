@@ -15,7 +15,7 @@ Já implementado:
 - Dashboard logado separado por perfil.
 - Gestão de eventos.
 - Busca de profissionais disponíveis por cidade, especialidade e agenda.
-- Convites entre empresa e freelancer.
+- Convites individuais ou em lote entre empresa e freelancers.
 - Contratos originados a partir de convites aceitos.
 - Pagamento simulado, split da plataforma e carteira do freelancer.
 - Avaliações pós-contrato com atualização automática da média de reputação.

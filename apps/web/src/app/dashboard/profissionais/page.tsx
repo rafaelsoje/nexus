@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, UsersRound } from "lucide-react";
+import { Send, Search, UsersRound } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import {
   DashboardShell,
@@ -20,6 +20,9 @@ export default function ProfessionalsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [freelancers, setFreelancers] = useState<Freelancer[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [selectedFreelancerIds, setSelectedFreelancerIds] = useState<string[]>(
+    [],
+  );
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -52,6 +55,7 @@ export default function ProfessionalsPage() {
       setSkills(loadedSkills);
       setFreelancers(loadedFreelancers);
       setEvents(loadedEvents);
+      setSelectedFreelancerIds([]);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -79,6 +83,7 @@ export default function ProfessionalsPage() {
         )}`,
       );
       setFreelancers(data);
+      setSelectedFreelancerIds([]);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -107,12 +112,63 @@ export default function ProfessionalsPage() {
         }),
       });
       setSuccess("Convite enviado.");
+      setSelectedFreelancerIds((current) =>
+        current.filter((item) => item !== freelancerId),
+      );
       await loadProfessionals();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao enviar convite.",
       );
     }
+  }
+
+  async function inviteSelectedFreelancers() {
+    const eventId = selectedEventId || events[0]?.id;
+
+    if (!eventId) {
+      setError("Selecione um evento antes de enviar convites.");
+      return;
+    }
+
+    if (!selectedFreelancerIds.length) {
+      setError("Selecione pelo menos um profissional.");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await apiRequest<{
+        totals: { invited: number; skipped: number };
+      }>("/api/invitations/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          eventId,
+          freelancerIds: selectedFreelancerIds,
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+          message: "Convite enviado pela plataforma NEXO.",
+        }),
+      });
+      setSelectedFreelancerIds([]);
+      setSuccess(
+        `${result.totals.invited} convite(s) enviado(s). ${result.totals.skipped} ignorado(s).`,
+      );
+      await loadProfessionals();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao enviar convites.",
+      );
+    }
+  }
+
+  function toggleFreelancerSelection(freelancerId: string) {
+    setSelectedFreelancerIds((current) =>
+      current.includes(freelancerId)
+        ? current.filter((item) => item !== freelancerId)
+        : [...current, freelancerId],
+    );
   }
 
   if (!session) {
@@ -176,22 +232,47 @@ export default function ProfessionalsPage() {
         <article className="panel report-panel">
           <div className="panel-header">
             <h2>Base de profissionais</h2>
-            <UsersRound size={18} />
+            <div className="row-actions">
+              {session.user.role === "COMPANY" ? (
+                <button
+                  className="icon-action"
+                  disabled={!selectedFreelancerIds.length}
+                  onClick={inviteSelectedFreelancers}
+                  type="button"
+                >
+                  <Send size={14} />
+                  Convidar selecionados
+                </button>
+              ) : null}
+              <UsersRound size={18} />
+            </div>
           </div>
           <div className="list">
             {freelancers.map((freelancer) => (
               <div className="list-row" key={freelancer.id}>
-                <div>
-                  <strong>{freelancer.displayName ?? "Profissional"}</strong>
-                  <span>
-                    {freelancer.city ?? "Cidade não informada"}
-                    {freelancer.dailyRateCents
-                      ? ` - ${formatCurrency(freelancer.dailyRateCents)}`
-                      : ""}
-                    {freelancer.isAvailable === false
-                      ? ` - ${freelancer.blockingReason}`
-                      : ""}
-                  </span>
+                <div className="selectable-row-content">
+                  {session.user.role === "COMPANY" ? (
+                    <input
+                      aria-label={`Selecionar ${freelancer.displayName ?? "profissional"}`}
+                      checked={selectedFreelancerIds.includes(freelancer.id)}
+                      className="compact-checkbox"
+                      disabled={freelancer.isAvailable === false}
+                      onChange={() => toggleFreelancerSelection(freelancer.id)}
+                      type="checkbox"
+                    />
+                  ) : null}
+                  <div>
+                    <strong>{freelancer.displayName ?? "Profissional"}</strong>
+                    <span>
+                      {freelancer.city ?? "Cidade não informada"}
+                      {freelancer.dailyRateCents
+                        ? ` - ${formatCurrency(freelancer.dailyRateCents)}`
+                        : ""}
+                      {freelancer.isAvailable === false
+                        ? ` - ${freelancer.blockingReason}`
+                        : ""}
+                    </span>
+                  </div>
                 </div>
                 {session.user.role === "COMPANY" ? (
                   <button

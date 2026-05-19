@@ -196,6 +196,19 @@ h3 {
   flex-wrap: wrap;
 }
 
+.selectable-row-content {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+input.compact-checkbox {
+  width: 1.1rem;
+  min-height: 1.1rem;
+  accent-color: var(--primary);
+}
+
 .full {
   width: 100%;
 }
