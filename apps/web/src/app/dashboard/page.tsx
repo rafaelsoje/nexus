@@ -13,6 +13,7 @@ import {
   UsersRound,
   Wallet,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type React from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -523,22 +524,26 @@ export default function DashboardPage() {
           <span>nexus</span>
         </div>
         <nav className="nav">
-          <a className="active">
+          <Link className="active" href="/dashboard">
             <CalendarDays size={18} />
             Dashboard
-          </a>
-          <a>
+          </Link>
+          <Link href="/dashboard/eventos">
             <BriefcaseBusiness size={18} />
             Eventos
-          </a>
-          <a>
+          </Link>
+          <Link href="/dashboard/profissionais">
             <UsersRound size={18} />
             Profissionais
-          </a>
-          <a>
+          </Link>
+          <Link href="/dashboard/convites">
+            <Bell size={18} />
+            Convites
+          </Link>
+          <Link href="/dashboard/pagamentos">
             <CreditCard size={18} />
             Pagamentos
-          </a>
+          </Link>
           <button className="nav-button" onClick={logout}>
             <LogOut size={18} />
             Sair

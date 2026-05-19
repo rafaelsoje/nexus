@@ -36,6 +36,10 @@ Web: `http://localhost:3000`
 - `/cadastro/empresa`: cadastro de empresas contratantes
 - `/cadastro/freelancer`: cadastro de profissionais
 - `/dashboard`: área logada por perfil
+- `/dashboard/eventos`: gestão de eventos
+- `/dashboard/profissionais`: busca e convite de profissionais
+- `/dashboard/convites`: convites enviados/recebidos
+- `/dashboard/pagamentos`: contratos, pagamentos e carteira
 
 ## Contas demo
 
