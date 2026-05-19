@@ -48,8 +48,8 @@ export default function DisputesPage() {
 
     try {
       if (session?.user.role === "ADMIN") {
+        setDisputes(await apiRequest<Dispute[]>("/api/admin/disputes"));
         setContracts([]);
-        setDisputes([]);
         return;
       }
 
@@ -93,6 +93,24 @@ export default function DisputesPage() {
     }
   }
 
+  async function updateDisputeStatus(disputeId: string, status: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/admin/disputes/${disputeId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setSuccess("Status da disputa atualizado.");
+      await loadDisputes();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao atualizar disputa.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -108,10 +126,58 @@ export default function DisputesPage() {
       {loading ? <EmptyState>Carregando disputas...</EmptyState> : null}
 
       {session.user.role === "ADMIN" ? (
-        <EmptyState>
-          A resolução administrativa de disputas será operada no próximo módulo
-          do painel admin.
-        </EmptyState>
+        <section className="dashboard-grid">
+          <ListPanel
+            icon={<BriefcaseBusiness size={18} />}
+            title="Disputas da plataforma"
+          >
+            {disputes.map((dispute) => (
+              <div className="list-row" key={dispute.id}>
+                <div>
+                  <strong>
+                    {dispute.contract?.event?.name ?? dispute.reason}
+                  </strong>
+                  <span>
+                    {dispute.reason} - {dispute.status}
+                    {dispute.details ? ` - ${dispute.details}` : ""}
+                  </span>
+                </div>
+                <div className="row-actions">
+                  {dispute.status === "OPEN" ? (
+                    <button
+                      className="icon-action"
+                      onClick={() =>
+                        updateDisputeStatus(dispute.id, "UNDER_REVIEW")
+                      }
+                    >
+                      Em análise
+                    </button>
+                  ) : null}
+                  {dispute.status !== "RESOLVED" ? (
+                    <button
+                      className="icon-action"
+                      onClick={() =>
+                        updateDisputeStatus(dispute.id, "RESOLVED")
+                      }
+                    >
+                      Resolver
+                    </button>
+                  ) : null}
+                  {dispute.status !== "REJECTED" ? (
+                    <button
+                      className="icon-action ghost"
+                      onClick={() =>
+                        updateDisputeStatus(dispute.id, "REJECTED")
+                      }
+                    >
+                      Rejeitar
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </ListPanel>
+        </section>
       ) : (
         <section className="dashboard-grid">
           <article className="panel">

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { VerificationStatus } from "@prisma/client";
+import { DisputeStatus, VerificationStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -92,6 +92,16 @@ export class AdminService {
     return this.prisma.freelancerProfile.update({
       where: { id },
       data: { verificationStatus: status },
+    });
+  }
+
+  updateDisputeStatus(id: string, status: DisputeStatus) {
+    return this.prisma.dispute.update({
+      where: { id },
+      data: { status },
+      include: {
+        contract: { include: { event: true, company: true, freelancer: true } },
+      },
     });
   }
 }
