@@ -147,7 +147,25 @@ Após rodar `pnpm prisma:seed`, use:
 - Empresa: `empresa@nexo.local` / `Nexo@12345`
 - Freelancer: `freelancer@nexo.local` / `Nexo@12345`
 
-O seed também cria um evento demo, um convite aceito e um contrato pendente de pagamento para validar o fluxo empresa -> pagamento -> admin libera -> carteira do freelancer.
+Contas extras de empresas:
+
+- `aurora@nexo.local` / `Nexo@12345`
+- `litoral@nexo.local` / `Nexo@12345`
+- `sertao@nexo.local` / `Nexo@12345`
+
+Contas extras de freelancers:
+
+- `audio@nexo.local` / `Nexo@12345`
+- `luz@nexo.local` / `Nexo@12345`
+- `foto@nexo.local` / `Nexo@12345`
+- `dj@nexo.local` / `Nexo@12345`
+- `recepcao@nexo.local` / `Nexo@12345`
+- `seguranca@nexo.local` / `Nexo@12345`
+- `bar@nexo.local` / `Nexo@12345`
+- `streaming@nexo.local` / `Nexo@12345`
+- `montagem@nexo.local` / `Nexo@12345`
+
+O seed cria uma base de testes com 4 empresas, 10 freelancers, 5 eventos, múltiplas especialidades, convites pendentes/aceitos/recusados, contratos em diferentes status, pagamentos simulados, carteira com repasse, avaliações, notificações, disponibilidade bloqueada e disputa em análise.
 
 ## Rotas Web
 
