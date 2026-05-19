@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Copy, Pencil } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import {
   DashboardShell,
@@ -9,12 +9,13 @@ import {
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, formatCurrency } from "../../../lib/api";
 import type { EventItem, Skill } from "../../../lib/dashboard-types";
 
 export default function EventsPage() {
   const session = useRequiredSession();
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -50,38 +51,59 @@ export default function EventsPage() {
     }
   }
 
-  async function handleCreateEvent(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setError("");
     setSuccess("");
 
     try {
-      await apiRequest("/api/events", {
-        method: "POST",
+      const payload = {
+        name: String(form.get("name")),
+        startsAt: String(form.get("startsAt")),
+        endsAt: String(form.get("endsAt")),
+        location: String(form.get("location")),
+        city: String(form.get("city")),
+        state: String(form.get("state")),
+        description: String(form.get("description")),
+        eventType: String(form.get("eventType")),
+        desiredProfessionals: Number(form.get("desiredProfessionals")),
+        requirements: [
+          {
+            skillId: String(form.get("skillId")),
+            quantity: Number(form.get("quantity")),
+            dailyRateCents: Number(form.get("dailyRate")) * 100,
+          },
+        ],
+      };
+      await apiRequest(editingEvent ? `/api/events/${editingEvent.id}` : "/api/events", {
+        method: editingEvent ? "PATCH" : "POST",
         body: JSON.stringify({
-          name: String(form.get("name")),
-          startsAt: String(form.get("startsAt")),
-          endsAt: String(form.get("endsAt")),
-          location: String(form.get("location")),
-          city: String(form.get("city")),
-          state: String(form.get("state")),
-          eventType: String(form.get("eventType")),
-          requirements: [
-            {
-              skillId: String(form.get("skillId")),
-              quantity: Number(form.get("quantity")),
-              dailyRateCents: Number(form.get("dailyRate")) * 100,
-            },
-          ],
+          ...payload,
         }),
       });
       event.currentTarget.reset();
-      setSuccess("Evento criado.");
+      setEditingEvent(null);
+      setSuccess(editingEvent ? "Evento atualizado." : "Evento criado.");
       await loadEvents();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Erro ao criar evento.",
+        caught instanceof Error ? caught.message : "Erro ao salvar evento.",
+      );
+    }
+  }
+
+  async function handleDuplicateEvent(eventId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/events/${eventId}/duplicate`, { method: "POST" });
+      setSuccess("Evento duplicado.");
+      await loadEvents();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao duplicar evento.",
       );
     }
   }
@@ -104,35 +126,72 @@ export default function EventsPage() {
         {session.user.role === "COMPANY" ? (
           <article className="panel">
             <div className="panel-header">
-              <h2>Criar evento</h2>
+              <h2>{editingEvent ? "Editar evento" : "Criar evento"}</h2>
               <CalendarDays size={18} />
             </div>
-            <form className="form compact" onSubmit={handleCreateEvent}>
+            <form
+              className="form compact"
+              key={editingEvent?.id ?? "create-event"}
+              onSubmit={handleSubmitEvent}
+            >
               <Field label="Nome">
-                <input name="name" required />
+                <input
+                  defaultValue={editingEvent?.name}
+                  name="name"
+                  required
+                />
               </Field>
               <div className="form-grid">
                 <Field label="Início">
-                  <input name="startsAt" type="datetime-local" required />
+                  <input
+                    defaultValue={toDateTimeLocal(editingEvent?.startsAt)}
+                    name="startsAt"
+                    type="datetime-local"
+                    required
+                  />
                 </Field>
                 <Field label="Fim">
-                  <input name="endsAt" type="datetime-local" required />
+                  <input
+                    defaultValue={toDateTimeLocal(editingEvent?.endsAt)}
+                    name="endsAt"
+                    type="datetime-local"
+                    required
+                  />
                 </Field>
               </div>
               <Field label="Local">
-                <input name="location" required />
+                <input
+                  defaultValue={editingEvent?.location}
+                  name="location"
+                  required
+                />
               </Field>
               <div className="form-grid">
                 <Field label="Cidade">
-                  <input name="city" />
+                  <input defaultValue={editingEvent?.city} name="city" />
                 </Field>
                 <Field label="UF">
-                  <input name="state" maxLength={2} />
+                  <input
+                    defaultValue={editingEvent?.state}
+                    name="state"
+                    maxLength={2}
+                  />
                 </Field>
               </div>
+              <Field label="Descrição">
+                <input
+                  defaultValue={editingEvent?.description}
+                  name="description"
+                  placeholder="Briefing, acesso, uniforme, horários..."
+                />
+              </Field>
               <div className="form-grid">
                 <Field label="Especialidade">
-                  <select name="skillId" required>
+                  <select
+                    defaultValue={editingEvent?.requirements?.[0]?.skillId}
+                    name="skillId"
+                    required
+                  >
                     {skills.map((skill) => (
                       <option key={skill.id} value={skill.id}>
                         {skill.name}
@@ -144,7 +203,7 @@ export default function EventsPage() {
                   <input
                     name="quantity"
                     type="number"
-                    defaultValue={1}
+                    defaultValue={editingEvent?.requirements?.[0]?.quantity ?? 1}
                     min={1}
                     required
                   />
@@ -155,14 +214,35 @@ export default function EventsPage() {
                   name="dailyRate"
                   type="number"
                   min={0}
-                  defaultValue={300}
+                  defaultValue={
+                    (editingEvent?.requirements?.[0]?.dailyRateCents ?? 30000) /
+                    100
+                  }
                   required
                 />
               </Field>
-              <input name="eventType" type="hidden" value="Evento" />
+              <input
+                name="desiredProfessionals"
+                type="hidden"
+                value={editingEvent?.desiredProfessionals ?? 1}
+              />
+              <input
+                name="eventType"
+                type="hidden"
+                value={editingEvent?.eventType ?? "Evento"}
+              />
               <button className="primary-button full" type="submit">
-                Criar evento
+                {editingEvent ? "Salvar alterações" : "Criar evento"}
               </button>
+              {editingEvent ? (
+                <button
+                  className="secondary-button full"
+                  onClick={() => setEditingEvent(null)}
+                  type="button"
+                >
+                  Cancelar edição
+                </button>
+              ) : null}
             </form>
           </article>
         ) : null}
@@ -176,12 +256,62 @@ export default function EventsPage() {
                   {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
                   {item.location}
                 </span>
+                <span>{formatRequirements(item)}</span>
               </div>
-              <small>{item.status}</small>
+              <div className="row-actions">
+                <small>{item.status}</small>
+                {session.user.role === "COMPANY" ? (
+                  <>
+                    <button
+                      className="icon-action"
+                      onClick={() => setEditingEvent(item)}
+                      type="button"
+                    >
+                      <Pencil size={14} />
+                      Editar
+                    </button>
+                    <button
+                      className="icon-action ghost"
+                      onClick={() => handleDuplicateEvent(item.id)}
+                      type="button"
+                    >
+                      <Copy size={14} />
+                      Duplicar
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ))}
         </ListPanel>
       </section>
     </DashboardShell>
   );
+}
+
+function formatRequirements(item: EventItem) {
+  if (!item.requirements?.length) {
+    return "Nenhum requisito informado";
+  }
+
+  return item.requirements
+    .map((requirement) => {
+      const skill = requirement.skill?.name ?? "Especialidade";
+      const rate = requirement.dailyRateCents
+        ? ` - ${formatCurrency(requirement.dailyRateCents)}`
+        : "";
+
+      return `${skill}: ${requirement.quantity} vaga(s)${rate}`;
+    })
+    .join(" | ");
+}
+
+function toDateTimeLocal(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }

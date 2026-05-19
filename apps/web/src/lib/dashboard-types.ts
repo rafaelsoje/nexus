@@ -8,8 +8,14 @@ export type EventItem = {
   startsAt: string;
   endsAt: string;
   location: string;
+  city?: string;
+  state?: string;
+  description?: string;
+  eventType?: string;
+  desiredProfessionals?: number;
   status: string;
   requirements?: Array<{
+    id?: string;
     skillId: string;
     quantity: number;
     dailyRateCents?: number;
