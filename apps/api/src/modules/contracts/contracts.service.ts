@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -56,6 +57,44 @@ export class ContractsService {
     });
   }
 
+  async updateStatus(
+    userId: string,
+    role: UserRole,
+    contractId: string,
+    status: ContractStatus,
+  ) {
+    const contract = await this.findParticipantContract(
+      userId,
+      role,
+      contractId,
+    );
+    this.assertAllowedStatusTransition(role, contract.status, status);
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedContract = await tx.contract.update({
+        where: { id: contract.id },
+        data: { status },
+        include: { event: true, company: true, freelancer: true },
+      });
+
+      const recipientUserId =
+        role === UserRole.COMPANY
+          ? contract.freelancer.userId
+          : contract.company.userId;
+
+      await tx.notification.create({
+        data: {
+          userId: recipientUserId,
+          type: "CONTRACT_STATUS_UPDATED",
+          title: "Contrato atualizado",
+          body: `${contract.event.name}: status alterado para ${status}.`,
+        },
+      });
+
+      return updatedContract;
+    });
+  }
+
   async hasScheduleConflict(
     freelancerId: string,
     startsAt: Date,
@@ -85,6 +124,69 @@ export class ContractsService {
     }
 
     return company;
+  }
+
+  private async findParticipantContract(
+    userId: string,
+    role: UserRole,
+    contractId: string,
+  ) {
+    const participantWhere =
+      role === UserRole.COMPANY
+        ? { company: { userId } }
+        : { freelancer: { userId } };
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, ...participantWhere },
+      include: { event: true, company: true, freelancer: true },
+    });
+
+    if (!contract) {
+      throw new NotFoundException("Contract not found");
+    }
+
+    return contract;
+  }
+
+  private assertAllowedStatusTransition(
+    role: UserRole,
+    currentStatus: ContractStatus,
+    nextStatus: ContractStatus,
+  ) {
+    const allowedByRole: Record<
+      Extract<UserRole, "COMPANY" | "FREELANCER">,
+      Set<ContractStatus>
+    > = {
+      [UserRole.COMPANY]: new Set([
+        ContractStatus.COMPLETED,
+        ContractStatus.NO_SHOW,
+        ContractStatus.CANCELLED,
+      ]),
+      [UserRole.FREELANCER]: new Set([
+        ContractStatus.COMPLETED,
+        ContractStatus.CANCELLED,
+      ]),
+    };
+
+    if (role === UserRole.ADMIN || !allowedByRole[role].has(nextStatus)) {
+      throw new ForbiddenException("Contract status update is not allowed");
+    }
+
+    const canComplete =
+      nextStatus === ContractStatus.COMPLETED &&
+      currentStatus === ContractStatus.CONFIRMED;
+    const canNoShow =
+      nextStatus === ContractStatus.NO_SHOW &&
+      currentStatus === ContractStatus.CONFIRMED;
+    const canCancel =
+      nextStatus === ContractStatus.CANCELLED &&
+      new Set<ContractStatus>([
+        ContractStatus.PENDING_PAYMENT,
+        ContractStatus.CONFIRMED,
+      ]).has(currentStatus);
+
+    if (!canComplete && !canNoShow && !canCancel) {
+      throw new BadRequestException("Contract status transition is invalid");
+    }
   }
 
   private async findFreelancerByUserId(userId: string) {

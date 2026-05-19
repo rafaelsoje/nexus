@@ -104,6 +104,26 @@ export default function PaymentsPage() {
     }
   }
 
+  async function updateContractStatus(contractId: string, status: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/contracts/${contractId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setSuccess("Contrato atualizado.");
+      await loadPayments();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao atualizar contrato.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -174,15 +194,23 @@ export default function PaymentsPage() {
                       {formatCurrency(contract.amountCents)} - {contract.status}
                     </span>
                   </div>
-                  {session.user.role === "COMPANY" &&
-                  contract.status === "PENDING_PAYMENT" ? (
-                    <button
-                      className="icon-action"
-                      onClick={() => payContract(contract.id)}
-                    >
-                      Pagar
-                    </button>
-                  ) : null}
+                  <div className="row-actions">
+                    {session.user.role === "COMPANY" &&
+                    contract.status === "PENDING_PAYMENT" ? (
+                      <button
+                        className="icon-action"
+                        onClick={() => payContract(contract.id)}
+                        type="button"
+                      >
+                        Pagar
+                      </button>
+                    ) : null}
+                    <ContractStatusActions
+                      contract={contract}
+                      role={session.user.role}
+                      onUpdate={updateContractStatus}
+                    />
+                  </div>
                 </div>
               ))}
             </ListPanel>
@@ -206,5 +234,54 @@ export default function PaymentsPage() {
         )}
       </section>
     </DashboardShell>
+  );
+}
+
+function ContractStatusActions({
+  contract,
+  onUpdate,
+  role,
+}: Readonly<{
+  contract: Contract;
+  onUpdate: (contractId: string, status: string) => void;
+  role: string;
+}>) {
+  const canCancel = ["PENDING_PAYMENT", "CONFIRMED"].includes(contract.status);
+  const canFinish = contract.status === "CONFIRMED";
+
+  if (role !== "COMPANY" && role !== "FREELANCER") {
+    return null;
+  }
+
+  return (
+    <>
+      {canFinish ? (
+        <button
+          className="icon-action"
+          onClick={() => onUpdate(contract.id, "COMPLETED")}
+          type="button"
+        >
+          Concluir
+        </button>
+      ) : null}
+      {role === "COMPANY" && canFinish ? (
+        <button
+          className="icon-action ghost"
+          onClick={() => onUpdate(contract.id, "NO_SHOW")}
+          type="button"
+        >
+          No-show
+        </button>
+      ) : null}
+      {canCancel ? (
+        <button
+          className="icon-action ghost"
+          onClick={() => onUpdate(contract.id, "CANCELLED")}
+          type="button"
+        >
+          Cancelar
+        </button>
+      ) : null}
+    </>
   );
 }

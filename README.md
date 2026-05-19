@@ -17,6 +17,7 @@ Já implementado:
 - Busca de profissionais disponíveis por cidade, especialidade e agenda.
 - Convites individuais ou em lote entre empresa e freelancers.
 - Contratos originados a partir de convites aceitos.
+- Ciclo de contrato com pagamento, conclusão, no-show e cancelamento.
 - Pagamento simulado, split da plataforma e carteira do freelancer.
 - Avaliações pós-contrato com atualização automática da média de reputação.
 - Central de notificações com avisos automáticos para convites, pagamentos, avaliações e disputas.
@@ -184,7 +185,8 @@ Fluxo empresa:
 5. Envia convite.
 6. Acompanha contrato.
 7. Simula pagamento.
-8. Avalia o profissional após contrato concluído ou pago.
+8. Conclui, cancela ou marca no-show.
+9. Avalia o profissional após contrato concluído ou pago.
 
 Fluxo freelancer:
 
@@ -193,7 +195,8 @@ Fluxo freelancer:
 3. Recebe convites.
 4. Aceita ou recusa convites.
 5. Acompanha contratos e carteira.
-6. Avalia a empresa após contrato concluído ou pago.
+6. Conclui ou cancela contratos elegíveis.
+7. Avalia a empresa após contrato concluído ou pago.
 
 Fluxo admin:
 
