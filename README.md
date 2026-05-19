@@ -188,7 +188,7 @@ Dashboard:
 - `/dashboard/notificacoes`: central de notificações.
 - `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse e carteira.
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
-- `/dashboard/disputas`: abertura, histórico e resolução admin de disputas.
+- `/dashboard/disputas`: abertura, histórico, filtros e resolução admin de disputas.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.
 - `/dashboard/usuarios`: listagem admin com filtros e ativação/desativação de acessos.
 - `/dashboard/perfil`: dados de perfil, especialidades e disponibilidade.
