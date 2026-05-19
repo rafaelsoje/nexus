@@ -186,7 +186,7 @@ Dashboard:
 - `/dashboard/profissionais`: busca de profissionais e envio de convites.
 - `/dashboard/convites`: convites enviados e recebidos.
 - `/dashboard/notificacoes`: central de notificações.
-- `/dashboard/pagamentos`: contratos, pagamentos simulados, liberação admin e carteira.
+- `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse e carteira.
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
 - `/dashboard/disputas`: abertura, histórico e resolução admin de disputas.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.

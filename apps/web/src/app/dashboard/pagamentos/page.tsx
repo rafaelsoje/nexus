@@ -1,7 +1,7 @@
 "use client";
 
 import { BriefcaseBusiness, CreditCard, Wallet } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -29,6 +29,27 @@ export default function PaymentsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const adminMetrics = useMemo(
+    () => ({
+      total: adminPayments.length,
+      grossAmountCents: adminPayments.reduce(
+        (total, payment) => total + payment.grossAmountCents,
+        0,
+      ),
+      freelancerAmountCents: adminPayments.reduce(
+        (total, payment) => total + payment.freelancerAmountCents,
+        0,
+      ),
+      platformFeeCents: adminPayments.reduce(
+        (total, payment) => total + payment.platformFeeCents,
+        0,
+      ),
+      pendingRelease: adminPayments.filter((payment) => payment.status === "PAID")
+        .length,
+    }),
+    [adminPayments],
+  );
 
   useEffect(() => {
     if (!session) {
@@ -138,6 +159,29 @@ export default function PaymentsPage() {
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
       {loading ? <EmptyState>Carregando pagamentos...</EmptyState> : null}
 
+      {session.user.role === "ADMIN" ? (
+        <section className="metrics">
+          <article className="metric">
+            <span>Pagamentos</span>
+            <strong>{adminMetrics.total}</strong>
+          </article>
+          <article className="metric">
+            <span>Volume bruto</span>
+            <strong>{formatCurrency(adminMetrics.grossAmountCents)}</strong>
+          </article>
+          <article className="metric">
+            <span>Repasse</span>
+            <strong>
+              {formatCurrency(adminMetrics.freelancerAmountCents)}
+            </strong>
+          </article>
+          <article className="metric">
+            <span>Taxa NEXO</span>
+            <strong>{formatCurrency(adminMetrics.platformFeeCents)}</strong>
+          </article>
+        </section>
+      ) : null}
+
       <section className="dashboard-grid">
         {session.user.role === "FREELANCER" ? (
           <ListPanel icon={<Wallet size={18} />} title="Carteira">
@@ -157,32 +201,51 @@ export default function PaymentsPage() {
         ) : null}
 
         {session.user.role === "ADMIN" ? (
-          <ListPanel
-            icon={<CreditCard size={18} />}
-            title="Pagamentos da plataforma"
-          >
-            {adminPayments.map((payment) => (
-              <div className="list-row" key={payment.id}>
-                <div>
-                  <strong>
-                    {payment.contract?.event?.name ?? "Pagamento"}
-                  </strong>
-                  <span>
-                    {formatCurrency(payment.grossAmountCents)} -{" "}
-                    {payment.status}
-                  </span>
-                </div>
-                {payment.status === "PAID" ? (
-                  <button
-                    className="icon-action"
-                    onClick={() => releasePayment(payment.id)}
-                  >
-                    Liberar
-                  </button>
-                ) : null}
+          <>
+            <article className="panel">
+              <div className="panel-header">
+                <h2>Fila de repasse</h2>
+                <Wallet size={18} />
               </div>
-            ))}
-          </ListPanel>
+              <div className="admin-count">{adminMetrics.pendingRelease}</div>
+              <p>Pagamento(s) aguardando liberação para o freelancer.</p>
+            </article>
+
+            <ListPanel
+              icon={<CreditCard size={18} />}
+              title="Pagamentos da plataforma"
+            >
+              {adminPayments.map((payment) => (
+                <div className="list-row" key={payment.id}>
+                  <div>
+                    <strong>
+                      {payment.contract?.event?.name ?? "Pagamento"}
+                    </strong>
+                    <span>
+                      {payment.contract?.company?.companyName ?? "Empresa"} -{" "}
+                      {payment.contract?.freelancer?.displayName ??
+                        "Profissional"}
+                    </span>
+                    <span>
+                      Bruto {formatCurrency(payment.grossAmountCents)} -
+                      repasse {formatCurrency(payment.freelancerAmountCents)} -
+                      taxa {formatCurrency(payment.platformFeeCents)} -{" "}
+                      {payment.status}
+                    </span>
+                  </div>
+                  {payment.status === "PAID" ? (
+                    <button
+                      className="icon-action"
+                      onClick={() => releasePayment(payment.id)}
+                      type="button"
+                    >
+                      Liberar
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </ListPanel>
+          </>
         ) : (
           <>
             <ListPanel icon={<BriefcaseBusiness size={18} />} title="Contratos">
