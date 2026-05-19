@@ -5,6 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { AdminService } from "./admin.service";
 import { UpdateDisputeStatusDto } from "./dto/update-dispute-status.dto";
+import { UpdateUserStatusDto } from "./dto/update-user-status.dto";
 import { UpdateVerificationDto } from "./dto/update-verification.dto";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -16,6 +17,14 @@ export class AdminController {
   @Get("users")
   users() {
     return this.adminService.listUsers();
+  }
+
+  @Patch("users/:id/status")
+  updateUserStatus(
+    @Param("id") id: string,
+    @Body() dto: UpdateUserStatusDto,
+  ) {
+    return this.adminService.updateUserStatus(id, dto.isActive);
   }
 
   @Get("companies")

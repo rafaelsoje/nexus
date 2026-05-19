@@ -548,6 +548,10 @@ h3 {
   background: rgba(0, 191, 255, 0.08);
 }
 
+.list-row.inactive-row {
+  opacity: 0.72;
+}
+
 .feature-row {
   align-items: flex-start;
   flex-direction: column;

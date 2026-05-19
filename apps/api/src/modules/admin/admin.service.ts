@@ -21,6 +21,25 @@ export class AdminService {
     });
   }
 
+  updateUserStatus(id: string, isActive: boolean) {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        isActive,
+        refreshTokenHash: isActive ? undefined : null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+  }
+
   listCompanies() {
     return this.prisma.companyProfile.findMany({
       orderBy: { createdAt: "desc" },

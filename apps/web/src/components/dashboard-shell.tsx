@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Star,
+  UserCog,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -37,6 +38,7 @@ const navItems = [
     label: "Verificações",
     icon: ShieldCheck,
   },
+  { href: "/dashboard/usuarios", label: "Usuários", icon: UserCog },
   { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
 ];
 

@@ -160,6 +160,16 @@ export type AdminFreelancer = Freelancer & {
   wallet?: { balanceCents: number };
 };
 
+export type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+};
+
 export type ReportSummary = {
   scope: UserRole;
   totals: Record<string, number>;

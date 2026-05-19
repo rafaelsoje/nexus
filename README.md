@@ -170,6 +170,7 @@ Dashboard:
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
 - `/dashboard/disputas`: abertura, histórico e resolução admin de disputas.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.
+- `/dashboard/usuarios`: listagem admin e ativação/desativação de acessos.
 - `/dashboard/perfil`: dados de perfil, especialidades e disponibilidade.
 
 ## Fluxos Principais
@@ -198,9 +199,10 @@ Fluxo admin:
 
 1. Acompanha relatórios e dados operacionais.
 2. Verifica empresas e profissionais.
-3. Visualiza pagamentos.
-4. Libera repasses simulados.
-5. Analisa e resolve disputas.
+3. Ativa ou desativa usuários.
+4. Visualiza pagamentos.
+5. Libera repasses simulados.
+6. Analisa e resolve disputas.
 
 ## API
 

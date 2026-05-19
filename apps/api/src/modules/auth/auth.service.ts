@@ -47,7 +47,11 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    if (
+      !user ||
+      !user.isActive ||
+      !(await bcrypt.compare(dto.password, user.passwordHash))
+    ) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
@@ -64,7 +68,8 @@ export class AuthService {
       });
 
       if (
-        !user?.refreshTokenHash ||
+        !user?.isActive ||
+        !user.refreshTokenHash ||
         !(await bcrypt.compare(refreshToken, user.refreshTokenHash))
       ) {
         throw new UnauthorizedException("Invalid refresh token");
