@@ -39,6 +39,7 @@ Web: `http://localhost:3000`
 - `/dashboard/eventos`: gestão de eventos
 - `/dashboard/profissionais`: busca e convite de profissionais
 - `/dashboard/convites`: convites enviados/recebidos
+- `/dashboard/notificacoes`: central de notificações
 - `/dashboard/pagamentos`: contratos, pagamentos e carteira
 - `/dashboard/avaliacoes`: reputação e avaliações pós-contrato
 - `/dashboard/perfil`: perfil, especialidades e agenda

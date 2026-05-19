@@ -65,6 +65,15 @@ export type Review = {
   contract?: Contract;
 };
 
+export type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  readAt?: string;
+  createdAt: string;
+};
+
 export type WalletData = {
   balanceCents: number;
   transactions: Array<{

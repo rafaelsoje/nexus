@@ -541,6 +541,10 @@ export default function DashboardPage() {
             <Bell size={18} />
             Convites
           </Link>
+          <Link href="/dashboard/notificacoes">
+            <Bell size={18} />
+            Notificações
+          </Link>
           <Link href="/dashboard/pagamentos">
             <CreditCard size={18} />
             Pagamentos

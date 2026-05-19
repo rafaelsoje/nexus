@@ -26,6 +26,7 @@ const navItems = [
     icon: UsersRound,
   },
   { href: "/dashboard/convites", label: "Convites", icon: Bell },
+  { href: "/dashboard/notificacoes", label: "Notificações", icon: Bell },
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
   { href: "/dashboard/perfil", label: "Perfil", icon: Settings },

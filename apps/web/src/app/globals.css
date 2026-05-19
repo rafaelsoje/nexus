@@ -543,6 +543,11 @@ h3 {
   background: var(--surface-soft);
 }
 
+.list-row.unread-row {
+  border-color: rgba(0, 191, 255, 0.42);
+  background: rgba(0, 191, 255, 0.08);
+}
+
 .feature-row {
   align-items: flex-start;
   flex-direction: column;
