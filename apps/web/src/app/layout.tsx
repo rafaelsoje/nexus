@@ -9,8 +9,9 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "nexus",
-  description: "A nova forma de fazer eventos.",
+  title: "NEXO | Marketplace e fintech para eventos",
+  description:
+    "Contrate freelancers de eventos, organize agendas, formalize pagamentos e acompanhe relatórios em uma única plataforma.",
 };
 
 export default function RootLayout({

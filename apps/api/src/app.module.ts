@@ -13,6 +13,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { ReviewsModule } from "./modules/reviews/reviews.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { SkillsModule } from "./modules/skills/skills.module";
 import { UsersModule } from "./modules/users/users.module";
 import { WalletModule } from "./modules/wallet/wallet.module";
@@ -33,6 +34,7 @@ import { WalletModule } from "./modules/wallet/wallet.module";
     PaymentsModule,
     WalletModule,
     ReviewsModule,
+    ReportsModule,
     NotificationsModule,
     DisputesModule,
     AdminModule,

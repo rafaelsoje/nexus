@@ -53,6 +53,34 @@ export class InvitationsService {
       );
     }
 
+    if (
+      await this.hasBlockedAvailability(
+        freelancer.id,
+        event.startsAt,
+        event.endsAt,
+      )
+    ) {
+      throw new BadRequestException(
+        "Freelancer is unavailable in this time range",
+      );
+    }
+
+    const existingInvitation = await this.prisma.invitation.findFirst({
+      where: {
+        eventId: event.id,
+        freelancerId: freelancer.id,
+        status: {
+          in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED],
+        },
+      },
+    });
+
+    if (existingInvitation) {
+      throw new BadRequestException(
+        "Freelancer already has an active invitation for this event",
+      );
+    }
+
     return this.prisma.invitation.create({
       data: {
         eventId: event.id,
@@ -135,6 +163,18 @@ export class InvitationsService {
       );
     }
 
+    if (
+      await this.hasBlockedAvailability(
+        freelancer.id,
+        invitation.event.startsAt,
+        invitation.event.endsAt,
+      )
+    ) {
+      throw new BadRequestException(
+        "Freelancer is unavailable in this time range",
+      );
+    }
+
     const amountCents =
       invitation.event.requirements[0]?.dailyRateCents ??
       freelancer.dailyRateCents ??
@@ -201,6 +241,23 @@ export class InvitationsService {
     }
 
     return invitation;
+  }
+
+  private async hasBlockedAvailability(
+    freelancerId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ) {
+    const count = await this.prisma.availability.count({
+      where: {
+        freelancerId,
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+        isAvailable: false,
+      },
+    });
+
+    return count > 0;
   }
 
   private async findCompanyByUserId(userId: string) {

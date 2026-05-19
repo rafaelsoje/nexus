@@ -27,9 +27,29 @@ API: `http://localhost:3001`
 
 Web: `http://localhost:3000`
 
+## Estrutura do produto web
+
+- `/`: site público de apresentação da NEXO
+- `/empresas`: apresentação para empresas contratantes
+- `/freelancers`: apresentação para profissionais
+- `/login`: entrada para usuários cadastrados
+- `/cadastro/empresa`: cadastro de empresas contratantes
+- `/cadastro/freelancer`: cadastro de profissionais
+- `/dashboard`: área logada por perfil
+
+## Contas demo
+
+Após rodar `pnpm prisma:seed`, use:
+
+- Admin: `admin@nexo.local` / `Nexo@12345`
+- Empresa: `empresa@nexo.local` / `Nexo@12345`
+- Freelancer: `freelancer@nexo.local` / `Nexo@12345`
+
+O seed também cria um evento demo, um convite aceito e um contrato pendente de pagamento para validar o fluxo empresa -> pagamento -> admin libera -> carteira do freelancer.
+
 ## Fase atual
 
-Fase 1 do MVP:
+MVP em validação:
 
 - Monorepo
 - API NestJS
@@ -39,6 +59,10 @@ Fase 1 do MVP:
 - Companies
 - Freelancers
 - Skills
-- Seed inicial de especialidades
+- Eventos, convites e contratos
+- Pagamento simulado, split e carteira
+- Admin básico
+- Relatórios operacionais por perfil
+- Seed de especialidades e cenário demo
 
 Os arquivos de referência de marca/produto ficam fora deste repositório.

@@ -34,6 +34,12 @@ type EventItem = {
   endsAt: string;
   location: string;
   status: string;
+  requirements?: Array<{
+    skillId: string;
+    quantity: number;
+    dailyRateCents?: number;
+    skill?: Skill;
+  }>;
 };
 type Freelancer = {
   id: string;
@@ -69,6 +75,7 @@ type Payment = {
   grossAmountCents: number;
   freelancerAmountCents: number;
   platformFeeCents: number;
+  contract?: Contract;
 };
 type WalletData = {
   balanceCents: number;
@@ -79,13 +86,39 @@ type WalletData = {
     description?: string;
   }>;
 };
+type AvailabilityItem = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  isAvailable: boolean;
+  reason?: string;
+};
+type FreelancerProfile = {
+  id: string;
+  displayName?: string;
+  dailyRateCents?: number;
+  skills: Array<{ skill: Skill; dailyRateCents?: number }>;
+};
+type AdminPayment = Payment & {
+  contract?: Contract & {
+    event?: EventItem;
+    company?: { companyName: string };
+    freelancer?: Freelancer;
+  };
+};
 type AdminData = {
   users: unknown[];
   companies: unknown[];
   freelancers: unknown[];
   events: unknown[];
-  payments: unknown[];
+  payments: AdminPayment[];
   disputes: unknown[];
+};
+type ReportSummary = {
+  scope: UserRole;
+  totals: Record<string, number>;
+  contractStatus: Array<{ status: string; count: number }>;
+  eventStatus: Array<{ status: string; count: number }>;
 };
 
 export default function DashboardPage() {
@@ -98,7 +131,14 @@ export default function DashboardPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
+  const [freelancerProfile, setFreelancerProfile] =
+    useState<FreelancerProfile | null>(null);
   const [adminData, setAdminData] = useState<AdminData | null>(null);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(
+    null,
+  );
+  const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -133,8 +173,12 @@ export default function DashboardPage() {
     setLoading(true);
 
     try {
-      const loadedSkills = await apiRequest<Skill[]>("/api/skills");
+      const [loadedSkills, loadedReport] = await Promise.all([
+        apiRequest<Skill[]>("/api/skills"),
+        apiRequest<ReportSummary>("/api/reports/summary"),
+      ]);
       setSkills(loadedSkills);
+      setReportSummary(loadedReport);
 
       if (currentRole === "COMPANY") {
         const [
@@ -158,14 +202,24 @@ export default function DashboardPage() {
       }
 
       if (currentRole === "FREELANCER") {
-        const [received, loadedContracts, walletData] = await Promise.all([
+        const [
+          received,
+          loadedContracts,
+          walletData,
+          availabilityData,
+          profile,
+        ] = await Promise.all([
           apiRequest<Invitation[]>("/api/invitations/received"),
           apiRequest<Contract[]>("/api/contracts"),
           apiRequest<WalletData>("/api/wallet"),
+          apiRequest<AvailabilityItem[]>("/api/availability"),
+          apiRequest<FreelancerProfile>("/api/freelancers/profile"),
         ]);
         setInvitations(received);
         setContracts(loadedContracts);
         setWallet(walletData);
+        setAvailability(availabilityData);
+        setFreelancerProfile(profile);
       }
 
       if (currentRole === "ADMIN") {
@@ -181,7 +235,7 @@ export default function DashboardPage() {
           apiRequest<unknown[]>("/api/admin/companies"),
           apiRequest<unknown[]>("/api/admin/freelancers"),
           apiRequest<unknown[]>("/api/admin/events"),
-          apiRequest<unknown[]>("/api/admin/payments"),
+          apiRequest<AdminPayment[]>("/api/admin/payments"),
           apiRequest<unknown[]>("/api/admin/disputes"),
         ]);
         setAdminData({
@@ -248,7 +302,9 @@ export default function DashboardPage() {
   async function handleSearchFreelancers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const eventId = String(form.get("eventId") ?? "");
     setError("");
+    setSelectedEventId(eventId);
 
     try {
       const data = await apiRequest<Freelancer[]>(
@@ -269,7 +325,9 @@ export default function DashboardPage() {
   }
 
   async function inviteFreelancer(freelancerId: string) {
-    if (!events[0]) {
+    const eventId = selectedEventId || events[0]?.id;
+
+    if (!eventId) {
       setError("Crie um evento antes de enviar convites.");
       return;
     }
@@ -278,7 +336,7 @@ export default function DashboardPage() {
       await apiRequest("/api/invitations", {
         method: "POST",
         body: JSON.stringify({
-          eventId: events[0].id,
+          eventId,
           freelancerId,
           expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
           message: "Convite enviado pela plataforma nexus.",
@@ -320,6 +378,98 @@ export default function DashboardPage() {
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao pagar contrato.",
+      );
+    }
+  }
+
+  async function handleSaveFreelancerSkill(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest("/api/freelancers/skills", {
+        method: "POST",
+        body: JSON.stringify({
+          skills: [
+            {
+              skillId: String(form.get("skillId")),
+              dailyRateCents: Number(form.get("dailyRate")) * 100,
+            },
+          ],
+        }),
+      });
+      setSuccess("Especialidade atualizada.");
+      await loadDashboard("FREELANCER");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao salvar especialidade.",
+      );
+    }
+  }
+
+  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest("/api/availability", {
+        method: "POST",
+        body: JSON.stringify({
+          startsAt: String(form.get("startsAt")),
+          endsAt: String(form.get("endsAt")),
+          reason: String(form.get("reason") || "Indisponível"),
+        }),
+      });
+      event.currentTarget.reset();
+      setSuccess("Indisponibilidade adicionada.");
+      await loadDashboard("FREELANCER");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao adicionar indisponibilidade.",
+      );
+    }
+  }
+
+  async function removeAvailability(availabilityId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/availability/${availabilityId}`, {
+        method: "DELETE",
+      });
+      setSuccess("Indisponibilidade removida.");
+      await loadDashboard("FREELANCER");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao remover indisponibilidade.",
+      );
+    }
+  }
+
+  async function releasePayment(paymentId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/payments/${paymentId}/release`, {
+        method: "POST",
+      });
+      setSuccess("Pagamento liberado para o freelancer.");
+      await loadDashboard("ADMIN");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao liberar pagamento.",
       );
     }
   }
@@ -429,6 +579,8 @@ export default function DashboardPage() {
             events={events}
             freelancers={freelancers}
             invitations={invitations}
+            reportSummary={reportSummary}
+            selectedEventId={selectedEventId}
             skills={skills}
             onCreateEvent={handleCreateEvent}
             onInvite={inviteFreelancer}
@@ -438,15 +590,25 @@ export default function DashboardPage() {
         ) : null}
         {!loading && role === "FREELANCER" ? (
           <FreelancerDashboard
+            availability={availability}
             contracts={contracts}
+            freelancerProfile={freelancerProfile}
             invitations={invitations}
+            reportSummary={reportSummary}
             skills={skills}
+            onCreateAvailability={handleCreateAvailability}
+            onRemoveAvailability={removeAvailability}
             wallet={wallet}
             onRespond={respondInvitation}
+            onSaveSkill={handleSaveFreelancerSkill}
           />
         ) : null}
         {!loading && role === "ADMIN" && adminData ? (
-          <AdminDashboard data={adminData} />
+          <AdminDashboard
+            data={adminData}
+            onReleasePayment={releasePayment}
+            reportSummary={reportSummary}
+          />
         ) : null}
       </section>
     </main>
@@ -458,6 +620,8 @@ function CompanyDashboard({
   events,
   freelancers,
   invitations,
+  reportSummary,
+  selectedEventId,
   skills,
   onCreateEvent,
   onInvite,
@@ -468,6 +632,8 @@ function CompanyDashboard({
   events: EventItem[];
   freelancers: Freelancer[];
   invitations: Invitation[];
+  reportSummary: ReportSummary | null;
+  selectedEventId: string;
   skills: Skill[];
   onCreateEvent: (event: FormEvent<HTMLFormElement>) => void;
   onInvite: (freelancerId: string) => void;
@@ -546,6 +712,18 @@ function CompanyDashboard({
           <UsersRound size={18} />
         </div>
         <form className="form compact" onSubmit={onSearch}>
+          <Field label="Evento para convite">
+            <select name="eventId" defaultValue={selectedEventId} required>
+              <option value="" disabled>
+                Selecione um evento
+              </option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <div className="form-grid">
             <Field label="Início">
               <input name="startsAt" type="datetime-local" required />
@@ -581,9 +759,10 @@ function CompanyDashboard({
               </div>
               <button
                 className="icon-action"
+                disabled={freelancer.isAvailable === false}
                 onClick={() => onInvite(freelancer.id)}
               >
-                Convidar
+                {freelancer.isAvailable === false ? "Indisponível" : "Convidar"}
               </button>
             </div>
           ))}
@@ -637,24 +816,132 @@ function CompanyDashboard({
           </div>
         ))}
       </ListPanel>
+
+      <ReportPanel reportSummary={reportSummary} />
     </section>
   );
 }
 
 function FreelancerDashboard({
+  availability,
   contracts,
+  freelancerProfile,
   invitations,
+  reportSummary,
+  skills,
   wallet,
+  onCreateAvailability,
+  onRemoveAvailability,
   onRespond,
+  onSaveSkill,
 }: Readonly<{
+  availability: AvailabilityItem[];
   contracts: Contract[];
+  freelancerProfile: FreelancerProfile | null;
   invitations: Invitation[];
+  reportSummary: ReportSummary | null;
   skills: Skill[];
   wallet: WalletData | null;
+  onCreateAvailability: (event: FormEvent<HTMLFormElement>) => void;
+  onRemoveAvailability: (availabilityId: string) => void;
   onRespond: (invitationId: string, action: "accept" | "decline") => void;
+  onSaveSkill: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
   return (
     <section className="dashboard-grid">
+      <article className="panel">
+        <div className="panel-header">
+          <h2>Especialidade e diária</h2>
+          <Star size={18} />
+        </div>
+        <form className="form compact" onSubmit={onSaveSkill}>
+          <Field label="Especialidade principal">
+            <select
+              name="skillId"
+              defaultValue={freelancerProfile?.skills[0]?.skill.id ?? ""}
+              required
+            >
+              <option value="" disabled>
+                Selecione uma especialidade
+              </option>
+              {skills.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Diária para essa função">
+            <input
+              name="dailyRate"
+              type="number"
+              min={0}
+              defaultValue={
+                (freelancerProfile?.skills[0]?.dailyRateCents ??
+                  freelancerProfile?.dailyRateCents ??
+                  0) / 100
+              }
+              required
+            />
+          </Field>
+          <button className="primary-button full" type="submit">
+            Salvar especialidade
+          </button>
+        </form>
+        <div className="list">
+          {freelancerProfile?.skills.map((item) => (
+            <div className="list-row" key={item.skill.id}>
+              <div>
+                <strong>{item.skill.name}</strong>
+                <span>{formatCurrency(item.dailyRateCents)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article className="panel">
+        <div className="panel-header">
+          <h2>Indisponibilidade</h2>
+          <CalendarDays size={18} />
+        </div>
+        <form className="form compact" onSubmit={onCreateAvailability}>
+          <div className="form-grid">
+            <Field label="Início">
+              <input name="startsAt" type="datetime-local" required />
+            </Field>
+            <Field label="Fim">
+              <input name="endsAt" type="datetime-local" required />
+            </Field>
+          </div>
+          <Field label="Motivo">
+            <input name="reason" placeholder="Outro evento, viagem..." />
+          </Field>
+          <button className="secondary-button full" type="submit">
+            Bloquear agenda
+          </button>
+        </form>
+        <div className="list">
+          {availability.map((item) => (
+            <div className="list-row" key={item.id}>
+              <div>
+                <strong>{item.reason ?? "Indisponível"}</strong>
+                <span>
+                  {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
+                  {new Date(item.endsAt).toLocaleString("pt-BR")}
+                </span>
+              </div>
+              <button
+                className="icon-action ghost"
+                onClick={() => onRemoveAvailability(item.id)}
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+        </div>
+      </article>
+
       <ListPanel icon={<Bell size={18} />} title="Convites recebidos">
         {invitations.map((invitation) => (
           <div className="list-row" key={invitation.id}>
@@ -712,11 +999,21 @@ function FreelancerDashboard({
           </div>
         ))}
       </ListPanel>
+
+      <ReportPanel reportSummary={reportSummary} />
     </section>
   );
 }
 
-function AdminDashboard({ data }: Readonly<{ data: AdminData }>) {
+function AdminDashboard({
+  data,
+  onReleasePayment,
+  reportSummary,
+}: Readonly<{
+  data: AdminData;
+  onReleasePayment: (paymentId: string) => void;
+  reportSummary: ReportSummary | null;
+}>) {
   return (
     <section className="dashboard-grid">
       <AdminPanel
@@ -749,7 +1046,80 @@ function AdminDashboard({ data }: Readonly<{ data: AdminData }>) {
         title="Disputas"
         value={data.disputes.length}
       />
+      <ListPanel icon={<CreditCard size={18} />} title="Pagamentos">
+        {data.payments.map((payment) => (
+          <div className="list-row" key={payment.id}>
+            <div>
+              <strong>{payment.contract?.event?.name ?? "Pagamento"}</strong>
+              <span>
+                {formatCurrency(payment.grossAmountCents)} - {payment.status}
+              </span>
+            </div>
+            {payment.status === "PAID" ? (
+              <button
+                className="icon-action"
+                onClick={() => onReleasePayment(payment.id)}
+              >
+                Liberar
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </ListPanel>
+      <ReportPanel reportSummary={reportSummary} />
     </section>
+  );
+}
+
+function ReportPanel({
+  reportSummary,
+}: Readonly<{ reportSummary: ReportSummary | null }>) {
+  const totals = reportSummary?.totals ?? {};
+  const moneyKeys = new Set([
+    "grossAmountCents",
+    "freelancerAmountCents",
+    "platformFeeCents",
+    "balanceCents",
+  ]);
+  const labels: Record<string, string> = {
+    users: "Usuários",
+    companies: "Empresas",
+    freelancers: "Freelancers",
+    events: "Eventos",
+    contracts: "Contratos",
+    payments: "Pagamentos",
+    grossAmountCents: "Volume pago",
+    freelancerAmountCents: "Repasse",
+    platformFeeCents: "Taxa plataforma",
+    balanceCents: "Saldo",
+  };
+
+  return (
+    <article className="panel report-panel">
+      <div className="panel-header">
+        <h2>Relatórios</h2>
+        <BriefcaseBusiness size={18} />
+      </div>
+      <div className="report-grid">
+        {Object.entries(totals).map(([key, value]) => (
+          <div className="report-tile" key={key}>
+            <span>{labels[key] ?? key}</span>
+            <strong>
+              {moneyKeys.has(key) ? formatCurrency(value) : value}
+            </strong>
+          </div>
+        ))}
+      </div>
+      {reportSummary?.contractStatus.length ? (
+        <div className="status-strip">
+          {reportSummary.contractStatus.map((item) => (
+            <span key={item.status}>
+              {item.status}: {item.count}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
