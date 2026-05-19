@@ -74,6 +74,15 @@ export type NotificationItem = {
   createdAt: string;
 };
 
+export type Dispute = {
+  id: string;
+  reason: string;
+  status: string;
+  details?: string;
+  createdAt: string;
+  contract?: Contract;
+};
+
 export type WalletData = {
   balanceCents: number;
   transactions: Array<{

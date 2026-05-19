@@ -42,6 +42,7 @@ Web: `http://localhost:3000`
 - `/dashboard/notificacoes`: central de notificações
 - `/dashboard/pagamentos`: contratos, pagamentos e carteira
 - `/dashboard/avaliacoes`: reputação e avaliações pós-contrato
+- `/dashboard/disputas`: abertura e histórico de disputas
 - `/dashboard/perfil`: perfil, especialidades e agenda
 
 ## Contas demo

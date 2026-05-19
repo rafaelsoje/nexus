@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings,
   Search,
+  ShieldAlert,
   Star,
   UsersRound,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/dashboard/notificacoes", label: "Notificações", icon: Bell },
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
+  { href: "/dashboard/disputas", label: "Disputas", icon: ShieldAlert },
   { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
 ];
 

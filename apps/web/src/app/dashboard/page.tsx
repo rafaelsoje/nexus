@@ -10,6 +10,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  ShieldAlert,
   Star,
   UsersRound,
   Wallet,
@@ -552,6 +553,10 @@ export default function DashboardPage() {
           <Link href="/dashboard/avaliacoes">
             <Star size={18} />
             Avaliações
+          </Link>
+          <Link href="/dashboard/disputas">
+            <ShieldAlert size={18} />
+            Disputas
           </Link>
           <Link href="/dashboard/perfil">
             <Settings size={18} />
