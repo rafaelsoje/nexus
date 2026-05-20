@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -31,6 +32,10 @@ export class DisputesService {
 
     if (!contract) {
       throw new NotFoundException("Contract not found");
+    }
+
+    if (contract.status === ContractStatus.DISPUTED) {
+      throw new BadRequestException("Contract already has an open dispute");
     }
 
     return this.prisma.$transaction(async (tx) => {

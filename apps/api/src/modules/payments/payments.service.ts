@@ -7,9 +7,11 @@ import {
 } from "@nestjs/common";
 import {
   ContractStatus,
+  DisputeStatus,
   PaymentStatus,
   TransactionType,
   UserRole,
+  VerificationStatus,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PAYMENT_GATEWAY, PaymentGateway } from "./gateways/payment-gateway";
@@ -63,6 +65,7 @@ export class PaymentsService {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
       include: {
+        company: { include: { wallet: true } },
         event: true,
         payment: true,
         freelancer: { include: { wallet: true } },
@@ -77,19 +80,70 @@ export class PaymentsService {
       throw new BadRequestException("Contract already has a payment");
     }
 
+    if (contract.status !== ContractStatus.PENDING_PAYMENT) {
+      throw new BadRequestException("Contract is not awaiting payment");
+    }
+
+    if (
+      contract.company.verificationStatus !== VerificationStatus.VERIFIED ||
+      contract.freelancer.verificationStatus !== VerificationStatus.VERIFIED
+    ) {
+      throw new ForbiddenException("Contract participants must be verified");
+    }
+
     const freelancerAmountCents = contract.amountCents;
     const platformFeeCents = contract.platformFeeCents;
     const grossAmountCents = freelancerAmountCents + platformFeeCents;
-    const gatewayPayment = await this.paymentGateway.charge({
-      contractId: contract.id,
-      companyId: contract.companyId,
-      freelancerId: contract.freelancerId,
-      grossAmountCents,
-      freelancerAmountCents,
-      platformFeeCents,
-    });
+    const walletBalanceCents = contract.company.wallet?.balanceCents ?? 0;
+    const walletAmountCents = Math.min(walletBalanceCents, grossAmountCents);
+    const gatewayAmountCents = grossAmountCents - walletAmountCents;
+    const gatewayPayment =
+      gatewayAmountCents > 0
+        ? await this.paymentGateway.charge({
+            contractId: contract.id,
+            companyId: contract.companyId,
+            freelancerId: contract.freelancerId,
+            grossAmountCents,
+            freelancerAmountCents,
+            platformFeeCents,
+            walletAmountCents,
+            gatewayAmountCents,
+          })
+        : {
+            status: PaymentStatus.PAID,
+            gatewayTransactionId: `wallet_${contract.id}`,
+            paidAt: new Date(),
+            splits: [
+              {
+                recipientType: "FREELANCER" as const,
+                amountCents: freelancerAmountCents,
+                gatewayRecipientId: `freelancer_${contract.freelancerId}`,
+              },
+              {
+                recipientType: "PLATFORM" as const,
+                amountCents: platformFeeCents,
+                gatewayRecipientId: "platform",
+              },
+            ],
+          };
 
     return this.prisma.$transaction(async (tx) => {
+      if (walletAmountCents > 0 && contract.company.wallet) {
+        await tx.wallet.update({
+          where: { id: contract.company.wallet.id },
+          data: { balanceCents: { decrement: walletAmountCents } },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: contract.company.wallet.id,
+            type: TransactionType.DEBIT,
+            amountCents: walletAmountCents,
+            description: `Pagamento do contrato ${contract.id}`,
+          },
+        });
+      }
+
       const payment = await tx.payment.create({
         data: {
           contractId: contract.id,
@@ -130,7 +184,7 @@ export class PaymentsService {
     return this.processPayment(userId, contractId);
   }
 
-  async releaseToFreelancer(paymentId: string) {
+  async releaseToFreelancer(paymentId: string, now = new Date()) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
@@ -138,6 +192,7 @@ export class PaymentsService {
           include: {
             company: true,
             event: true,
+            disputes: true,
             freelancer: { include: { wallet: true } },
           },
         },
@@ -150,6 +205,30 @@ export class PaymentsService {
 
     if (payment.status === PaymentStatus.RELEASED_TO_FREELANCER) {
       throw new BadRequestException("Payment already released");
+    }
+
+    if (payment.status !== PaymentStatus.PAID) {
+      throw new BadRequestException("Payment must be paid before release");
+    }
+
+    if (
+      payment.contract.status !== ContractStatus.CONFIRMED &&
+      payment.contract.status !== ContractStatus.COMPLETED
+    ) {
+      throw new BadRequestException("Contract is not eligible for release");
+    }
+
+    if (now < this.addBusinessDays(payment.contract.endsAt, 1)) {
+      throw new BadRequestException("Payment cannot be released before deadline");
+    }
+
+    const hasBlockingDispute = payment.contract.disputes.some((dispute) =>
+      dispute.status === DisputeStatus.OPEN ||
+      dispute.status === DisputeStatus.UNDER_REVIEW,
+    );
+
+    if (hasBlockingDispute) {
+      throw new BadRequestException("Payment cannot be released with open dispute");
     }
 
     const wallet = payment.contract.freelancer.wallet;
@@ -205,6 +284,51 @@ export class PaymentsService {
     });
   }
 
+  async processDueReleases(now = new Date()) {
+    const paidPayments = await this.prisma.payment.findMany({
+      where: {
+        status: PaymentStatus.PAID,
+        contract: {
+          status: { in: [ContractStatus.CONFIRMED, ContractStatus.COMPLETED] },
+        },
+      },
+      include: {
+        contract: {
+          include: {
+            disputes: true,
+          },
+        },
+      },
+      orderBy: { paidAt: "asc" },
+    });
+
+    const eligiblePayments = paidPayments.filter((payment) => {
+      const hasBlockingDispute = payment.contract.disputes.some((dispute) =>
+        [DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW].some(
+          (status) => status === dispute.status,
+        ),
+      );
+
+      return (
+        !hasBlockingDispute &&
+        now >= this.addBusinessDays(payment.contract.endsAt, 1)
+      );
+    });
+
+    const released = [];
+
+    for (const payment of eligiblePayments) {
+      released.push(await this.releaseToFreelancer(payment.id, now));
+    }
+
+    return {
+      checked: paidPayments.length,
+      eligible: eligiblePayments.length,
+      released: released.length,
+      payments: released,
+    };
+  }
+
   private async findCompanyByUserId(userId: string) {
     const company = await this.prisma.companyProfile.findUnique({
       where: { userId },
@@ -227,5 +351,20 @@ export class PaymentsService {
     }
 
     return freelancer;
+  }
+
+  private addBusinessDays(date: Date, days: number) {
+    const result = new Date(date);
+    let remainingDays = days;
+
+    while (remainingDays > 0) {
+      result.setDate(result.getDate() + 1);
+
+      if (result.getDay() !== 0 && result.getDay() !== 6) {
+        remainingDays -= 1;
+      }
+    }
+
+    return result;
   }
 }

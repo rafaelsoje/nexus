@@ -13,37 +13,114 @@ import {
   Star,
   UserCog,
   UsersRound,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { clearSession, getSession, type AuthSession } from "../lib/api";
+import {
+  clearSession,
+  getSession,
+  type AuthSession,
+  type UserRole,
+} from "../lib/api";
 import { ThemeToggle } from "./theme-toggle";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/eventos", label: "Eventos", icon: CalendarDays },
-  { href: "/dashboard/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/dashboard/oportunidades", label: "Oportunidades", icon: UsersRound },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageCircle },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  roles: UserRole[];
+};
+
+const allRoles: UserRole[] = ["ADMIN", "COMPANY", "FREELANCER"];
+
+const navItems: NavItem[] = [
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    roles: allRoles,
+  },
+  {
+    href: "/dashboard/eventos",
+    label: "Eventos",
+    icon: CalendarDays,
+    roles: ["ADMIN", "COMPANY"],
+  },
+  {
+    href: "/dashboard/agenda",
+    label: "Agenda",
+    icon: CalendarDays,
+    roles: ["FREELANCER"],
+  },
+  {
+    href: "/dashboard/oportunidades",
+    label: "Oportunidades",
+    icon: UsersRound,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/chat",
+    label: "Chat",
+    icon: MessageCircle,
+    roles: ["COMPANY", "FREELANCER"],
+  },
   {
     href: "/dashboard/profissionais",
     label: "Profissionais",
     icon: UsersRound,
+    roles: ["ADMIN", "COMPANY"],
   },
-  { href: "/dashboard/convites", label: "Convites", icon: Bell },
-  { href: "/dashboard/notificacoes", label: "Notificações", icon: Bell },
-  { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
-  { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
-  { href: "/dashboard/disputas", label: "Contestações", icon: ShieldAlert },
+  {
+    href: "/dashboard/convites",
+    label: "Convites",
+    icon: Bell,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/notificacoes",
+    label: "Notificações",
+    icon: Bell,
+    roles: allRoles,
+  },
+  {
+    href: "/dashboard/pagamentos",
+    label: "Pagamentos",
+    icon: CreditCard,
+    roles: allRoles,
+  },
+  {
+    href: "/dashboard/avaliacoes",
+    label: "Avaliações",
+    icon: Star,
+    roles: allRoles,
+  },
+  {
+    href: "/dashboard/disputas",
+    label: "Contestações",
+    icon: ShieldAlert,
+    roles: allRoles,
+  },
   {
     href: "/dashboard/verificacoes",
     label: "Verificações",
     icon: ShieldCheck,
+    roles: ["ADMIN"],
   },
-  { href: "/dashboard/usuarios", label: "Usuários", icon: UserCog },
-  { href: "/dashboard/perfil", label: "Perfil", icon: Settings },
+  {
+    href: "/dashboard/usuarios",
+    label: "Usuários",
+    icon: UserCog,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/dashboard/perfil",
+    label: "Perfil",
+    icon: Settings,
+    roles: allRoles,
+  },
 ];
 
 export function useRequiredSession() {
@@ -77,6 +154,17 @@ export function DashboardShell({
 }>) {
   const pathname = usePathname();
   const router = useRouter();
+  const [session, setSession] = useState<AuthSession | null>(() =>
+    getSession(),
+  );
+
+  useEffect(() => {
+    setSession(getSession());
+  }, [pathname]);
+
+  const visibleNavItems = session
+    ? navItems.filter((item) => item.roles.includes(session.user.role))
+    : [];
 
   function logout() {
     clearSession();
@@ -91,7 +179,7 @@ export function DashboardShell({
           <span>NEXO</span>
         </Link>
         <nav className="nav">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === "/dashboard"

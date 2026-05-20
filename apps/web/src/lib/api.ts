@@ -78,11 +78,19 @@ const apiMessageTranslations: Record<string, string> = {
   "End must be after start": "A data final precisa ser posterior ao início.",
   "Invalid credentials": "E-mail ou senha inválidos.",
   "Email already registered": "Este e-mail já está cadastrado.",
+  "Admin users cannot self-register":
+    "Administradores devem ser criados pela operação da plataforma.",
   "Invalid refresh token": "Sua sessão expirou. Entre novamente.",
   "Invalid or expired reset token": "Token inválido ou expirado.",
   "Company profile is required": "Complete o perfil da empresa para continuar.",
+  "Company must be verified":
+    "A empresa precisa estar verificada para continuar.",
   "Freelancer profile is required":
     "Complete o perfil profissional para continuar.",
+  "Freelancer must be verified":
+    "O profissional precisa estar verificado para continuar.",
+  "Contract participants must be verified":
+    "Empresa e profissional precisam estar verificados para continuar.",
   "Company profile not found": "Perfil da empresa não encontrado.",
   "Freelancer profile not found": "Perfil profissional não encontrado.",
   "Profile not found": "Perfil não encontrado.",
@@ -92,6 +100,7 @@ const apiMessageTranslations: Record<string, string> = {
   "Payment not found": "Pagamento não encontrado.",
   "Wallet not found": "Carteira não encontrada.",
   "Notification not found": "Notificação não encontrada.",
+  "Availability not found": "Indisponibilidade não encontrada.",
   "Document not found": "Documento não encontrado.",
   "Document file not found": "Arquivo do documento não encontrado.",
   "Invitation not found": "Convite não encontrado.",
@@ -102,6 +111,8 @@ const apiMessageTranslations: Record<string, string> = {
     "A negociação deste convite não está disponível.",
   "Invitation expiration must be in the future":
     "A expiração do convite precisa estar no futuro.",
+  "Event is not open for invitations":
+    "Este evento não está aberto para convites.",
   "Freelancer already has a contract in this time range":
     "O profissional já tem um contrato nesse período.",
   "Freelancer is unavailable in this time range":
@@ -121,11 +132,16 @@ const apiMessageTranslations: Record<string, string> = {
     "O chat está disponível apenas para empresas e profissionais.",
   "Contract already has a payment": "Este contrato já possui pagamento.",
   "Payment already released": "Este pagamento já foi liberado.",
+  "Payment must be paid before release":
+    "O pagamento precisa estar confirmado antes da liberação.",
+  "Payment must be paid before confirmation":
+    "O pagamento precisa estar confirmado antes da contratação.",
   "Freelancer wallet not found": "Carteira do profissional não encontrada.",
   "Contract status update is not allowed":
     "Você não pode alterar o contrato para esse status.",
   "Contract status transition is invalid":
     "Essa mudança de status do contrato não é permitida.",
+  "No-show deadline has expired": "O prazo para marcar falta já expirou.",
   "Contract must be completed or paid before review":
     "O contrato precisa estar concluído ou pago antes da avaliação.",
   "Review is not allowed for this contract":
@@ -147,7 +163,10 @@ function translateApiMessage(message: string) {
 
   return message
     .split(", ")
-    .map((item) => apiMessageTranslations[item] ?? translateValidationMessage(item))
+    .map(
+      (item) =>
+        apiMessageTranslations[item] ?? translateValidationMessage(item),
+    )
     .join(", ");
 }
 

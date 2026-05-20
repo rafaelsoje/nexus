@@ -4,18 +4,25 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   ApplicationStatus,
   ContractStatus,
   EventStatus,
   InvitationStatus,
+  Prisma,
+  VerificationStatus,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { calculatePlatformFeeCents } from "../payments/fees";
 import { CreateApplicationDto } from "./dto/create-application.dto";
 
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async listOpportunities(userId: string) {
     const freelancer = await this.findFreelancerByUserId(userId);
@@ -26,6 +33,10 @@ export class ApplicationsService {
       where: {
         startsAt: { gt: now },
         status: { notIn: [EventStatus.CANCELLED, EventStatus.FINISHED] },
+        company: {
+          user: { isActive: true },
+          verificationStatus: VerificationStatus.VERIFIED,
+        },
         requirements: skillIds.length
           ? { some: { skillId: { in: skillIds } } }
           : undefined,
@@ -33,7 +44,9 @@ export class ApplicationsService {
         invitations: {
           none: {
             freelancerId: freelancer.id,
-            status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED] },
+            status: {
+              in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED],
+            },
           },
         },
         contracts: { none: { freelancerId: freelancer.id } },
@@ -114,7 +127,7 @@ export class ApplicationsService {
     const event = await this.prisma.event.findUnique({
       where: { id: dto.eventId },
       include: {
-        company: true,
+        company: { include: { user: { select: { isActive: true } } } },
         requirements: true,
         contracts: true,
       },
@@ -123,6 +136,13 @@ export class ApplicationsService {
     if (!event) {
       throw new NotFoundException("Event not found");
     }
+
+    if (!event.company.user.isActive) {
+      throw new BadRequestException("Event is not open for applications");
+    }
+
+    this.assertFreelancerVerified(freelancer);
+    this.assertCompanyVerified(event.company);
 
     if (event.startsAt <= new Date()) {
       throw new BadRequestException("Event is not open for applications");
@@ -180,6 +200,7 @@ export class ApplicationsService {
 
   async accept(userId: string, applicationId: string) {
     const company = await this.findCompanyByUserId(userId);
+    this.assertCompanyVerified(company);
     const application = await this.findApplicationForCompany(
       applicationId,
       company.id,
@@ -189,6 +210,9 @@ export class ApplicationsService {
       throw new BadRequestException("Application is not pending");
     }
 
+    this.assertFreelancerVerified(application.freelancer);
+
+    await this.assertEventHasOpenSpot(application.eventId);
     await this.assertFreelancerCanWork(
       application.freelancerId,
       application.event.startsAt,
@@ -202,6 +226,15 @@ export class ApplicationsService {
       0;
 
     return this.prisma.$transaction(async (tx) => {
+      await this.lockHiringRows(tx, application.eventId, application.freelancerId);
+      await this.assertEventHasOpenSpot(application.eventId, tx);
+      await this.assertFreelancerCanWork(
+        application.freelancerId,
+        application.event.startsAt,
+        application.event.endsAt,
+        tx,
+      );
+
       const updatedApplication = await tx.application.update({
         where: { id: application.id },
         data: {
@@ -218,7 +251,7 @@ export class ApplicationsService {
           applicationId: application.id,
           status: ContractStatus.PENDING_PAYMENT,
           amountCents,
-          platformFeeCents: Math.round(amountCents * 0.08),
+          platformFeeCents: calculatePlatformFeeCents(amountCents, this.config),
           startsAt: application.event.startsAt,
           endsAt: application.event.endsAt,
         },
@@ -288,8 +321,14 @@ export class ApplicationsService {
       where: { id: freelancerId },
       include: { skills: true },
     });
+    if (!freelancer) {
+      throw new NotFoundException("Freelancer not found");
+    }
+
+    this.assertFreelancerVerified(freelancer);
+
     const freelancerSkillIds = new Set(
-      freelancer?.skills.map((item) => item.skillId) ?? [],
+      freelancer.skills.map((item) => item.skillId),
     );
     const matchesRequirement =
       event.requirements.length === 0 ||
@@ -323,19 +362,26 @@ export class ApplicationsService {
     });
 
     if (existingInvitation) {
-      throw new BadRequestException("Freelancer already has an active invitation for this event");
+      throw new BadRequestException(
+        "Freelancer already has an active invitation for this event",
+      );
     }
 
-    await this.assertFreelancerCanWork(freelancerId, event.startsAt, event.endsAt);
+    await this.assertFreelancerCanWork(
+      freelancerId,
+      event.startsAt,
+      event.endsAt,
+    );
   }
 
   private async assertFreelancerCanWork(
     freelancerId: string,
     startsAt: Date,
     endsAt: Date,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
     const [contractCount, availabilityCount] = await Promise.all([
-      this.prisma.contract.count({
+      db.contract.count({
         where: {
           freelancerId,
           startsAt: { lt: endsAt },
@@ -345,7 +391,7 @@ export class ApplicationsService {
           },
         },
       }),
-      this.prisma.availability.count({
+      db.availability.count({
         where: {
           freelancerId,
           startsAt: { lt: endsAt },
@@ -368,7 +414,58 @@ export class ApplicationsService {
     }
   }
 
-  private async findApplicationForCompany(applicationId: string, companyId: string) {
+  private async assertEventHasOpenSpot(
+    eventId: string,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const event = await db.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contracts: {
+          where: {
+            status: {
+              notIn: [ContractStatus.CANCELLED, ContractStatus.NO_SHOW],
+            },
+          },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!event || event.contracts.length >= event.desiredProfessionals) {
+      throw new BadRequestException("Event has no open spots");
+    }
+  }
+
+  private async lockHiringRows(
+    tx: Prisma.TransactionClient,
+    eventId: string,
+    freelancerId: string,
+  ) {
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "FreelancerProfile" WHERE id = ${freelancerId} FOR UPDATE`;
+  }
+
+  private assertCompanyVerified(company: {
+    verificationStatus: VerificationStatus;
+  }) {
+    if (company.verificationStatus !== VerificationStatus.VERIFIED) {
+      throw new ForbiddenException("Company must be verified");
+    }
+  }
+
+  private assertFreelancerVerified(freelancer: {
+    verificationStatus: VerificationStatus;
+  }) {
+    if (freelancer.verificationStatus !== VerificationStatus.VERIFIED) {
+      throw new ForbiddenException("Freelancer must be verified");
+    }
+  }
+
+  private async findApplicationForCompany(
+    applicationId: string,
+    companyId: string,
+  ) {
     const application = await this.prisma.application.findFirst({
       where: { id: applicationId, companyId },
       include: {

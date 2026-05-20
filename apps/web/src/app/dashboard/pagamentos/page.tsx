@@ -1,14 +1,14 @@
 "use client";
 
 import { BriefcaseBusiness, CreditCard, Wallet } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
   useRequiredSession,
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
-import { EmptyState, StatusMessage } from "../../../components/ui";
+import { EmptyState, Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
 import type {
   Contract,
@@ -45,8 +45,9 @@ export default function PaymentsPage() {
         (total, payment) => total + payment.platformFeeCents,
         0,
       ),
-      pendingRelease: adminPayments.filter((payment) => payment.status === "PAID")
-        .length,
+      pendingRelease: adminPayments.filter(
+        (payment) => payment.status === "PAID",
+      ).length,
     }),
     [adminPayments],
   );
@@ -77,7 +78,10 @@ export default function PaymentsPage() {
       setContracts(loadedContracts);
       setPayments(loadedPayments);
 
-      if (session?.user.role === "FREELANCER") {
+      if (
+        session?.user.role === "FREELANCER" ||
+        session?.user.role === "COMPANY"
+      ) {
         setWallet(await apiRequest<WalletData>("/api/wallet"));
       }
     } catch (caught) {
@@ -99,13 +103,46 @@ export default function PaymentsPage() {
       await apiRequest(`/api/payments/contracts/${contractId}/pay`, {
         method: "POST",
       });
-      setSuccess("Pagamento simulado realizado.");
+      setSuccess(
+        "Pagamento realizado. Saldo da carteira aplicado quando disponível.",
+      );
       await loadPayments();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao pagar contrato.",
       );
     }
+  }
+
+  async function topUpWallet(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    const form = new FormData(event.currentTarget);
+    const amount = Number(form.get("amount"));
+
+    try {
+      await apiRequest("/api/wallet/top-up", {
+        method: "POST",
+        body: JSON.stringify({
+          amountCents: Math.round(amount * 100),
+          description: "Carga simulada pela tela de pagamentos",
+        }),
+      });
+      event.currentTarget.reset();
+      setSuccess("Saldo carregado na carteira da empresa.");
+      await loadPayments();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao carregar saldo da carteira.",
+      );
+    }
+  }
+
+  function contractTotal(contract: Contract) {
+    return contract.amountCents + contract.platformFeeCents;
   }
 
   async function releasePayment(paymentId: string) {
@@ -121,6 +158,28 @@ export default function PaymentsPage() {
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao liberar pagamento.",
+      );
+    }
+  }
+
+  async function processDueReleases() {
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await apiRequest<{ released: number; eligible: number }>(
+        "/api/payments/process-due-releases",
+        { method: "POST" },
+      );
+      setSuccess(
+        `${result.released} repasse(s) liberado(s) de ${result.eligible} elegível(is).`,
+      );
+      await loadPayments();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao processar repasses vencidos.",
       );
     }
   }
@@ -183,6 +242,38 @@ export default function PaymentsPage() {
       ) : null}
 
       <section className="dashboard-grid">
+        {session.user.role === "COMPANY" ? (
+          <ListPanel icon={<Wallet size={18} />} title="Carteira da empresa">
+            <div className="wallet-balance">
+              {formatCurrency(wallet?.balanceCents)}
+            </div>
+            <form className="form compact" onSubmit={topUpWallet}>
+              <Field label="Carregar saldo">
+                <input
+                  min="1"
+                  name="amount"
+                  placeholder="500,00"
+                  required
+                  step="0.01"
+                  type="number"
+                />
+              </Field>
+              <button className="primary-button" type="submit">
+                Carregar saldo
+              </button>
+            </form>
+            {wallet?.transactions?.slice(0, 5).map((transaction) => (
+              <div className="list-row" key={transaction.id}>
+                <div>
+                  <strong>{transaction.type}</strong>
+                  <span>{transaction.description ?? "Transação"}</span>
+                </div>
+                <small>{formatCurrency(transaction.amountCents)}</small>
+              </div>
+            ))}
+          </ListPanel>
+        ) : null}
+
         {session.user.role === "FREELANCER" ? (
           <ListPanel icon={<Wallet size={18} />} title="Carteira">
             <div className="wallet-balance">
@@ -209,6 +300,13 @@ export default function PaymentsPage() {
               </div>
               <div className="admin-count">{adminMetrics.pendingRelease}</div>
               <p>Pagamento(s) aguardando liberação para o freelancer.</p>
+              <button
+                className="primary-button full"
+                onClick={processDueReleases}
+                type="button"
+              >
+                Processar vencidos
+              </button>
             </article>
 
             <ListPanel
@@ -227,9 +325,9 @@ export default function PaymentsPage() {
                         "Profissional"}
                     </span>
                     <span>
-                      Bruto {formatCurrency(payment.grossAmountCents)} -
-                      repasse {formatCurrency(payment.freelancerAmountCents)} -
-                      taxa {formatCurrency(payment.platformFeeCents)} -{" "}
+                      Bruto {formatCurrency(payment.grossAmountCents)} - repasse{" "}
+                      {formatCurrency(payment.freelancerAmountCents)} - taxa{" "}
+                      {formatCurrency(payment.platformFeeCents)} -{" "}
                       {payment.status}
                     </span>
                   </div>
@@ -256,6 +354,27 @@ export default function PaymentsPage() {
                     <span>
                       {formatCurrency(contract.amountCents)} - {contract.status}
                     </span>
+                    {session.user.role === "COMPANY" &&
+                    contract.status === "PENDING_PAYMENT" ? (
+                      <span>
+                        Total com taxa:{" "}
+                        {formatCurrency(contractTotal(contract))} | saldo usado:{" "}
+                        {formatCurrency(
+                          Math.min(
+                            wallet?.balanceCents ?? 0,
+                            contractTotal(contract),
+                          ),
+                        )}{" "}
+                        | complemento:{" "}
+                        {formatCurrency(
+                          Math.max(
+                            contractTotal(contract) -
+                              (wallet?.balanceCents ?? 0),
+                            0,
+                          ),
+                        )}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="row-actions">
                     {session.user.role === "COMPANY" &&

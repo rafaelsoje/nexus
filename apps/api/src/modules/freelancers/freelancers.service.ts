@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { VerificationStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { SetFreelancerSkillsDto } from "./dto/set-freelancer-skills.dto";
 import { UpsertFreelancerProfileDto } from "./dto/upsert-freelancer-profile.dto";
@@ -66,6 +67,10 @@ export class FreelancersService {
 
   listPublicProfiles() {
     return this.prisma.freelancerProfile.findMany({
+      where: {
+        user: { isActive: true },
+        verificationStatus: VerificationStatus.VERIFIED,
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

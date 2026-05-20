@@ -30,6 +30,12 @@ export class PaymentsController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Post("process-due-releases")
+  processDueReleases() {
+    return this.paymentsService.processDueReleases();
+  }
+
+  @Roles(UserRole.ADMIN)
   @Post(":id/release")
   releaseToFreelancer(@Param("id") id: string) {
     return this.paymentsService.releaseToFreelancer(id);

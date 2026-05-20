@@ -1,14 +1,19 @@
 "use client";
 
-import {
-  BriefcaseBusiness,
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Wallet,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import type {
+  DateSelectArg,
+  EventDropArg,
+  EventInput,
+} from "@fullcalendar/core";
+import ptBrLocale from "@fullcalendar/core/locales/pt-br";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import interactionPlugin, {
+  type EventResizeDoneArg,
+} from "@fullcalendar/interaction";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import { BriefcaseBusiness, Clock, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -22,24 +27,19 @@ import type {
   WalletData,
 } from "../../../lib/dashboard-types";
 
-type CalendarEntry = {
-  id: string;
-  dateKey: string;
-  title: string;
-  meta: string;
-  kind: "work" | "blocked";
-};
-
-const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
 const statusLabels: Record<string, string> = {
   ACTIVE: "Ativo",
+  AUTHORIZED: "Autorizado",
   PAID: "Pago",
+  PENDING_PAYMENT: "Aguardando pagamento",
+  CONFIRMED: "Confirmado",
   COMPLETED: "Concluído",
   CANCELLED: "Cancelado",
   NO_SHOW: "No-show",
   PENDING: "Pendente",
   RELEASED: "Liberado",
+  RELEASED_TO_FREELANCER: "Liberado",
+  DISPUTED: "Contestado",
 };
 
 export default function AgendaPage() {
@@ -47,7 +47,6 @@ export default function AgendaPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
   const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -80,12 +79,52 @@ export default function AgendaPage() {
     }
   }, [session]);
 
-  const days = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
-  const entriesByDay = useMemo(
-    () => groupEntries(contracts, availability),
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadAgenda();
+  }, [loadAgenda, session]);
+
+  const calendarEvents = useMemo<EventInput[]>(
+    () => [
+      ...contracts.map((contract) => ({
+        id: `contract-${contract.id}`,
+        title: contract.event?.name ?? "Evento",
+        start: contract.startsAt,
+        end: contract.endsAt,
+        editable: false,
+        classNames: [
+          "nexo-calendar-event",
+          "nexo-calendar-event-work",
+          `status-${contract.status.toLowerCase().replaceAll("_", "-")}`,
+        ],
+        extendedProps: {
+          kind: "work",
+          status: contract.status,
+          meta: `${contract.company?.companyName ?? "Empresa"} - ${formatCurrency(contract.amountCents)}`,
+        },
+      })),
+      ...availability.map((item) => ({
+        id: `availability-${item.id}`,
+        title: item.reason ?? "Indisponível",
+        start: item.startsAt,
+        end: item.endsAt,
+        editable: true,
+        durationEditable: true,
+        startEditable: true,
+        classNames: ["nexo-calendar-event", "nexo-calendar-event-blocked"],
+        extendedProps: {
+          availabilityId: item.id,
+          kind: "blocked",
+          meta: "Bloqueio de agenda",
+          reason: item.reason ?? "Indisponível",
+        },
+      })),
+    ],
     [availability, contracts],
   );
-  const todayKey = toDateKey(new Date());
 
   const metrics = useMemo(() => {
     const now = new Date();
@@ -137,11 +176,75 @@ export default function AgendaPage() {
     return null;
   }
 
-  function changeMonth(offset: number) {
-    setMonthDate(
-      (current) =>
-        new Date(current.getFullYear(), current.getMonth() + offset, 1),
-    );
+  async function createAvailabilityBlock(selection: DateSelectArg) {
+    if (!selection.start || !selection.end) {
+      return;
+    }
+
+    setError("");
+
+    try {
+      await apiRequest<AvailabilityItem>("/api/availability", {
+        method: "POST",
+        body: JSON.stringify({
+          startsAt: selection.start.toISOString(),
+          endsAt: selection.end.toISOString(),
+          isAvailable: false,
+          reason: "Indisponível",
+        }),
+      });
+      selection.view.calendar.unselect();
+      await loadAgenda();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao criar indisponibilidade.",
+      );
+    }
+  }
+
+  async function updateAvailabilityBlock(
+    change: EventDropArg | EventResizeDoneArg,
+  ) {
+    const availabilityId = change.event.extendedProps.availabilityId;
+
+    if (
+      typeof availabilityId !== "string" ||
+      !change.event.start ||
+      !change.event.end
+    ) {
+      change.revert();
+      return;
+    }
+
+    setError("");
+
+    try {
+      await apiRequest<AvailabilityItem>(
+        `/api/availability/${availabilityId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            startsAt: change.event.start.toISOString(),
+            endsAt: change.event.end.toISOString(),
+            isAvailable: false,
+            reason:
+              typeof change.event.extendedProps.reason === "string"
+                ? change.event.extendedProps.reason
+                : "Indisponível",
+          }),
+        },
+      );
+      await loadAgenda();
+    } catch (caught) {
+      change.revert();
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao atualizar indisponibilidade.",
+      );
+    }
   }
 
   return (
@@ -174,81 +277,59 @@ export default function AgendaPage() {
           {!loading ? (
             <section className="dashboard-grid">
               <article className="panel report-panel">
-                <div className="calendar-toolbar">
-                  <div>
-                    <p className="eyebrow">Calendário profissional</p>
-                    <h2>{formatMonth(monthDate)}</h2>
-                  </div>
-                  <div className="button-row">
-                    <button
-                      aria-label="Mês anterior"
-                      className="secondary-button icon-action"
-                      onClick={() => changeMonth(-1)}
-                      type="button"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                    <button
-                      className="secondary-button icon-action"
-                      onClick={() => setMonthDate(startOfMonth(new Date()))}
-                      type="button"
-                    >
-                      Hoje
-                    </button>
-                    <button
-                      aria-label="Próximo mês"
-                      className="secondary-button icon-action"
-                      onClick={() => changeMonth(1)}
-                      type="button"
-                    >
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="calendar-grid">
-                  {weekdays.map((weekday) => (
-                    <div className="calendar-weekday" key={weekday}>
-                      {weekday}
-                    </div>
-                  ))}
-                  {days.map((day) => {
-                    const dayKey = toDateKey(day.date);
-                    const entries = entriesByDay.get(dayKey) ?? [];
-
-                    return (
-                      <div
-                        className={[
-                          "calendar-day",
-                          day.isCurrentMonth ? "" : "outside",
-                          dayKey === todayKey ? "today" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        key={dayKey}
-                      >
-                        <div className="calendar-day-header">
-                          <span>{day.date.getDate()}</span>
-                        </div>
-                        <div className="calendar-items">
-                          {entries.slice(0, 3).map((entry) => (
-                            <span
-                              className={`calendar-pill ${entry.kind}`}
-                              key={entry.id}
-                              title={`${entry.title} - ${entry.meta}`}
-                            >
-                              {entry.title}
-                            </span>
-                          ))}
-                          {entries.length > 3 ? (
-                            <span className="calendar-more">
-                              +{entries.length - 3}
-                            </span>
-                          ) : null}
-                        </div>
+                <div className="calendar-shell">
+                  <FullCalendar
+                    allDaySlot={false}
+                    buttonText={{
+                      day: "Dia",
+                      month: "Mês",
+                      today: "Hoje",
+                      week: "Semana",
+                    }}
+                    dayMaxEvents={3}
+                    editable
+                    eventAllow={(_dropInfo, draggedEvent) =>
+                      draggedEvent?.extendedProps.kind === "blocked"
+                    }
+                    eventClassNames={(arg) =>
+                      arg.isMirror ? ["is-mirror"] : []
+                    }
+                    eventContent={(arg) => (
+                      <div className="fc-event-card">
+                        <strong>{arg.event.title}</strong>
+                        <span>
+                          {arg.timeText}
+                          {arg.event.extendedProps.meta
+                            ? ` - ${arg.event.extendedProps.meta}`
+                            : ""}
+                        </span>
                       </div>
-                    );
-                  })}
+                    )}
+                    eventDrop={updateAvailabilityBlock}
+                    eventResize={updateAvailabilityBlock}
+                    events={calendarEvents}
+                    firstDay={1}
+                    headerToolbar={{
+                      left: "prev,next today",
+                      center: "title",
+                      right: "dayGridMonth,timeGridWeek,timeGridDay",
+                    }}
+                    height="auto"
+                    initialView="timeGridWeek"
+                    locale={ptBrLocale}
+                    nowIndicator
+                    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+                    select={createAvailabilityBlock}
+                    selectable
+                    selectMirror
+                    slotLabelFormat={{
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }}
+                    slotMinTime="06:00:00"
+                    slotMaxTime="24:00:00"
+                    weekends
+                  />
                 </div>
               </article>
 
@@ -347,89 +428,6 @@ export default function AgendaPage() {
       ) : null}
     </DashboardShell>
   );
-}
-
-function buildMonthGrid(monthDate: Date) {
-  const firstDay = startOfMonth(monthDate);
-  const gridStart = new Date(firstDay);
-  gridStart.setDate(firstDay.getDate() - firstDay.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-
-    return {
-      date,
-      isCurrentMonth: date.getMonth() === monthDate.getMonth(),
-    };
-  });
-}
-
-function groupEntries(contracts: Contract[], availability: AvailabilityItem[]) {
-  const entries = new Map<string, CalendarEntry[]>();
-
-  contracts.forEach((contract) => {
-    addRangeEntry(entries, contract.startsAt, contract.endsAt, {
-      id: contract.id,
-      dateKey: "",
-      title: contract.event?.name ?? "Evento",
-      meta: statusLabels[contract.status] ?? contract.status,
-      kind: "work",
-    });
-  });
-
-  availability.forEach((item) => {
-    addRangeEntry(entries, item.startsAt, item.endsAt, {
-      id: item.id,
-      dateKey: "",
-      title: item.reason ?? "Indisponível",
-      meta: "Bloqueio de agenda",
-      kind: "blocked",
-    });
-  });
-
-  return entries;
-}
-
-function addRangeEntry(
-  entries: Map<string, CalendarEntry[]>,
-  startsAt: string,
-  endsAt: string,
-  entry: CalendarEntry,
-) {
-  const current = startOfDay(new Date(startsAt));
-  const end = startOfDay(new Date(endsAt));
-
-  while (current <= end) {
-    const dateKey = toDateKey(current);
-    const dayEntries = entries.get(dateKey) ?? [];
-    dayEntries.push({ ...entry, dateKey, id: `${entry.id}-${dateKey}` });
-    entries.set(dateKey, dayEntries);
-    current.setDate(current.getDate() + 1);
-  }
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function toDateKey(date: Date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
-}
-
-function formatMonth(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric",
-  }).format(date);
 }
 
 function formatDateTime(date: string) {

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, EventStatus } from "@prisma/client";
+import { ContractStatus, EventStatus, VerificationStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { SearchAvailableFreelancersDto } from "./dto/search-available-freelancers.dto";
@@ -16,6 +16,7 @@ export class EventsService {
 
   async create(userId: string, dto: CreateEventDto) {
     const company = await this.findCompanyByUserId(userId);
+    this.assertCompanyVerified(company);
     this.assertValidRange(dto.startsAt, dto.endsAt);
 
     return this.prisma.event.create({
@@ -30,6 +31,7 @@ export class EventsService {
         description: dto.description,
         eventType: dto.eventType,
         desiredProfessionals: dto.desiredProfessionals ?? 1,
+        status: EventStatus.OPEN,
         requirements: {
           create: dto.requirements?.map((item) => ({
             skillId: item.skillId,
@@ -122,7 +124,7 @@ export class EventsService {
         description: event.description,
         eventType: event.eventType,
         desiredProfessionals: event.desiredProfessionals,
-        status: EventStatus.DRAFT,
+        status: EventStatus.OPEN,
         requirements: {
           create: event.requirements.map((item) => ({
             skillId: item.skillId,
@@ -145,6 +147,8 @@ export class EventsService {
 
     const freelancers = await this.prisma.freelancerProfile.findMany({
       where: {
+        user: { isActive: true },
+        verificationStatus: VerificationStatus.VERIFIED,
         city: query.city || undefined,
         dailyRateCents: {
           gte: query.minDailyRateCents,
@@ -158,7 +162,12 @@ export class EventsService {
           : undefined,
         OR: normalizedSearch
           ? [
-              { displayName: { contains: normalizedSearch, mode: "insensitive" } },
+              {
+                displayName: {
+                  contains: normalizedSearch,
+                  mode: "insensitive",
+                },
+              },
               {
                 user: {
                   name: { contains: normalizedSearch, mode: "insensitive" },
@@ -240,6 +249,12 @@ export class EventsService {
   private assertValidRange(startsAt: string, endsAt: string) {
     if (new Date(startsAt) >= new Date(endsAt)) {
       throw new BadRequestException("End must be after start");
+    }
+  }
+
+  private assertCompanyVerified(company: { verificationStatus: VerificationStatus }) {
+    if (company.verificationStatus !== VerificationStatus.VERIFIED) {
+      throw new ForbiddenException("Company must be verified");
     }
   }
 }

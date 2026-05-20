@@ -33,6 +33,11 @@ export default function ProfessionalsPage() {
       return;
     }
 
+    if (session.user.role === "FREELANCER") {
+      setLoading(false);
+      return;
+    }
+
     void loadProfessionals();
   }, [session]);
 
@@ -81,14 +86,8 @@ export default function ProfessionalsPage() {
       ["search", String(form.get("search") ?? "")],
       ["tools", String(form.get("tools") ?? "")],
       ["transportation", String(form.get("transportation") ?? "")],
-      [
-        "minDailyRateCents",
-        centsFromCurrencyInput(form.get("minDailyRate")),
-      ],
-      [
-        "maxDailyRateCents",
-        centsFromCurrencyInput(form.get("maxDailyRate")),
-      ],
+      ["minDailyRateCents", centsFromCurrencyInput(form.get("minDailyRate"))],
+      ["maxDailyRateCents", centsFromCurrencyInput(form.get("maxDailyRate"))],
     ];
     setError("");
     setSelectedEventId(eventId);
@@ -194,6 +193,17 @@ export default function ProfessionalsPage() {
 
   if (!session) {
     return null;
+  }
+
+  if (session.user.role === "FREELANCER") {
+    return (
+      <DashboardShell eyebrow={session.user.role} title="Profissionais">
+        <EmptyState>
+          A busca e o convite de profissionais ficam disponíveis para empresas.
+          Para acompanhar trabalhos, use Oportunidades, Convites e Agenda.
+        </EmptyState>
+      </DashboardShell>
+    );
   }
 
   return (

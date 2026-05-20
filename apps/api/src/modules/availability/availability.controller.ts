@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -35,6 +36,15 @@ export class AvailabilityController {
     @Body() dto: CreateAvailabilityDto,
   ) {
     return this.availabilityService.create(user.sub, dto);
+  }
+
+  @Patch(":id")
+  update(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @Body() dto: CreateAvailabilityDto,
+  ) {
+    return this.availabilityService.update(user.sub, id, dto);
   }
 
   @Delete(":id")

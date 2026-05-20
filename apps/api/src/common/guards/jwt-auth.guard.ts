@@ -5,12 +5,14 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { PrismaService } from "../../modules/prisma/prisma.service";
 
 @Injectable()
 export class JwtAuthGuard {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -25,9 +27,19 @@ export class JwtAuthGuard {
     }
 
     try {
-      request.user = await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync(token, {
         secret: this.config.get<string>("JWT_ACCESS_SECRET"),
       });
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { isActive: true },
+      });
+
+      if (!user?.isActive) {
+        throw new UnauthorizedException("Invalid access token");
+      }
+
+      request.user = payload;
       return true;
     } catch {
       throw new UnauthorizedException("Invalid access token");

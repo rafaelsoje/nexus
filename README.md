@@ -38,7 +38,9 @@ Já implementado:
 - Contratos originados a partir de convites aceitos.
 - Ciclo de contrato com pagamento, conclusão, no-show e cancelamento.
 - Pagamento simulado, split da plataforma e carteira do freelancer.
+- Carteira da empresa com carga de saldo simulada e uso automático no pagamento com complemento via gateway.
 - Gateway de pagamento abstraído com provider simulado configurável.
+- Regra inicial pós-evento com prazo de 1 dia útil para no-show e processamento admin de repasses vencidos.
 - Avaliações pós-contrato com atualização automática da média de reputação.
 - Central de notificações com avisos automáticos para convites, pagamentos, avaliações e contestações.
 - Abertura e resolução administrativa de contestações.
@@ -53,9 +55,8 @@ Já implementado:
 
 Próximas entregas orientadas pelo novo documento:
 
-- Carteira da empresa com carga de saldo e complemento de pagamento.
 - Gateway real com cartão, boleto/Pix quando definido, comprovantes e webhooks.
-- Regras automáticas de pós-evento: prazo de 1 dia útil para no-show, contestação e liberação de pagamento.
+- Automação agendada das regras pós-evento, sem depender de acionamento administrativo manual.
 - Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
 - Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
 - Upload específico de foto/logo/avatar, além dos documentos de verificação.
@@ -117,6 +118,7 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 PAYMENT_GATEWAY_PROVIDER="simulated"
 PAYMENT_GATEWAY_TRANSACTION_PREFIX="sim"
 PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID="platform"
+PLATFORM_COMPANY_FEE_BASIS_POINTS="800"
 EMAIL_PROVIDER="local"
 EMAIL_EXPOSE_DEV_TOKENS="true"
 JSON_BODY_LIMIT="8mb"
@@ -131,6 +133,8 @@ PAYMENT_GATEWAY_PROVIDER="simulated"
 ```
 
 Quando a administração de pagamentos estiver definida, o próximo ajuste fica concentrado no módulo de pagamentos: adicionar o provider real, mapear `gatewayTransactionId`, recebedores do split e eventos de confirmação/estorno do gateway.
+
+A taxa de conveniência cobrada da empresa é configurada por `PLATFORM_COMPANY_FEE_BASIS_POINTS`, em basis points. O padrão `800` representa 8%.
 
 ## E-mail
 
@@ -180,6 +184,10 @@ URLs:
 
 - Web: `http://localhost:3000`
 - API: `http://localhost:3001`
+
+## Deploy
+
+Para publicar em um VPS e permitir que sócios acompanhem a evolução do produto, consulte o guia [DEPLOY.md](DEPLOY.md).
 
 ## Comandos Úteis
 

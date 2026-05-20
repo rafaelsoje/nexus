@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { ContractStatus, UserRole } from "@prisma/client";
+import { ContractStatus, PaymentStatus, UserRole } from "@prisma/client";
 import { ContractsService } from "./contracts.service";
 
 function createPrismaMock(overrides: Record<string, unknown> = {}) {
@@ -30,6 +30,7 @@ function createPrismaMock(overrides: Record<string, unknown> = {}) {
 const participantContract = {
   id: "contract-1",
   status: ContractStatus.CONFIRMED,
+  endsAt: new Date("2020-06-10T23:00:00.000Z"),
   event: { name: "Festival NEXO" },
   company: { userId: "company-user" },
   freelancer: { userId: "freelancer-user" },
@@ -95,6 +96,72 @@ describe("ContractsService", () => {
         ),
       BadRequestException,
     );
+  });
+
+  it("blocks closing a contract before the event ends", async () => {
+    const prisma = createPrismaMock({
+      contract: {
+        findFirst: async () => ({
+          ...participantContract,
+          endsAt: new Date("2099-06-10T23:00:00.000Z"),
+        }),
+      },
+    });
+    const service = new ContractsService(prisma as never);
+
+    await assert.rejects(
+      () =>
+        service.updateStatus(
+          "company-user",
+          UserRole.COMPANY,
+          "contract-1",
+          ContractStatus.COMPLETED,
+        ),
+      BadRequestException,
+    );
+  });
+
+  it("blocks manual confirmation before payment is paid", async () => {
+    const prisma = createPrismaMock({
+      companyProfile: {
+        findUnique: async () => ({ id: "company-1" }),
+      },
+      contract: {
+        findFirst: async () => ({
+          id: "contract-1",
+          payment: null,
+        }),
+      },
+    });
+    const service = new ContractsService(prisma as never);
+
+    await assert.rejects(
+      () => service.confirmByCompany("company-user", "contract-1"),
+      BadRequestException,
+    );
+  });
+
+  it("allows manual confirmation only when payment is paid", async () => {
+    const prisma = createPrismaMock({
+      companyProfile: {
+        findUnique: async () => ({ id: "company-1" }),
+      },
+      contract: {
+        findFirst: async () => ({
+          id: "contract-1",
+          payment: { status: PaymentStatus.PAID },
+        }),
+        update: async ({ data }: { data: { status: ContractStatus } }) => ({
+          id: "contract-1",
+          status: data.status,
+        }),
+      },
+    });
+    const service = new ContractsService(prisma as never);
+
+    const result = await service.confirmByCompany("company-user", "contract-1");
+
+    assert.equal(result.status, ContractStatus.CONFIRMED);
   });
 
   it("detects schedule conflicts only when matching contracts overlap", async () => {

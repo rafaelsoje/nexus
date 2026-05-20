@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, UserRole } from "@prisma/client";
+import { ContractStatus, PaymentStatus, UserRole } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -45,10 +45,15 @@ export class ContractsService {
     const company = await this.findCompanyByUserId(userId);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
+      include: { payment: true },
     });
 
     if (!contract) {
       throw new NotFoundException("Contract not found");
+    }
+
+    if (contract.payment?.status !== PaymentStatus.PAID) {
+      throw new BadRequestException("Payment must be paid before confirmation");
     }
 
     return this.prisma.contract.update({
@@ -68,7 +73,12 @@ export class ContractsService {
       role,
       contractId,
     );
-    this.assertAllowedStatusTransition(role, contract.status, status);
+    this.assertAllowedStatusTransition(
+      role,
+      contract.status,
+      status,
+      contract.endsAt,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const updatedContract = await tx.contract.update({
@@ -151,6 +161,7 @@ export class ContractsService {
     role: UserRole,
     currentStatus: ContractStatus,
     nextStatus: ContractStatus,
+    endsAt: Date,
   ) {
     const allowedByRole: Record<
       Extract<UserRole, "COMPANY" | "FREELANCER">,
@@ -187,6 +198,36 @@ export class ContractsService {
     if (!canComplete && !canNoShow && !canCancel) {
       throw new BadRequestException("Contract status transition is invalid");
     }
+
+    if (
+      (nextStatus === ContractStatus.COMPLETED ||
+        nextStatus === ContractStatus.NO_SHOW) &&
+      new Date() < endsAt
+    ) {
+      throw new BadRequestException("Contract cannot be closed before event ends");
+    }
+
+    if (
+      nextStatus === ContractStatus.NO_SHOW &&
+      new Date() > this.addBusinessDays(endsAt, 1)
+    ) {
+      throw new BadRequestException("No-show deadline has expired");
+    }
+  }
+
+  private addBusinessDays(date: Date, days: number) {
+    const result = new Date(date);
+    let remainingDays = days;
+
+    while (remainingDays > 0) {
+      result.setDate(result.getDate() + 1);
+
+      if (result.getDay() !== 0 && result.getDay() !== 6) {
+        remainingDays -= 1;
+      }
+    }
+
+    return result;
   }
 
   private async findFreelancerByUserId(userId: string) {

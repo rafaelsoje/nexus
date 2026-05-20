@@ -22,13 +22,38 @@ export class AvailabilityService {
   async create(userId: string, dto: CreateAvailabilityDto) {
     const freelancer = await this.findFreelancerByUserId(userId);
 
-    if (new Date(dto.startsAt) >= new Date(dto.endsAt)) {
-      throw new BadRequestException("End must be after start");
-    }
+    this.assertValidRange(dto.startsAt, dto.endsAt);
 
     return this.prisma.availability.create({
       data: {
         freelancerId: freelancer.id,
+        startsAt: new Date(dto.startsAt),
+        endsAt: new Date(dto.endsAt),
+        isAvailable: dto.isAvailable ?? false,
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async update(
+    userId: string,
+    availabilityId: string,
+    dto: CreateAvailabilityDto,
+  ) {
+    const freelancer = await this.findFreelancerByUserId(userId);
+    const availability = await this.prisma.availability.findFirst({
+      where: { id: availabilityId, freelancerId: freelancer.id },
+    });
+
+    if (!availability) {
+      throw new NotFoundException("Availability not found");
+    }
+
+    this.assertValidRange(dto.startsAt, dto.endsAt);
+
+    return this.prisma.availability.update({
+      where: { id: availability.id },
+      data: {
         startsAt: new Date(dto.startsAt),
         endsAt: new Date(dto.endsAt),
         isAvailable: dto.isAvailable ?? false,
@@ -61,5 +86,11 @@ export class AvailabilityService {
     }
 
     return freelancer;
+  }
+
+  private assertValidRange(startsAt: string, endsAt: string) {
+    if (new Date(startsAt) >= new Date(endsAt)) {
+      throw new BadRequestException("End must be after start");
+    }
   }
 }

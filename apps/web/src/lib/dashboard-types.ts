@@ -87,6 +87,7 @@ export type Contract = {
   id: string;
   status: string;
   amountCents: number;
+  platformFeeCents: number;
   startsAt: string;
   endsAt: string;
   event?: EventItem;

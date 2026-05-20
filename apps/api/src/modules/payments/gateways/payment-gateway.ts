@@ -11,6 +11,8 @@ export type PaymentGatewayChargeInput = {
   grossAmountCents: number;
   freelancerAmountCents: number;
   platformFeeCents: number;
+  walletAmountCents: number;
+  gatewayAmountCents: number;
 };
 
 export type PaymentGatewayChargeResult = {

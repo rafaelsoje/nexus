@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { User } from "@prisma/client";
+import { User, UserRole } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
@@ -24,6 +25,10 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    if (dto.role === UserRole.ADMIN) {
+      throw new ForbiddenException("Admin users cannot self-register");
+    }
+
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -108,7 +113,9 @@ export class AuthService {
       where: { id: user.id },
       data: {
         resetTokenHash: await bcrypt.hash(resetToken, 12),
-        resetTokenExpiresAt: new Date(Date.now() + 1000 * 60 * expiresInMinutes),
+        resetTokenExpiresAt: new Date(
+          Date.now() + 1000 * 60 * expiresInMinutes,
+        ),
       },
     });
 

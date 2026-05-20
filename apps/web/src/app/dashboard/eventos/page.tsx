@@ -56,6 +56,11 @@ export default function EventsPage() {
       return;
     }
 
+    if (session.user.role === "FREELANCER") {
+      setLoading(false);
+      return;
+    }
+
     void loadEvents();
   }, [session]);
 
@@ -204,6 +209,17 @@ export default function EventsPage() {
     return null;
   }
 
+  if (session.user.role === "FREELANCER") {
+    return (
+      <DashboardShell eyebrow={session.user.role} title="Eventos">
+        <EmptyState>
+          Empresas gerenciam eventos por aqui. Para profissionais, use
+          Oportunidades, Convites e Agenda.
+        </EmptyState>
+      </DashboardShell>
+    );
+  }
+
   return (
     <DashboardShell
       action={<ModuleHeaderAction onRefresh={loadEvents} />}
@@ -248,11 +264,7 @@ export default function EventsPage() {
               onSubmit={handleSubmitEvent}
             >
               <Field label="Nome">
-                <input
-                  defaultValue={editingEvent?.name}
-                  name="name"
-                  required
-                />
+                <input defaultValue={editingEvent?.name} name="name" required />
               </Field>
               <div className="form-grid">
                 <Field label="Início">

@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { DisputeStatus, VerificationStatus } from "@prisma/client";
+import {
+  ContractStatus,
+  DisputeStatus,
+  PaymentStatus,
+  VerificationStatus,
+} from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -123,10 +128,30 @@ export class AdminService {
         data: { status },
         include: {
           contract: {
-            include: { event: true, company: true, freelancer: true },
+            include: {
+              event: true,
+              company: true,
+              freelancer: true,
+              payment: true,
+            },
           },
         },
       });
+
+      if (
+        dispute.contract.status === ContractStatus.DISPUTED &&
+        (status === DisputeStatus.RESOLVED || status === DisputeStatus.REJECTED)
+      ) {
+        await tx.contract.update({
+          where: { id: dispute.contractId },
+          data: {
+            status:
+              dispute.contract.payment?.status === PaymentStatus.PAID
+                ? ContractStatus.CONFIRMED
+                : ContractStatus.PENDING_PAYMENT,
+          },
+        });
+      }
 
       await tx.notification.createMany({
         data: [
