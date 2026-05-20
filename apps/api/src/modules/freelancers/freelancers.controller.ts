@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { UserRole } from "@prisma/client";
 import {
   CurrentUser,
@@ -53,5 +61,11 @@ export class FreelancersController {
   @Get()
   listPublicProfiles() {
     return this.freelancersService.listPublicProfiles();
+  }
+
+  @Roles(UserRole.COMPANY, UserRole.FREELANCER, UserRole.ADMIN)
+  @Get(":id/public")
+  publicProfile(@Param("id") id: string) {
+    return this.freelancersService.findPublicProfile(id);
   }
 }

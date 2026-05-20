@@ -5,19 +5,39 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ContractStatus, PaymentStatus, UserRole } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
+import {
+  CompanyAccessService,
+  companyFinanceRoles,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class ContractsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async listMine(userId: string, role: UserRole) {
     if (role === UserRole.COMPANY) {
-      const company = await this.findCompanyByUserId(userId);
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
       return this.prisma.contract.findMany({
         where: { companyId: company.id },
         orderBy: { startsAt: "desc" },
-        include: { event: true, freelancer: true, payment: true },
+        include: {
+          event: true,
+          freelancer: { select: publicFreelancerSelect },
+          payment: true,
+        },
       });
     }
 
@@ -27,22 +47,17 @@ export class ContractsService {
       orderBy: { startsAt: "desc" },
       include: {
         event: true,
-        company: {
-          select: {
-            id: true,
-            companyName: true,
-            logoUrl: true,
-            city: true,
-            state: true,
-          },
-        },
+        company: { select: publicCompanySelect },
         payment: true,
       },
     });
   }
 
   async confirmByCompany(userId: string, contractId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyFinanceRoles,
+    );
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
       include: { payment: true },
@@ -84,22 +99,29 @@ export class ContractsService {
       const updatedContract = await tx.contract.update({
         where: { id: contract.id },
         data: { status },
-        include: { event: true, company: true, freelancer: true },
+        include: {
+          event: true,
+          company: { select: publicCompanySelect },
+          freelancer: { select: publicFreelancerSelect },
+        },
       });
 
-      const recipientUserId =
-        role === UserRole.COMPANY
-          ? contract.freelancer.userId
-          : contract.company.userId;
-
-      await tx.notification.create({
-        data: {
-          userId: recipientUserId,
+      if (role === UserRole.COMPANY) {
+        await tx.notification.create({
+          data: {
+            userId: contract.freelancer.userId,
+            type: "CONTRACT_STATUS_UPDATED",
+            title: "Contrato atualizado",
+            body: `${contract.event.name}: status alterado para ${status}.`,
+          },
+        });
+      } else {
+        await this.companyAccess.notifyCompanyMembers(tx, contract.companyId, {
           type: "CONTRACT_STATUS_UPDATED",
           title: "Contrato atualizado",
           body: `${contract.event.name}: status alterado para ${status}.`,
-        },
-      });
+        });
+      }
 
       return updatedContract;
     });
@@ -124,18 +146,6 @@ export class ContractsService {
     return count > 0;
   }
 
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
-
-    return company;
-  }
-
   private async findParticipantContract(
     userId: string,
     role: UserRole,
@@ -143,7 +153,7 @@ export class ContractsService {
   ) {
     const participantWhere =
       role === UserRole.COMPANY
-        ? { company: { userId } }
+        ? { company: { members: { some: { userId, isActive: true } } } }
         : { freelancer: { userId } };
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, ...participantWhere },
@@ -204,7 +214,9 @@ export class ContractsService {
         nextStatus === ContractStatus.NO_SHOW) &&
       new Date() < endsAt
     ) {
-      throw new BadRequestException("Contract cannot be closed before event ends");
+      throw new BadRequestException(
+        "Contract cannot be closed before event ends",
+      );
     }
 
     if (

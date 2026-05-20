@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   ContractStatus,
   DisputeStatus,
@@ -13,7 +14,17 @@ import {
   UserRole,
   VerificationStatus,
 } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
+import {
+  CompanyAccessService,
+  companyFinanceRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { calculateMarketplaceFees } from "./fees";
 import { PAYMENT_GATEWAY, PaymentGateway } from "./gateways/payment-gateway";
 
 @Injectable()
@@ -22,6 +33,8 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY)
     private readonly paymentGateway: PaymentGateway,
+    private readonly companyAccess: CompanyAccessService,
+    private readonly config: ConfigService,
   ) {}
 
   async listMine(userId: string, role: UserRole) {
@@ -38,12 +51,20 @@ export class PaymentsService {
     }
 
     if (role === UserRole.COMPANY) {
-      const company = await this.findCompanyByUserId(userId);
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
       return this.prisma.payment.findMany({
         where: { contract: { companyId: company.id } },
         orderBy: { createdAt: "desc" },
         include: {
-          contract: { include: { event: true, freelancer: true } },
+          contract: {
+            include: {
+              event: true,
+              freelancer: { select: publicFreelancerSelect },
+            },
+          },
           splits: true,
         },
       });
@@ -54,14 +75,22 @@ export class PaymentsService {
       where: { contract: { freelancerId: freelancer.id } },
       orderBy: { createdAt: "desc" },
       include: {
-        contract: { include: { event: true, company: true } },
+        contract: {
+          include: {
+            event: true,
+            company: { select: publicCompanySelect },
+          },
+        },
         splits: true,
       },
     });
   }
 
   async processPayment(userId: string, contractId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyFinanceRoles,
+    );
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
       include: {
@@ -91,21 +120,22 @@ export class PaymentsService {
       throw new ForbiddenException("Contract participants must be verified");
     }
 
-    const freelancerAmountCents = contract.amountCents;
-    const platformFeeCents = contract.platformFeeCents;
-    const grossAmountCents = freelancerAmountCents + platformFeeCents;
+    const fees = calculateMarketplaceFees(contract.amountCents, this.config, {
+      companyFeeAmountCents: contract.platformFeeCents,
+    });
+    const grossAmountCents = fees.grossAmountCents;
     const walletBalanceCents = contract.company.wallet?.balanceCents ?? 0;
     const walletAmountCents = Math.min(walletBalanceCents, grossAmountCents);
     const gatewayAmountCents = grossAmountCents - walletAmountCents;
     const gatewayPayment =
       gatewayAmountCents > 0
-        ? await this.paymentGateway.charge({
+        ? await this.paymentGateway.createCharge({
             contractId: contract.id,
             companyId: contract.companyId,
             freelancerId: contract.freelancerId,
-            grossAmountCents,
-            freelancerAmountCents,
-            platformFeeCents,
+            ...fees,
+            freelancerAmountCents: contract.amountCents,
+            platformFeeCents: fees.platformAmountCents,
             walletAmountCents,
             gatewayAmountCents,
           })
@@ -116,12 +146,12 @@ export class PaymentsService {
             splits: [
               {
                 recipientType: "FREELANCER" as const,
-                amountCents: freelancerAmountCents,
+                amountCents: fees.amountToReleaseFreelancerCents,
                 gatewayRecipientId: `freelancer_${contract.freelancerId}`,
               },
               {
                 recipientType: "PLATFORM" as const,
-                amountCents: platformFeeCents,
+                amountCents: fees.platformAmountCents,
                 gatewayRecipientId: "platform",
               },
             ],
@@ -149,8 +179,18 @@ export class PaymentsService {
           contractId: contract.id,
           status: gatewayPayment.status,
           grossAmountCents,
-          freelancerAmountCents,
-          platformFeeCents,
+          freelancerAmountCents: fees.freelancerNetAmountCents,
+          platformFeeCents: fees.platformAmountCents,
+          companyFeeAmountCents: fees.companyFeeAmountCents,
+          freelancerFeeAmountCents: fees.freelancerFeeAmountCents,
+          gatewayFeeAmountCents:
+            gatewayPayment.gatewayFeeAmountCents ?? fees.gatewayFeeAmountCents,
+          platformAmountCents: fees.platformAmountCents,
+          freelancerNetAmountCents: fees.freelancerNetAmountCents,
+          amountToChargeCompanyCents: fees.amountToChargeCompanyCents,
+          amountToReleaseFreelancerCents: fees.amountToReleaseFreelancerCents,
+          walletAmountCents,
+          gatewayAmountCents,
           gatewayTransactionId: gatewayPayment.gatewayTransactionId,
           paidAt: gatewayPayment.paidAt,
           splits: {
@@ -219,16 +259,21 @@ export class PaymentsService {
     }
 
     if (now < this.addBusinessDays(payment.contract.endsAt, 1)) {
-      throw new BadRequestException("Payment cannot be released before deadline");
+      throw new BadRequestException(
+        "Payment cannot be released before deadline",
+      );
     }
 
-    const hasBlockingDispute = payment.contract.disputes.some((dispute) =>
-      dispute.status === DisputeStatus.OPEN ||
-      dispute.status === DisputeStatus.UNDER_REVIEW,
+    const hasBlockingDispute = payment.contract.disputes.some(
+      (dispute) =>
+        dispute.status === DisputeStatus.OPEN ||
+        dispute.status === DisputeStatus.UNDER_REVIEW,
     );
 
     if (hasBlockingDispute) {
-      throw new BadRequestException("Payment cannot be released with open dispute");
+      throw new BadRequestException(
+        "Payment cannot be released with open dispute",
+      );
     }
 
     const wallet = payment.contract.freelancer.wallet;
@@ -240,14 +285,16 @@ export class PaymentsService {
     return this.prisma.$transaction(async (tx) => {
       await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balanceCents: { increment: payment.freelancerAmountCents } },
+        data: {
+          balanceCents: { increment: payment.amountToReleaseFreelancerCents },
+        },
       });
 
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type: TransactionType.CREDIT,
-          amountCents: payment.freelancerAmountCents,
+          amountCents: payment.amountToReleaseFreelancerCents,
           description: `Liberação do pagamento ${payment.id}`,
         },
       });
@@ -271,14 +318,18 @@ export class PaymentsService {
             title: "Repasse liberado",
             body: `O repasse de ${payment.contract.event.name} entrou na sua carteira.`,
           },
-          {
-            userId: payment.contract.company.userId,
-            type: "PAYMENT_RELEASED",
-            title: "Pagamento liberado",
-            body: `O repasse de ${payment.contract.event.name} foi liberado ao profissional.`,
-          },
         ],
       });
+
+      await this.companyAccess.notifyCompanyMembers(
+        tx,
+        payment.contract.companyId,
+        {
+          type: "PAYMENT_RELEASED",
+          title: "Pagamento liberado",
+          body: `O repasse de ${payment.contract.event.name} foi liberado ao profissional.`,
+        },
+      );
 
       return releasedPayment;
     });
@@ -318,7 +369,23 @@ export class PaymentsService {
     const released = [];
 
     for (const payment of eligiblePayments) {
-      released.push(await this.releaseToFreelancer(payment.id, now));
+      const releasedPayment = await this.releaseToFreelancer(payment.id, now);
+      released.push(releasedPayment);
+      await this.prisma.auditLog.create({
+        data: {
+          action: "AUTO_PAYMENT_RELEASED",
+          entity: "Payment",
+          entityId: payment.id,
+          metadata: {
+            contractId: payment.contractId,
+            releasedAt: now.toISOString(),
+            deadlineAt: this.addBusinessDays(
+              payment.contract.endsAt,
+              1,
+            ).toISOString(),
+          },
+        },
+      });
     }
 
     return {
@@ -329,16 +396,101 @@ export class PaymentsService {
     };
   }
 
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
+  async processPostEventAutomation(now = new Date()) {
+    const reminders = await this.notifyCompaniesWithOpenReviewWindow(now);
+    const releases = await this.processDueReleases(now);
+
+    return {
+      reminders,
+      releases,
+    };
+  }
+
+  private async notifyCompaniesWithOpenReviewWindow(now: Date) {
+    const paidPayments = await this.prisma.payment.findMany({
+      where: {
+        status: PaymentStatus.PAID,
+        contract: {
+          status: ContractStatus.CONFIRMED,
+          endsAt: { lte: now },
+        },
+      },
+      include: {
+        contract: {
+          include: {
+            disputes: true,
+            event: true,
+          },
+        },
+      },
+      orderBy: { paidAt: "asc" },
     });
 
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
+    let sent = 0;
+
+    for (const payment of paidPayments) {
+      const deadline = this.addBusinessDays(payment.contract.endsAt, 1);
+
+      if (now >= deadline) {
+        continue;
+      }
+
+      const hasBlockingDispute = payment.contract.disputes.some(
+        (dispute) =>
+          dispute.status === DisputeStatus.OPEN ||
+          dispute.status === DisputeStatus.UNDER_REVIEW,
+      );
+
+      if (hasBlockingDispute) {
+        continue;
+      }
+
+      const alreadySent = await this.prisma.auditLog.findFirst({
+        where: {
+          action: "POST_EVENT_REVIEW_REMINDER_SENT",
+          entity: "Contract",
+          entityId: payment.contractId,
+        },
+        select: { id: true },
+      });
+
+      if (alreadySent) {
+        continue;
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await this.companyAccess.notifyCompanyMembers(
+          tx,
+          payment.contract.companyId,
+          {
+            type: "POST_EVENT_REVIEW_PENDING",
+            title: "Evento finalizado",
+            body: `${payment.contract.event.name}: avalie o profissional ou marque no-show até ${deadline.toLocaleDateString("pt-BR")}.`,
+          },
+        );
+
+        await tx.auditLog.create({
+          data: {
+            action: "POST_EVENT_REVIEW_REMINDER_SENT",
+            entity: "Contract",
+            entityId: payment.contractId,
+            metadata: {
+              paymentId: payment.id,
+              eventId: payment.contract.eventId,
+              deadlineAt: deadline.toISOString(),
+              sentAt: now.toISOString(),
+            },
+          },
+        });
+      });
+
+      sent += 1;
     }
 
-    return company;
+    return {
+      checked: paidPayments.length,
+      sent,
+    };
   }
 
   private async findFreelancerByUserId(userId: string) {

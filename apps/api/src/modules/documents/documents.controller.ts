@@ -47,8 +47,10 @@ export class DocumentsController {
     @Param("id") id: string,
     @Res() response: Response,
   ) {
-    const document =
-      await this.documentsService.getVerificationDocumentFile(user, id);
+    const document = await this.documentsService.getVerificationDocumentFile(
+      user,
+      id,
+    );
 
     response.contentType(document.mimeType);
     response.setHeader(

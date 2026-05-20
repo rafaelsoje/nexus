@@ -13,8 +13,17 @@ import {
   Prisma,
   VerificationStatus,
 } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
 import { PrismaService } from "../prisma/prisma.service";
 import { calculatePlatformFeeCents } from "../payments/fees";
+import {
+  CompanyAccessService,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
 
 @Injectable()
@@ -22,6 +31,7 @@ export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly companyAccess: CompanyAccessService,
   ) {}
 
   async listOpportunities(userId: string) {
@@ -54,13 +64,7 @@ export class ApplicationsService {
       orderBy: { startsAt: "asc" },
       include: {
         company: {
-          select: {
-            id: true,
-            companyName: true,
-            city: true,
-            state: true,
-            ratingAverage: true,
-          },
+          select: publicCompanySelect,
         },
         requirements: { include: { skill: true } },
         contracts: true,
@@ -87,7 +91,7 @@ export class ApplicationsService {
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
         company: {
-          select: { id: true, companyName: true, city: true, state: true },
+          select: publicCompanySelect,
         },
         contract: true,
       },
@@ -95,7 +99,10 @@ export class ApplicationsService {
   }
 
   async listReceived(userId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyReadRoles,
+    );
 
     return this.prisma.application.findMany({
       where: { companyId: company.id },
@@ -103,19 +110,7 @@ export class ApplicationsService {
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
         freelancer: {
-          select: {
-            id: true,
-            displayName: true,
-            avatarUrl: true,
-            city: true,
-            state: true,
-            dailyRateCents: true,
-            ratingAverage: true,
-            tools: true,
-            transportation: true,
-            skills: { include: { skill: true } },
-            user: { select: { name: true } },
-          },
+          select: publicFreelancerSelect,
         },
         contract: true,
       },
@@ -185,13 +180,10 @@ export class ApplicationsService {
         },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: event.company.userId,
-          type: "APPLICATION_RECEIVED",
-          title: "Nova candidatura recebida",
-          body: `${freelancer.displayName ?? "Profissional"} se candidatou para ${event.name}.`,
-        },
+      await this.companyAccess.notifyCompanyMembers(tx, event.companyId, {
+        type: "APPLICATION_RECEIVED",
+        title: "Nova candidatura recebida",
+        body: `${freelancer.displayName ?? "Profissional"} se candidatou para ${event.name}.`,
       });
 
       return application;
@@ -199,7 +191,10 @@ export class ApplicationsService {
   }
 
   async accept(userId: string, applicationId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyOperateRoles,
+    );
     this.assertCompanyVerified(company);
     const application = await this.findApplicationForCompany(
       applicationId,
@@ -226,7 +221,11 @@ export class ApplicationsService {
       0;
 
     return this.prisma.$transaction(async (tx) => {
-      await this.lockHiringRows(tx, application.eventId, application.freelancerId);
+      await this.lockHiringRows(
+        tx,
+        application.eventId,
+        application.freelancerId,
+      );
       await this.assertEventHasOpenSpot(application.eventId, tx);
       await this.assertFreelancerCanWork(
         application.freelancerId,
@@ -276,7 +275,10 @@ export class ApplicationsService {
   }
 
   async decline(userId: string, applicationId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyOperateRoles,
+    );
     const application = await this.findApplicationForCompany(
       applicationId,
       company.id,
@@ -479,18 +481,6 @@ export class ApplicationsService {
     }
 
     return application;
-  }
-
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
-
-    return company;
   }
 
   private async findFreelancerByUserId(userId: string) {

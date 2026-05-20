@@ -216,6 +216,17 @@ h3 {
   color: var(--on-primary);
   font: inherit;
   font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+}
+
+.primary-button:hover {
+  box-shadow: 0 0.75rem 1.6rem rgba(0, 191, 255, 0.2);
+  filter: brightness(1.03);
+  transform: translateY(-1px);
 }
 
 .primary-button:disabled,
@@ -1681,7 +1692,7 @@ select:focus {
 
 .calendar-shell .fc-event {
   border-radius: 0.4rem;
-  cursor: default;
+  cursor: pointer;
   overflow: hidden;
 }
 
@@ -1747,6 +1758,102 @@ select:focus {
 .fc-event-card span {
   font-size: 0.66rem;
   opacity: 0.82;
+}
+
+.agenda-modal-backdrop {
+  align-items: center;
+  background: rgba(4, 8, 18, 0.72);
+  backdrop-filter: blur(10px);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1.25rem;
+  position: fixed;
+  z-index: 60;
+}
+
+.agenda-modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+  color: var(--white);
+  display: grid;
+  gap: 1rem;
+  max-height: min(42rem, calc(100vh - 2.5rem));
+  max-width: 42rem;
+  overflow: auto;
+  padding: 1.15rem;
+  width: min(100%, 42rem);
+}
+
+.agenda-modal-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.agenda-modal-header span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agenda-modal-header h2 {
+  font-size: 1.25rem;
+  letter-spacing: 0;
+  margin: 0.2rem 0 0;
+}
+
+.agenda-modal-close {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  color: var(--white);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.35rem;
+  justify-content: center;
+  width: 2.35rem;
+}
+
+.agenda-modal-close:hover {
+  border-color: var(--primary);
+}
+
+.agenda-detail-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agenda-detail-item {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.8rem;
+}
+
+.agenda-detail-item span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.agenda-detail-item strong {
+  color: var(--white);
+  font-size: 0.95rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .chat-layout {
@@ -1997,6 +2104,10 @@ select:focus {
 
   .calendar-shell .fc-button {
     flex: 1;
+  }
+
+  .agenda-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .chat-form {

@@ -4,7 +4,17 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, EventStatus, VerificationStatus } from "@prisma/client";
+import {
+  ContractStatus,
+  EventStatus,
+  VerificationStatus,
+} from "@prisma/client";
+import { publicFreelancerSelect } from "../../common/selectors/public-profiles";
+import {
+  CompanyAccessService,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { SearchAvailableFreelancersDto } from "./dto/search-available-freelancers.dto";
@@ -12,10 +22,16 @@ import { UpdateEventDto } from "./dto/update-event.dto";
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async create(userId: string, dto: CreateEventDto) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyOperateRoles,
+    );
     this.assertCompanyVerified(company);
     this.assertValidRange(dto.startsAt, dto.endsAt);
 
@@ -45,7 +61,10 @@ export class EventsService {
   }
 
   async listMine(userId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyReadRoles,
+    );
     return this.prisma.event.findMany({
       where: { companyId: company.id },
       orderBy: { startsAt: "desc" },
@@ -54,7 +73,10 @@ export class EventsService {
   }
 
   async findMine(userId: string, eventId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyReadRoles,
+    );
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, companyId: company.id },
       include: {
@@ -72,6 +94,7 @@ export class EventsService {
   }
 
   async update(userId: string, eventId: string, dto: UpdateEventDto) {
+    await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
     const startsAt = dto.startsAt ?? event.startsAt.toISOString();
     const endsAt = dto.endsAt ?? event.endsAt.toISOString();
@@ -110,6 +133,7 @@ export class EventsService {
   }
 
   async duplicate(userId: string, eventId: string) {
+    await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
 
     return this.prisma.event.create({
@@ -180,23 +204,7 @@ export class EventsService {
           : undefined,
       },
       select: {
-        id: true,
-        displayName: true,
-        avatarUrl: true,
-        city: true,
-        state: true,
-        tools: true,
-        transportation: true,
-        dailyRateCents: true,
-        ratingAverage: true,
-        verificationStatus: true,
-        user: { select: { name: true } },
-        skills: {
-          select: {
-            dailyRateCents: true,
-            skill: { select: { id: true, name: true, slug: true } },
-          },
-        },
+        ...publicFreelancerSelect,
         availability: {
           where: {
             startsAt: { lt: endsAt },
@@ -234,25 +242,15 @@ export class EventsService {
       );
   }
 
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
-
-    return company;
-  }
-
   private assertValidRange(startsAt: string, endsAt: string) {
     if (new Date(startsAt) >= new Date(endsAt)) {
       throw new BadRequestException("End must be after start");
     }
   }
 
-  private assertCompanyVerified(company: { verificationStatus: VerificationStatus }) {
+  private assertCompanyVerified(company: {
+    verificationStatus: VerificationStatus;
+  }) {
     if (company.verificationStatus !== VerificationStatus.VERIFIED) {
       throw new ForbiddenException("Company must be verified");
     }

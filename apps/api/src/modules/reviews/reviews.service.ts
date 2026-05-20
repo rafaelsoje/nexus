@@ -5,16 +5,31 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ContractStatus, Prisma, UserRole } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
+import {
+  CompanyAccessService,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateReviewDto } from "./dto/create-review.dto";
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async listMine(userId: string, role: UserRole) {
     if (role === UserRole.COMPANY) {
-      const company = await this.findCompanyByUserId(userId);
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
       return this.prisma.review.findMany({
         where: {
           OR: [
@@ -23,7 +38,14 @@ export class ReviewsService {
           ],
         },
         orderBy: { createdAt: "desc" },
-        include: { contract: { include: { event: true, freelancer: true } } },
+        include: {
+          contract: {
+            include: {
+              event: true,
+              freelancer: { select: publicFreelancerSelect },
+            },
+          },
+        },
       });
     }
 
@@ -36,7 +58,14 @@ export class ReviewsService {
         ],
       },
       orderBy: { createdAt: "desc" },
-      include: { contract: { include: { event: true, company: true } } },
+      include: {
+        contract: {
+          include: {
+            event: true,
+            company: { select: publicCompanySelect },
+          },
+        },
+      },
     });
   }
 
@@ -64,7 +93,10 @@ export class ReviewsService {
     }
 
     if (role === UserRole.COMPANY) {
-      const company = await this.findCompanyByUserId(userId);
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyOperateRoles,
+      );
 
       if (contract.companyId !== company.id) {
         throw new ForbiddenException("Review is not allowed for this contract");
@@ -137,13 +169,10 @@ export class ReviewsService {
       });
 
       await this.updateCompanyRatingAverage(tx, contract.companyId);
-      await tx.notification.create({
-        data: {
-          userId: contract.company.userId,
-          type: "REVIEW_RECEIVED",
-          title: "Nova avaliação recebida",
-          body: `${contract.freelancer.displayName ?? contract.freelancer.user.name} avaliou sua empresa.`,
-        },
+      await this.companyAccess.notifyCompanyMembers(tx, contract.companyId, {
+        type: "REVIEW_RECEIVED",
+        title: "Nova avaliação recebida",
+        body: `${contract.freelancer.displayName ?? contract.freelancer.user.name} avaliou sua empresa.`,
       });
 
       return review;
@@ -182,18 +211,6 @@ export class ReviewsService {
 
   private toRatingAverage(value?: number | null) {
     return value ? Number(value.toFixed(2)) : 0;
-  }
-
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
-
-    return company;
   }
 
   private async findFreelancerByUserId(userId: string) {

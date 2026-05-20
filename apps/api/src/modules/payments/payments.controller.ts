@@ -32,7 +32,7 @@ export class PaymentsController {
   @Roles(UserRole.ADMIN)
   @Post("process-due-releases")
   processDueReleases() {
-    return this.paymentsService.processDueReleases();
+    return this.paymentsService.processPostEventAutomation();
   }
 
   @Roles(UserRole.ADMIN)

@@ -36,6 +36,11 @@ const participantContract = {
   freelancer: { userId: "freelancer-user" },
 };
 
+const companyAccess = {
+  findCompanyForUser: async () => ({ id: "company-1" }),
+  notifyCompanyMembers: async () => undefined,
+};
+
 describe("ContractsService", () => {
   it("allows a company to mark a confirmed contract as completed", async () => {
     const prisma = createPrismaMock({
@@ -43,7 +48,7 @@ describe("ContractsService", () => {
         findFirst: async () => participantContract,
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     const result = await service.updateStatus(
       "company-user",
@@ -61,7 +66,7 @@ describe("ContractsService", () => {
         findFirst: async () => participantContract,
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     await assert.rejects(
       () =>
@@ -84,7 +89,7 @@ describe("ContractsService", () => {
         }),
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     await assert.rejects(
       () =>
@@ -107,7 +112,7 @@ describe("ContractsService", () => {
         }),
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     await assert.rejects(
       () =>
@@ -133,7 +138,7 @@ describe("ContractsService", () => {
         }),
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     await assert.rejects(
       () => service.confirmByCompany("company-user", "contract-1"),
@@ -157,7 +162,7 @@ describe("ContractsService", () => {
         }),
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     const result = await service.confirmByCompany("company-user", "contract-1");
 
@@ -194,7 +199,7 @@ describe("ContractsService", () => {
         },
       },
     });
-    const service = new ContractsService(prisma as never);
+    const service = new ContractsService(prisma as never, companyAccess as never);
 
     const hasConflict = await service.hasScheduleConflict(
       "freelancer-1",

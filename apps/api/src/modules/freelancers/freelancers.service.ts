@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { VerificationStatus } from "@prisma/client";
+import { publicFreelancerSelect } from "../../common/selectors/public-profiles";
 import { PrismaService } from "../prisma/prisma.service";
 import { SetFreelancerSkillsDto } from "./dto/set-freelancer-skills.dto";
 import { UpsertFreelancerProfileDto } from "./dto/upsert-freelancer-profile.dto";
@@ -72,22 +73,24 @@ export class FreelancersService {
         verificationStatus: VerificationStatus.VERIFIED,
       },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        displayName: true,
-        avatarUrl: true,
-        city: true,
-        state: true,
-        dailyRateCents: true,
-        ratingAverage: true,
-        verificationStatus: true,
-        skills: {
-          select: {
-            dailyRateCents: true,
-            skill: { select: { id: true, name: true, slug: true } },
-          },
-        },
-      },
+      select: publicFreelancerSelect,
     });
+  }
+
+  async findPublicProfile(id: string) {
+    const profile = await this.prisma.freelancerProfile.findFirst({
+      where: {
+        id,
+        user: { isActive: true },
+        verificationStatus: VerificationStatus.VERIFIED,
+      },
+      select: publicFreelancerSelect,
+    });
+
+    if (!profile) {
+      throw new NotFoundException("Freelancer profile not found");
+    }
+
+    return profile;
   }
 }

@@ -1,10 +1,17 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { Prisma, UserRole } from "@prisma/client";
+import {
+  CompanyAccessService,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async summary(userId: string, role: UserRole) {
     if (role === UserRole.ADMIN) {
@@ -12,13 +19,10 @@ export class ReportsService {
     }
 
     if (role === UserRole.COMPANY) {
-      const company = await this.prisma.companyProfile.findUnique({
-        where: { userId },
-      });
-
-      if (!company) {
-        throw new ForbiddenException("Company profile is required");
-      }
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
 
       return this.companySummary(company.id);
     }

@@ -170,6 +170,32 @@ pnpm prisma:generate
 pnpm build
 ```
 
+## Deploy com containers
+
+Além do fluxo com PM2, o projeto agora possui arquivos base para container:
+
+- `apps/api/Dockerfile`
+- `apps/web/Dockerfile`
+- `docker-compose.prod.yml`
+- `nginx/nexus.conf`
+- `.env.production.example`
+
+Prepare o ambiente:
+
+```bash
+cp .env.production.example .env.production
+```
+
+Edite `.env.production`, troque senhas, segredos JWT e dominios. Para o Compose interpolar `POSTGRES_PASSWORD`, rode usando o arquivo de env explicitamente:
+
+```bash
+NEXUS_ENV_FILE=.env.production docker compose --env-file .env.production -f docker-compose.prod.yml build
+NEXUS_ENV_FILE=.env.production docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+NEXUS_ENV_FILE=.env.production docker compose --env-file .env.production -f docker-compose.prod.yml exec api pnpm prisma:deploy
+```
+
+Use `DOCUMENT_STORAGE_PROVIDER="local"` apenas em homologacao ou com volume persistente e backup. Para producao real, implemente `s3` ou `r2` no provider de storage antes de armazenar documentos sensiveis em escala.
+
 ## Rodando com PM2
 
 Inicie a API:

@@ -5,22 +5,27 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { TransactionType, UserRole } from "@prisma/client";
+import {
+  CompanyAccessService,
+  companyFinanceRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TopUpWalletDto } from "./dto/top-up-wallet.dto";
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async findMine(userId: string, role: UserRole) {
     if (role === UserRole.COMPANY) {
-      const company = await this.prisma.companyProfile.findUnique({
-        where: { userId },
-      });
-
-      if (!company) {
-        throw new ForbiddenException("Company profile is required");
-      }
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
 
       return this.findWallet({ companyId: company.id });
     }
@@ -41,14 +46,10 @@ export class WalletService {
       throw new BadRequestException("Amount must be positive");
     }
 
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyFinanceRoles,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.upsert({

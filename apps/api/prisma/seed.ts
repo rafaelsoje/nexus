@@ -443,13 +443,24 @@ async function createPaymentOnce(data: {
     return existing;
   }
 
+  const grossAmountCents = data.freelancerAmountCents + data.platformFeeCents;
+
   return prisma.payment.create({
     data: {
       contractId: data.contractId,
       status: data.status,
       freelancerAmountCents: data.freelancerAmountCents,
       platformFeeCents: data.platformFeeCents,
-      grossAmountCents: data.freelancerAmountCents + data.platformFeeCents,
+      grossAmountCents,
+      companyFeeAmountCents: data.platformFeeCents,
+      freelancerFeeAmountCents: 0,
+      gatewayFeeAmountCents: 0,
+      platformAmountCents: data.platformFeeCents,
+      freelancerNetAmountCents: data.freelancerAmountCents,
+      amountToChargeCompanyCents: grossAmountCents,
+      amountToReleaseFreelancerCents: data.freelancerAmountCents,
+      walletAmountCents: 0,
+      gatewayAmountCents: grossAmountCents,
       gatewayTransactionId: `seed_${data.contractId}`,
       paidAt: new Date(),
       splits: {
@@ -652,6 +663,23 @@ async function main() {
       },
     });
     await ensureCompanyWallet(profile.id);
+    await prisma.companyMember.upsert({
+      where: {
+        companyId_userId: {
+          companyId: profile.id,
+          userId: user.id,
+        },
+      },
+      update: {
+        role: "OWNER",
+        isActive: true,
+      },
+      create: {
+        companyId: profile.id,
+        userId: user.id,
+        role: "OWNER",
+      },
+    });
     companies.set(companySeed.companyName, profile);
   }
 
@@ -724,7 +752,8 @@ async function main() {
       location: "Orla de Atalaia",
       city: "Aracaju",
       state: "SE",
-      description: "Festival aberto com palco, LED, transmissão e operação técnica.",
+      description:
+        "Festival aberto com palco, LED, transmissão e operação técnica.",
       eventType: "Festival",
       status: "OPEN",
       requirements: [
@@ -758,7 +787,8 @@ async function main() {
       location: "Centro de Convenções AM Malls",
       city: "Aracaju",
       state: "SE",
-      description: "Congresso corporativo com streaming, credenciamento e plenária.",
+      description:
+        "Congresso corporativo com streaming, credenciamento e plenária.",
       eventType: "Congresso",
       status: "INVITING",
       requirements: [
@@ -775,7 +805,8 @@ async function main() {
       location: "Rooftop Comércio",
       city: "Salvador",
       state: "BA",
-      description: "Ativação de marca com recepção, segurança e conteúdo social.",
+      description:
+        "Ativação de marca com recepção, segurança e conteúdo social.",
       eventType: "Brand experience",
       status: "OPEN",
       requirements: [

@@ -1,15 +1,20 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
-import { mkdir, stat, unlink, writeFile } from "fs/promises";
-import { basename, extname, join, resolve } from "path";
+import { basename } from "path";
 import { randomUUID } from "crypto";
+import {
+  CompanyAccessService,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UploadVerificationDocumentDto } from "./dto/upload-verification-document.dto";
+import { DOCUMENT_STORAGE, DocumentStorage } from "./storage/document-storage";
 
 const allowedMimeTypes = new Map([
   ["application/pdf", ".pdf"],
@@ -26,20 +31,21 @@ type RequestUser = {
 
 @Injectable()
 export class DocumentsService {
-  private readonly uploadDir = resolve(
-    process.cwd(),
-    "uploads",
-    "verification-documents",
-  );
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+    @Inject(DOCUMENT_STORAGE)
+    private readonly storage: DocumentStorage,
+  ) {}
 
   async uploadVerificationDocument(
     user: RequestUser,
     dto: UploadVerificationDocumentDto,
   ) {
     if (user.role !== UserRole.COMPANY && user.role !== UserRole.FREELANCER) {
-      throw new ForbiddenException("Only companies and freelancers can upload documents");
+      throw new ForbiddenException(
+        "Only companies and freelancers can upload documents",
+      );
     }
 
     const extension = allowedMimeTypes.get(dto.mimeType);
@@ -54,10 +60,10 @@ export class DocumentsService {
 
     const owner =
       user.role === UserRole.COMPANY
-        ? await this.prisma.companyProfile.findUnique({
-            where: { userId: user.sub },
-            select: { id: true },
-          })
+        ? await this.companyAccess.findCompanyForUser(
+            user.sub,
+            companyReadRoles,
+          )
         : await this.prisma.freelancerProfile.findUnique({
             where: { userId: user.sub },
             select: { id: true },
@@ -67,19 +73,17 @@ export class DocumentsService {
       throw new NotFoundException("Profile not found");
     }
 
-    await mkdir(this.uploadDir, { recursive: true });
     const fileName = `${randomUUID()}${extension}`;
-    const storagePath = join(this.uploadDir, fileName);
-    await writeFile(storagePath, buffer, { flag: "wx" });
+    const stored = await this.storage.save({ fileName, data: buffer });
 
     return this.prisma.verificationDocument.create({
       data: {
         category: dto.category.trim(),
         originalName: basename(dto.originalName),
-        fileName,
+        fileName: stored.fileName,
         mimeType: dto.mimeType,
         sizeBytes: buffer.length,
-        storagePath,
+        storagePath: stored.storagePath,
         uploadedById: user.sub,
         companyId: user.role === UserRole.COMPANY ? owner.id : undefined,
         freelancerId: user.role === UserRole.FREELANCER ? owner.id : undefined,
@@ -92,7 +96,7 @@ export class DocumentsService {
     await this.prisma.verificationDocument.delete({ where: { id } });
 
     try {
-      await unlink(document.storagePath);
+      await this.storage.delete(document.storagePath);
     } catch {
       // The database record is authoritative; a missing local file should not block deletion.
     }
@@ -103,9 +107,7 @@ export class DocumentsService {
   async getVerificationDocumentFile(user: RequestUser, id: string) {
     const document = await this.findAuthorizedDocument(user, id);
 
-    try {
-      await stat(document.storagePath);
-    } catch {
+    if (!(await this.storage.exists(document.storagePath))) {
       throw new NotFoundException("Document file not found");
     }
 
@@ -130,7 +132,14 @@ export class DocumentsService {
     const document = await this.prisma.verificationDocument.findUnique({
       where: { id },
       include: {
-        company: { select: { userId: true } },
+        company: {
+          select: {
+            members: {
+              where: { userId: user.sub, isActive: true },
+              select: { id: true },
+            },
+          },
+        },
         freelancer: { select: { userId: true } },
       },
     });
@@ -141,7 +150,7 @@ export class DocumentsService {
 
     const ownsDocument =
       document.uploadedById === user.sub ||
-      document.company?.userId === user.sub ||
+      Boolean(document.company?.members.length) ||
       document.freelancer?.userId === user.sub;
 
     if (user.role !== UserRole.ADMIN && !ownsDocument) {

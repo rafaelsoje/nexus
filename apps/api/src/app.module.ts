@@ -5,6 +5,7 @@ import { AvailabilityModule } from "./modules/availability/availability.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { ApplicationsModule } from "./modules/applications/applications.module";
 import { ChatModule } from "./modules/chat/chat.module";
+import { CompanyAccessModule } from "./modules/company-access/company-access.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
 import { DisputesModule } from "./modules/disputes/disputes.module";
@@ -26,6 +27,7 @@ import { WalletModule } from "./modules/wallet/wallet.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    CompanyAccessModule,
     AuthModule,
     UsersModule,
     CompaniesModule,

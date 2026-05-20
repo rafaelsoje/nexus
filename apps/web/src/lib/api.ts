@@ -83,6 +83,8 @@ const apiMessageTranslations: Record<string, string> = {
   "Invalid refresh token": "Sua sessão expirou. Entre novamente.",
   "Invalid or expired reset token": "Token inválido ou expirado.",
   "Company profile is required": "Complete o perfil da empresa para continuar.",
+  "Company access is required":
+    "Seu usuário não tem permissão para acessar esta empresa.",
   "Company must be verified":
     "A empresa precisa estar verificada para continuar.",
   "Freelancer profile is required":
@@ -154,6 +156,14 @@ const apiMessageTranslations: Record<string, string> = {
   "File must be up to 5 MB": "O arquivo deve ter no máximo 5 MB.",
   "Invalid file data": "Arquivo inválido.",
   "You cannot access this document": "Você não pode acessar este documento.",
+  "Owner role cannot be invited":
+    "O papel de dono só pertence ao primeiro administrador da empresa.",
+  "User already belongs to a company":
+    "Este usuário já está vinculado a uma empresa.",
+  "User already belongs to another account type":
+    "Este e-mail já está vinculado a outro tipo de conta.",
+  "Invalid or expired company invitation":
+    "Convite de empresa inválido ou expirado.",
 };
 
 function translateApiMessage(message: string) {

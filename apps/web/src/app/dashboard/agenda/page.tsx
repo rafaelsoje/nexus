@@ -3,6 +3,7 @@
 import type {
   DateSelectArg,
   EventDropArg,
+  EventClickArg,
   EventInput,
 } from "@fullcalendar/core";
 import ptBrLocale from "@fullcalendar/core/locales/pt-br";
@@ -12,7 +13,7 @@ import interactionPlugin, {
 } from "@fullcalendar/interaction";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { BriefcaseBusiness, Clock, Wallet } from "lucide-react";
+import { BriefcaseBusiness, Clock, Wallet, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
@@ -42,11 +43,18 @@ const statusLabels: Record<string, string> = {
   DISPUTED: "Contestado",
 };
 
+type AgendaDetail =
+  | { kind: "work"; contract: Contract }
+  | { kind: "blocked"; item: AvailabilityItem };
+
 export default function AgendaPage() {
   const session = useRequiredSession();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
   const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<AgendaDetail | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -101,6 +109,7 @@ export default function AgendaPage() {
           `status-${contract.status.toLowerCase().replaceAll("_", "-")}`,
         ],
         extendedProps: {
+          contractId: contract.id,
           kind: "work",
           status: contract.status,
           meta: `${contract.company?.companyName ?? "Empresa"} - ${formatCurrency(contract.amountCents)}`,
@@ -174,6 +183,30 @@ export default function AgendaPage() {
 
   if (!session) {
     return null;
+  }
+
+  function openAgendaDetail(click: EventClickArg) {
+    const { kind, contractId, availabilityId } = click.event.extendedProps;
+
+    if (kind === "work" && typeof contractId === "string") {
+      const contract = contracts.find((item) => item.id === contractId);
+
+      if (contract) {
+        setSelectedDetail({ kind: "work", contract });
+      }
+    }
+
+    if (kind === "blocked" && typeof availabilityId === "string") {
+      const item = availability.find((entry) => entry.id === availabilityId);
+
+      if (item) {
+        setSelectedDetail({ kind: "blocked", item });
+      }
+    }
+  }
+
+  function closeAgendaDetail() {
+    setSelectedDetail(null);
   }
 
   async function createAvailabilityBlock(selection: DateSelectArg) {
@@ -305,6 +338,7 @@ export default function AgendaPage() {
                         </span>
                       </div>
                     )}
+                    eventClick={openAgendaDetail}
                     eventDrop={updateAvailabilityBlock}
                     eventResize={updateAvailabilityBlock}
                     events={calendarEvents}
@@ -315,7 +349,7 @@ export default function AgendaPage() {
                       right: "dayGridMonth,timeGridWeek,timeGridDay",
                     }}
                     height="auto"
-                    initialView="timeGridWeek"
+                    initialView="dayGridMonth"
                     locale={ptBrLocale}
                     nowIndicator
                     plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -424,14 +458,154 @@ export default function AgendaPage() {
               </article>
             </section>
           ) : null}
+
+          {selectedDetail ? (
+            <AgendaDetailModal
+              detail={selectedDetail}
+              onClose={closeAgendaDetail}
+            />
+          ) : null}
         </>
       ) : null}
     </DashboardShell>
   );
 }
 
+function AgendaDetailModal({
+  detail,
+  onClose,
+}: Readonly<{ detail: AgendaDetail; onClose: () => void }>) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  const isWork = detail.kind === "work";
+  const title = isWork
+    ? (detail.contract.event?.name ?? "Evento")
+    : (detail.item.reason ?? "Indisponível");
+
+  return (
+    <div
+      aria-modal="true"
+      className="agenda-modal-backdrop"
+      onMouseDown={onClose}
+      role="dialog"
+    >
+      <article
+        className="agenda-modal"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="agenda-modal-header">
+          <div>
+            <span>{isWork ? "Evento confirmado" : "Bloqueio de agenda"}</span>
+            <h2>{title}</h2>
+          </div>
+          <button
+            aria-label="Fechar detalhes"
+            className="agenda-modal-close"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </header>
+
+        {isWork ? (
+          <ContractDetails contract={detail.contract} />
+        ) : (
+          <AvailabilityDetails item={detail.item} />
+        )}
+      </article>
+    </div>
+  );
+}
+
+function ContractDetails({ contract }: Readonly<{ contract: Contract }>) {
+  return (
+    <div className="agenda-detail-grid">
+      <DetailItem label="Empresa" value={contract.company?.companyName} />
+      <DetailItem
+        label="Status"
+        value={statusLabels[contract.status] ?? contract.status}
+      />
+      <DetailItem label="Início" value={formatDateTime(contract.startsAt)} />
+      <DetailItem label="Fim" value={formatDateTime(contract.endsAt)} />
+      <DetailItem label="Local" value={contract.event?.location} />
+      <DetailItem label="Cidade" value={formatPlace(contract)} />
+      <DetailItem
+        label="Valor combinado"
+        value={formatCurrency(contract.amountCents)}
+      />
+      <DetailItem
+        label="Taxa da plataforma"
+        value={formatCurrency(contract.platformFeeCents)}
+      />
+      <DetailItem
+        label="Pagamento"
+        value={
+          contract.payment?.status
+            ? (statusLabels[contract.payment.status] ?? contract.payment.status)
+            : "Ainda não informado"
+        }
+      />
+      <DetailItem
+        label="Recebimento"
+        value={formatCurrency(
+          contract.payment?.freelancerAmountCents ?? contract.amountCents,
+        )}
+      />
+    </div>
+  );
+}
+
+function AvailabilityDetails({ item }: Readonly<{ item: AvailabilityItem }>) {
+  return (
+    <div className="agenda-detail-grid">
+      <DetailItem label="Motivo" value={item.reason ?? "Indisponível"} />
+      <DetailItem
+        label="Tipo"
+        value={item.isAvailable ? "Disponível" : "Indisponível"}
+      />
+      <DetailItem label="Início" value={formatDateTime(item.startsAt)} />
+      <DetailItem label="Fim" value={formatDateTime(item.endsAt)} />
+    </div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+}: Readonly<{ label: string; value?: string | null }>) {
+  return (
+    <div className="agenda-detail-item">
+      <span>{label}</span>
+      <strong>{value || "Não informado"}</strong>
+    </div>
+  );
+}
+
+function formatPlace(contract: Contract) {
+  const city = contract.event?.city;
+  const state = contract.event?.state;
+
+  if (city && state) {
+    return `${city}/${state}`;
+  }
+
+  return city ?? state ?? "Não informado";
+}
+
 function formatDateTime(date: string) {
   return new Intl.DateTimeFormat("pt-BR", {
+    year: "numeric",
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

@@ -42,7 +42,8 @@ export default function PaymentsPage() {
         0,
       ),
       platformFeeCents: adminPayments.reduce(
-        (total, payment) => total + payment.platformFeeCents,
+        (total, payment) =>
+          total + (payment.platformAmountCents ?? payment.platformFeeCents),
         0,
       ),
       pendingRelease: adminPayments.filter(
@@ -167,12 +168,12 @@ export default function PaymentsPage() {
     setSuccess("");
 
     try {
-      const result = await apiRequest<{ released: number; eligible: number }>(
-        "/api/payments/process-due-releases",
-        { method: "POST" },
-      );
+      const result = await apiRequest<{
+        reminders: { sent: number };
+        releases: { released: number; eligible: number };
+      }>("/api/payments/process-due-releases", { method: "POST" });
       setSuccess(
-        `${result.released} repasse(s) liberado(s) de ${result.eligible} elegível(is).`,
+        `${result.releases.released} repasse(s) liberado(s) de ${result.releases.eligible} elegível(is). ${result.reminders.sent} lembrete(s) enviado(s).`,
       );
       await loadPayments();
     } catch (caught) {
@@ -325,10 +326,32 @@ export default function PaymentsPage() {
                         "Profissional"}
                     </span>
                     <span>
-                      Bruto {formatCurrency(payment.grossAmountCents)} - repasse{" "}
-                      {formatCurrency(payment.freelancerAmountCents)} - taxa{" "}
-                      {formatCurrency(payment.platformFeeCents)} -{" "}
-                      {payment.status}
+                      Cobrado{" "}
+                      {formatCurrency(
+                        payment.amountToChargeCompanyCents ??
+                          payment.grossAmountCents,
+                      )}{" "}
+                      - repasse{" "}
+                      {formatCurrency(
+                        payment.amountToReleaseFreelancerCents ??
+                          payment.freelancerAmountCents,
+                      )}{" "}
+                      - plataforma{" "}
+                      {formatCurrency(
+                        payment.platformAmountCents ?? payment.platformFeeCents,
+                      )}{" "}
+                      - {payment.status}
+                    </span>
+                    <span>
+                      Taxa empresa{" "}
+                      {formatCurrency(
+                        payment.companyFeeAmountCents ??
+                          payment.platformFeeCents,
+                      )}{" "}
+                      - desconto freelancer{" "}
+                      {formatCurrency(payment.freelancerFeeAmountCents ?? 0)} -
+                      gateway{" "}
+                      {formatCurrency(payment.gatewayFeeAmountCents ?? 0)}
                     </span>
                   </div>
                   {payment.status === "PAID" ? (
@@ -405,8 +428,22 @@ export default function PaymentsPage() {
                       {payment.contract?.event?.name ?? "Pagamento"}
                     </strong>
                     <span>
-                      {formatCurrency(payment.grossAmountCents)} -{" "}
-                      {payment.status}
+                      Cobrado{" "}
+                      {formatCurrency(
+                        payment.amountToChargeCompanyCents ??
+                          payment.grossAmountCents,
+                      )}{" "}
+                      - repasse{" "}
+                      {formatCurrency(
+                        payment.amountToReleaseFreelancerCents ??
+                          payment.freelancerAmountCents,
+                      )}{" "}
+                      - {payment.status}
+                    </span>
+                    <span>
+                      Carteira {formatCurrency(payment.walletAmountCents ?? 0)}{" "}
+                      - complemento gateway{" "}
+                      {formatCurrency(payment.gatewayAmountCents ?? 0)}
                     </span>
                   </div>
                 </div>

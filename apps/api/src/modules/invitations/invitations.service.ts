@@ -13,8 +13,17 @@ import {
   UserRole,
   VerificationStatus,
 } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
 import { ContractsService } from "../contracts/contracts.service";
 import { calculatePlatformFeeCents } from "../payments/fees";
+import {
+  CompanyAccessService,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateBulkInvitationDto } from "./dto/create-bulk-invitation.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
@@ -26,10 +35,14 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly contractsService: ContractsService,
     private readonly config: ConfigService,
+    private readonly companyAccess: CompanyAccessService,
   ) {}
 
   async create(userId: string, dto: CreateInvitationDto) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyOperateRoles,
+    );
     this.assertCompanyVerified(company);
     const event = await this.prisma.event.findFirst({
       where: { id: dto.eventId, companyId: company.id },
@@ -118,9 +131,7 @@ export class InvitationsService {
         },
         include: {
           event: true,
-          freelancer: {
-            select: { id: true, displayName: true, city: true, state: true },
-          },
+          freelancer: { select: publicFreelancerSelect },
         },
       });
 
@@ -184,15 +195,16 @@ export class InvitationsService {
   }
 
   async listSent(userId: string) {
-    const company = await this.findCompanyByUserId(userId);
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyReadRoles,
+    );
     return this.prisma.invitation.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "desc" },
       include: {
         event: true,
-        freelancer: {
-          select: { id: true, displayName: true, avatarUrl: true },
-        },
+        freelancer: { select: publicFreelancerSelect },
       },
     });
   }
@@ -205,13 +217,7 @@ export class InvitationsService {
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
         company: {
-          select: {
-            id: true,
-            companyName: true,
-            logoUrl: true,
-            city: true,
-            state: true,
-          },
+          select: publicCompanySelect,
         },
       },
     });
@@ -311,13 +317,10 @@ export class InvitationsService {
         data: { contractId: contract.id },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: invitation.company.userId,
-          type: "INVITATION_ACCEPTED",
-          title: "Convite aceito",
-          body: `${freelancer.displayName ?? "Profissional"} aceitou o convite para ${invitation.event.name}.`,
-        },
+      await this.companyAccess.notifyCompanyMembers(tx, invitation.companyId, {
+        type: "INVITATION_ACCEPTED",
+        title: "Convite aceito",
+        body: `${freelancer.displayName ?? "Profissional"} aceitou o convite para ${invitation.event.name}.`,
       });
 
       return { invitation: updatedInvitation, contract };
@@ -344,13 +347,10 @@ export class InvitationsService {
         },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: invitation.company.userId,
-          type: "INVITATION_DECLINED",
-          title: "Convite recusado",
-          body: `${freelancer.displayName ?? "Profissional"} recusou o convite para ${invitation.event.name}.`,
-        },
+      await this.companyAccess.notifyCompanyMembers(tx, invitation.companyId, {
+        type: "INVITATION_DECLINED",
+        title: "Convite recusado",
+        body: `${freelancer.displayName ?? "Profissional"} recusou o convite para ${invitation.event.name}.`,
       });
 
       return updatedInvitation;
@@ -428,16 +428,26 @@ export class InvitationsService {
         });
       }
 
-      await tx.notification.create({
-        data: {
-          userId: isCompany
-            ? invitation.freelancer.userId
-            : invitation.company.userId,
-          type: "INVITATION_AMOUNT_PROPOSED",
-          title: "Nova proposta de valor",
-          body,
-        },
-      });
+      if (isCompany) {
+        await tx.notification.create({
+          data: {
+            userId: invitation.freelancer.userId,
+            type: "INVITATION_AMOUNT_PROPOSED",
+            title: "Nova proposta de valor",
+            body,
+          },
+        });
+      } else {
+        await this.companyAccess.notifyCompanyMembers(
+          tx,
+          invitation.companyId,
+          {
+            type: "INVITATION_AMOUNT_PROPOSED",
+            title: "Nova proposta de valor",
+            body,
+          },
+        );
+      }
 
       return updatedInvitation;
     });
@@ -508,16 +518,26 @@ export class InvitationsService {
         });
       }
 
-      await tx.notification.create({
-        data: {
-          userId: isCompany
-            ? invitation.freelancer.userId
-            : invitation.company.userId,
-          type: "INVITATION_AMOUNT_ACCEPTED",
-          title: "Valor acordado",
-          body,
-        },
-      });
+      if (isCompany) {
+        await tx.notification.create({
+          data: {
+            userId: invitation.freelancer.userId,
+            type: "INVITATION_AMOUNT_ACCEPTED",
+            title: "Valor acordado",
+            body,
+          },
+        });
+      } else {
+        await this.companyAccess.notifyCompanyMembers(
+          tx,
+          invitation.companyId,
+          {
+            type: "INVITATION_AMOUNT_ACCEPTED",
+            title: "Valor acordado",
+            body,
+          },
+        );
+      }
 
       return updatedInvitation;
     });
@@ -558,7 +578,10 @@ export class InvitationsService {
     const invitation = await this.prisma.invitation.findFirst({
       where: {
         id: invitationId,
-        OR: [{ company: { userId } }, { freelancer: { userId } }],
+        OR: [
+          { company: { members: { some: { userId, isActive: true } } } },
+          { freelancer: { userId } },
+        ],
       },
       include: {
         company: true,
@@ -716,18 +739,6 @@ export class InvitationsService {
     if (!event || event.contracts.length >= event.desiredProfessionals) {
       throw new BadRequestException("Event has no open spots");
     }
-  }
-
-  private async findCompanyByUserId(userId: string) {
-    const company = await this.prisma.companyProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!company) {
-      throw new ForbiddenException("Company profile is required");
-    }
-
-    return company;
   }
 
   private async findFreelancerByUserId(userId: string) {

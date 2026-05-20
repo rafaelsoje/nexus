@@ -74,6 +74,12 @@ const navItems: NavItem[] = [
     roles: ["ADMIN", "COMPANY"],
   },
   {
+    href: "/dashboard/equipe",
+    label: "Equipe",
+    icon: UserCog,
+    roles: ["COMPANY"],
+  },
+  {
     href: "/dashboard/convites",
     label: "Convites",
     icon: Bell,

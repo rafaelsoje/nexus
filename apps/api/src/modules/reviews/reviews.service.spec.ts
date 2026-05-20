@@ -105,8 +105,16 @@ function createPrismaMock({
 }
 
 describe("ReviewsService", () => {
+  const companyAccess = {
+    findCompanyForUser: async () => company,
+    notifyCompanyMembers: async () => undefined,
+  };
+
   it("creates a company review and updates freelancer rating average", async () => {
-    const service = new ReviewsService(createPrismaMock() as never);
+    const service = new ReviewsService(
+      createPrismaMock() as never,
+      companyAccess as never,
+    );
 
     const review = await service.create(
       "company-user",
@@ -126,6 +134,7 @@ describe("ReviewsService", () => {
           status: ContractStatus.CONFIRMED,
         },
       }) as never,
+      companyAccess as never,
     );
 
     await assert.rejects(
@@ -139,6 +148,7 @@ describe("ReviewsService", () => {
       createPrismaMock({
         existingReview: { id: "review-1" },
       }) as never,
+      companyAccess as never,
     );
 
     await assert.rejects(

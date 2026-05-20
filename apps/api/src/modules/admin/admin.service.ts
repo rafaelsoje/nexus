@@ -5,11 +5,15 @@ import {
   PaymentStatus,
   VerificationStatus,
 } from "@prisma/client";
+import { CompanyAccessService } from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   listUsers() {
     return this.prisma.user.findMany({
@@ -153,19 +157,22 @@ export class AdminService {
         });
       }
 
+      const notification = {
+        type: "DISPUTE_STATUS_UPDATED",
+        title: "Disputa atualizada",
+        body: `${dispute.contract.event.name}: status alterado para ${status}.`,
+      };
+
+      await this.companyAccess.notifyCompanyMembers(
+        tx,
+        dispute.contract.companyId,
+        notification,
+      );
       await tx.notification.createMany({
         data: [
           {
-            userId: dispute.contract.company.userId,
-            type: "DISPUTE_STATUS_UPDATED",
-            title: "Disputa atualizada",
-            body: `${dispute.contract.event.name}: status alterado para ${status}.`,
-          },
-          {
             userId: dispute.contract.freelancer.userId,
-            type: "DISPUTE_STATUS_UPDATED",
-            title: "Disputa atualizada",
-            body: `${dispute.contract.event.name}: status alterado para ${status}.`,
+            ...notification,
           },
         ],
       });

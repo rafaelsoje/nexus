@@ -98,6 +98,13 @@ export type Contract = {
     status: string;
     grossAmountCents: number;
     freelancerAmountCents: number;
+    companyFeeAmountCents?: number;
+    freelancerFeeAmountCents?: number;
+    gatewayFeeAmountCents?: number;
+    platformAmountCents?: number;
+    freelancerNetAmountCents?: number;
+    amountToChargeCompanyCents?: number;
+    amountToReleaseFreelancerCents?: number;
   };
 };
 
@@ -107,6 +114,15 @@ export type Payment = {
   grossAmountCents: number;
   freelancerAmountCents: number;
   platformFeeCents: number;
+  companyFeeAmountCents?: number;
+  freelancerFeeAmountCents?: number;
+  gatewayFeeAmountCents?: number;
+  platformAmountCents?: number;
+  freelancerNetAmountCents?: number;
+  amountToChargeCompanyCents?: number;
+  amountToReleaseFreelancerCents?: number;
+  walletAmountCents?: number;
+  gatewayAmountCents?: number;
   contract?: Contract;
 };
 
@@ -188,6 +204,48 @@ export type CompanyProfile = {
   city?: string;
   state?: string;
   verificationDocuments?: VerificationDocument[];
+};
+
+export type CompanyMemberRole =
+  | "OWNER"
+  | "ADMIN"
+  | "FINANCE"
+  | "OPERATOR"
+  | "VIEWER";
+
+export type CompanyMember = {
+  id: string;
+  role: CompanyMemberRole;
+  isActive: boolean;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    isActive: boolean;
+  };
+};
+
+export type CompanyInvitationStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "EXPIRED"
+  | "CANCELLED";
+
+export type CompanyTeamInvitation = {
+  id: string;
+  email: string;
+  role: CompanyMemberRole;
+  status: CompanyInvitationStatus;
+  expiresAt: string;
+  createdAt: string;
+  token?: string;
+};
+
+export type CompanyTeam = {
+  members: CompanyMember[];
+  invitations: CompanyTeamInvitation[];
 };
 
 export type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";

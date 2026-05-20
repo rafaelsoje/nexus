@@ -5,12 +5,24 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ContractStatus, UserRole } from "@prisma/client";
+import {
+  publicCompanySelect,
+  publicFreelancerSelect,
+} from "../../common/selectors/public-profiles";
+import {
+  CompanyAccessService,
+  companyOperateRoles,
+  companyReadRoles,
+} from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateDisputeDto } from "./dto/create-dispute.dto";
 
 @Injectable()
 export class DisputesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async listMine(userId: string, role: UserRole) {
     const participantWhere = await this.contractParticipantWhere(userId, role);
@@ -18,7 +30,13 @@ export class DisputesService {
       where: { contract: participantWhere },
       orderBy: { createdAt: "desc" },
       include: {
-        contract: { include: { event: true, company: true, freelancer: true } },
+        contract: {
+          include: {
+            event: true,
+            company: { select: publicCompanySelect },
+            freelancer: { select: publicFreelancerSelect },
+          },
+        },
       },
     });
   }
@@ -52,30 +70,39 @@ export class DisputesService {
         },
       });
 
-      const recipientUserId =
-        role === UserRole.COMPANY
-          ? contract.freelancer.userId
-          : contract.company.userId;
       const admins = await tx.user.findMany({
         where: { role: UserRole.ADMIN, isActive: true },
         select: { id: true },
       });
 
-      await tx.notification.createMany({
-        data: [
-          {
-            userId: recipientUserId,
-            type: "DISPUTE_OPENED",
-            title: "Disputa aberta",
-            body: `Uma disputa foi aberta no contrato de ${contract.event.name}.`,
+      const disputeNotification = {
+        type: "DISPUTE_OPENED",
+        title: "Disputa aberta",
+        body: `Uma disputa foi aberta no contrato de ${contract.event.name}.`,
+      };
+
+      if (role === UserRole.COMPANY) {
+        await tx.notification.create({
+          data: {
+            userId: contract.freelancer.userId,
+            ...disputeNotification,
           },
-          ...admins.map((admin) => ({
-            userId: admin.id,
-            type: "DISPUTE_OPENED",
-            title: "Nova disputa para análise",
-            body: `${contract.event.name}: ${dto.reason}.`,
-          })),
-        ],
+        });
+      } else {
+        await this.companyAccess.notifyCompanyMembers(
+          tx,
+          contract.companyId,
+          disputeNotification,
+        );
+      }
+
+      await tx.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          type: "DISPUTE_OPENED",
+          title: "Nova disputa para análise",
+          body: `${contract.event.name}: ${dto.reason}.`,
+        })),
       });
 
       return dispute;
@@ -84,13 +111,10 @@ export class DisputesService {
 
   private async contractParticipantWhere(userId: string, role: UserRole) {
     if (role === UserRole.COMPANY) {
-      const company = await this.prisma.companyProfile.findUnique({
-        where: { userId },
-      });
-
-      if (!company) {
-        throw new ForbiddenException("Company profile is required");
-      }
+      const company = await this.companyAccess.findCompanyForUser(
+        userId,
+        companyReadRoles,
+      );
 
       return { companyId: company.id };
     }

@@ -13,6 +13,21 @@ enum UserRole {
   FREELANCER
 }
 
+enum CompanyMemberRole {
+  OWNER
+  ADMIN
+  FINANCE
+  OPERATOR
+  VIEWER
+}
+
+enum CompanyInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
 enum VerificationStatus {
   PENDING
   VERIFIED
@@ -93,6 +108,8 @@ model User {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   companyProfile        CompanyProfile?
+  companyMemberships    CompanyMember[]
+  companyInvitations    CompanyInvitation[]    @relation("CompanyInvitationInviter")
   freelancerProfile     FreelancerProfile?
   verificationDocuments VerificationDocument[]
   notifications         Notification[]
@@ -122,9 +139,46 @@ model CompanyProfile {
   contracts             Contract[]
   chatThreads           ChatThread[]
   wallet                Wallet?
+  members               CompanyMember[]
+  teamInvitations       CompanyInvitation[]
   verificationDocuments VerificationDocument[]
   reviewsGiven          Review[]               @relation("CompanyReviewsGiven")
   reviewsReceived       Review[]               @relation("CompanyReviewsReceived")
+}
+
+model CompanyMember {
+  id        String            @id @default(cuid())
+  companyId String
+  userId    String
+  role      CompanyMemberRole @default(VIEWER)
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  company   CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@index([companyId])
+}
+
+model CompanyInvitation {
+  id          String                  @id @default(cuid())
+  companyId   String
+  email       String
+  role        CompanyMemberRole       @default(VIEWER)
+  tokenHash   String
+  status      CompanyInvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String?
+  createdAt   DateTime                @default(now())
+  company     CompanyProfile          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy   User?                   @relation("CompanyInvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([companyId])
+  @@index([email])
+  @@index([tokenHash])
 }
 
 model FreelancerProfile {
@@ -232,39 +286,39 @@ model EventRequirement {
 }
 
 model Invitation {
-  id           String            @id @default(cuid())
-  eventId      String
-  companyId    String
-  freelancerId String
-  status       InvitationStatus  @default(PENDING)
-  message      String?
-  proposedAmountCents Int?
-  counterAmountCents  Int?
-  agreedAmountCents   Int?
-  expiresAt    DateTime
-  respondedAt  DateTime?
-  createdAt    DateTime          @default(now())
-  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  company      CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
-  contract     Contract?
-  chatThread   ChatThread?
-}
-
-model Application {
-  id                  String             @id @default(cuid())
+  id                  String            @id @default(cuid())
   eventId             String
   companyId           String
   freelancerId        String
-  status              ApplicationStatus  @default(PENDING)
+  status              InvitationStatus  @default(PENDING)
+  message             String?
+  proposedAmountCents Int?
+  counterAmountCents  Int?
+  agreedAmountCents   Int?
+  expiresAt           DateTime
+  respondedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  event               Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company             CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer          FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  contract            Contract?
+  chatThread          ChatThread?
+}
+
+model Application {
+  id                  String            @id @default(cuid())
+  eventId             String
+  companyId           String
+  freelancerId        String
+  status              ApplicationStatus @default(PENDING)
   message             String?
   proposedAmountCents Int?
   respondedAt         DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  event               Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  company             CompanyProfile     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  freelancer          FreelancerProfile  @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  event               Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company             CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer          FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   contract            Contract?
   chatThread          ChatThread?
 
@@ -346,18 +400,27 @@ model Availability {
 }
 
 model Payment {
-  id                    String         @id @default(cuid())
-  contractId            String         @unique
-  status                PaymentStatus  @default(PENDING)
-  grossAmountCents      Int
-  freelancerAmountCents Int
-  platformFeeCents      Int
-  gatewayTransactionId  String?
-  paidAt                DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  contract              Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  splits                PaymentSplit[]
+  id                             String         @id @default(cuid())
+  contractId                     String         @unique
+  status                         PaymentStatus  @default(PENDING)
+  grossAmountCents               Int
+  freelancerAmountCents          Int
+  platformFeeCents               Int
+  companyFeeAmountCents          Int            @default(0)
+  freelancerFeeAmountCents       Int            @default(0)
+  gatewayFeeAmountCents          Int            @default(0)
+  platformAmountCents            Int            @default(0)
+  freelancerNetAmountCents       Int            @default(0)
+  amountToChargeCompanyCents     Int            @default(0)
+  amountToReleaseFreelancerCents Int            @default(0)
+  walletAmountCents              Int            @default(0)
+  gatewayAmountCents             Int            @default(0)
+  gatewayTransactionId           String?
+  paidAt                         DateTime?
+  createdAt                      DateTime       @default(now())
+  updatedAt                      DateTime       @updatedAt
+  contract                       Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  splits                         PaymentSplit[]
 }
 
 model PaymentSplit {

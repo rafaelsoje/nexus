@@ -60,6 +60,7 @@ Próximas entregas orientadas pelo novo documento:
 - Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
 - Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
 - Upload específico de foto/logo/avatar, além dos documentos de verificação.
+- Separação progressiva entre perfil público e privado, evitando expor carteira, documentos, dados bancários e contato fora das telas autorizadas.
 - Provider real de e-mail para recuperação de senha e notificações.
 - Notificações em tempo real, e-mail ou WhatsApp.
 - Storage externo para documentos/imagens, como S3 ou R2, com retenção e auditoria.
@@ -119,6 +120,14 @@ PAYMENT_GATEWAY_PROVIDER="simulated"
 PAYMENT_GATEWAY_TRANSACTION_PREFIX="sim"
 PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID="platform"
 PLATFORM_COMPANY_FEE_BASIS_POINTS="800"
+PLATFORM_FREELANCER_FEE_BASIS_POINTS="0"
+PLATFORM_FIXED_CONTRACT_FEE_CENTS="0"
+PAYMENT_GATEWAY_FEE_BASIS_POINTS="0"
+PAYMENT_GATEWAY_FIXED_FEE_CENTS="0"
+POST_EVENT_AUTOMATION_ENABLED="true"
+POST_EVENT_AUTOMATION_INTERVAL_MS="3600000"
+DOCUMENT_STORAGE_PROVIDER="local"
+DOCUMENT_STORAGE_LOCAL_DIR="uploads/verification-documents"
 EMAIL_PROVIDER="local"
 EMAIL_EXPOSE_DEV_TOKENS="true"
 JSON_BODY_LIMIT="8mb"
@@ -134,7 +143,11 @@ PAYMENT_GATEWAY_PROVIDER="simulated"
 
 Quando a administração de pagamentos estiver definida, o próximo ajuste fica concentrado no módulo de pagamentos: adicionar o provider real, mapear `gatewayTransactionId`, recebedores do split e eventos de confirmação/estorno do gateway.
 
-A taxa de conveniência cobrada da empresa é configurada por `PLATFORM_COMPANY_FEE_BASIS_POINTS`, em basis points. O padrão `800` representa 8%.
+A regra financeira registra, em cada pagamento, o valor cobrado da empresa, taxa da empresa, taxa do freelancer, taxa estimada do gateway, receita da plataforma, valor líquido do freelancer, uso de carteira e complemento via gateway. A taxa de conveniência cobrada da empresa é configurada por `PLATFORM_COMPANY_FEE_BASIS_POINTS`, em basis points. O padrão `800` representa 8%. Também existem `PLATFORM_FREELANCER_FEE_BASIS_POINTS`, `PLATFORM_FIXED_CONTRACT_FEE_CENTS`, `PAYMENT_GATEWAY_FEE_BASIS_POINTS` e `PAYMENT_GATEWAY_FIXED_FEE_CENTS`.
+
+A automação pós-evento roda em intervalo configurável por `POST_EVENT_AUTOMATION_INTERVAL_MS`. Ela avisa a empresa após o fim do evento para avaliar ou marcar no-show dentro de 1 dia útil e, se o prazo expirar sem contestação aberta, libera automaticamente o repasse para a carteira do freelancer com auditoria.
+
+O armazenamento de documentos passa por provider configurável. Em desenvolvimento use `DOCUMENT_STORAGE_PROVIDER="local"`. Para produção real, o próximo passo é implementar o provider `s3` ou `r2` usando as variáveis de bucket, endpoint, região e credenciais.
 
 ## E-mail
 
@@ -189,6 +202,23 @@ URLs:
 
 Para publicar em um VPS e permitir que sócios acompanhem a evolução do produto, consulte o guia [DEPLOY.md](DEPLOY.md).
 
+## Pendências Para Produção
+
+Itens pendentes sem considerar credenciais reais de gateway:
+
+- Implementar provider real de storage `s3` ou `r2` para documentos, fotos e logos.
+- Implementar provider real de e-mail para recuperação de senha e notificações.
+- Criar endpoint de webhooks de pagamento com validação de assinatura, idempotência e atualização de status.
+- Implementar payout/saque real para freelancer, incluindo falhas, status e comprovantes.
+- Ampliar auditoria para todas as ações sensíveis administrativas, financeiras e cadastrais.
+- Configurar backup automático do PostgreSQL e testar restore.
+- Definir política de retenção de documentos e dados.
+- Adicionar logs estruturados, monitoramento e alertas.
+- Adicionar rate limiting na API.
+- Fechar CORS e domínios por ambiente final.
+- Criar CI/CD de deploy quando sair do deploy manual.
+- Ampliar testes e2e para isolamento, no-show automático, carteira com complemento, split, perfis público/privado e permissões admin.
+
 ## Comandos Úteis
 
 ```bash
@@ -225,6 +255,8 @@ O comando `pnpm ci:check` roda Prisma generate, typecheck da API, typecheck da W
 ## Contas Demo
 
 Após rodar `pnpm prisma:seed`, use:
+
+Essas credenciais são apenas para desenvolvimento/demonstração. Não rode o seed nem mantenha essas senhas em produção real.
 
 - Admin: `admin@nexo.local` / `Nexo@12345`
 - Empresa: `empresa@nexo.local` / `Nexo@12345`
