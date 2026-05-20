@@ -97,6 +97,9 @@ const apiMessageTranslations: Record<string, string> = {
   "Invitation not found": "Convite não encontrado.",
   "Invitation is not pending": "Este convite não está mais pendente.",
   "Invitation expired": "Este convite expirou.",
+  "No amount proposal to accept": "Não há proposta de valor para aceitar.",
+  "Invitation negotiation is unavailable":
+    "A negociação deste convite não está disponível.",
   "Invitation expiration must be in the future":
     "A expiração do convite precisa estar no futuro.",
   "Freelancer already has a contract in this time range":

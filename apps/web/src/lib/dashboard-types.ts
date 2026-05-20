@@ -46,6 +46,9 @@ export type Invitation = {
   id: string;
   status: string;
   expiresAt: string;
+  proposedAmountCents?: number;
+  counterAmountCents?: number;
+  agreedAmountCents?: number;
   event?: EventItem;
   company?: { companyName: string };
   freelancer?: Freelancer;

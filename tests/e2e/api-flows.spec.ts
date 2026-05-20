@@ -19,7 +19,12 @@ type CompanyProfile = {
   verificationDocuments?: Array<{ id: string; originalName: string }>;
 };
 type EventItem = { id: string; name: string };
-type InvitationItem = { id: string; event?: EventItem };
+type InvitationItem = {
+  id: string;
+  event?: EventItem;
+  counterAmountCents?: number;
+  agreedAmountCents?: number;
+};
 type ApplicationItem = {
   id: string;
   status: string;
@@ -31,7 +36,7 @@ type ChatThreadItem = {
   event?: EventItem;
   messages: Array<{ id: string; body: string }>;
 };
-type ContractItem = { id: string; status: string };
+type ContractItem = { id: string; status: string; amountCents?: number };
 type PaymentItem = { id: string; status: string };
 type ReviewItem = { id: string; overallRating: number };
 type DisputeItem = { id: string; status: string };
@@ -91,7 +96,7 @@ test.describe.serial("NEXO e2e API flows", () => {
       skills: [{ skillId: skill.id, dailyRateCents: 42000 }],
     });
 
-    const window = futureWindow(800);
+    const window = futureWindow(1200);
     const event = await post<EventItem>(request, company, "/api/events", {
       name: `E2E Oportunidade Aberta ${Date.now()}`,
       startsAt: window.startsAt,
@@ -316,12 +321,31 @@ async function createAcceptedContract(
   );
   expect(received.some((item) => item.id === invitation.id)).toBeTruthy();
 
+  const counterProposal = await post<InvitationItem>(
+    api,
+    input.freelancer,
+    `/api/invitations/${invitation.id}/propose-amount`,
+    {
+      amountCents: 47000,
+      message: "Contraproposta de valor pelo e2e.",
+    },
+  );
+  expect(counterProposal.counterAmountCents).toBe(47000);
+
+  const agreed = await post<InvitationItem>(
+    api,
+    input.company,
+    `/api/invitations/${invitation.id}/accept-amount`,
+  );
+  expect(agreed.agreedAmountCents).toBe(47000);
+
   const accepted = await post<{ contract: ContractItem }>(
     api,
     input.freelancer,
     `/api/invitations/${invitation.id}/accept`,
   );
   expect(accepted.contract.status).toBe("PENDING_PAYMENT");
+  expect(accepted.contract.amountCents).toBe(47000);
 
   return { contractId: accepted.contract.id, eventId: event.id };
 }

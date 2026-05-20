@@ -4,11 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, InvitationStatus } from "@prisma/client";
+import { ContractStatus, InvitationStatus, UserRole } from "@prisma/client";
 import { ContractsService } from "../contracts/contracts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateBulkInvitationDto } from "./dto/create-bulk-invitation.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
+import { NegotiateInvitationAmountDto } from "./dto/negotiate-invitation-amount.dto";
 
 @Injectable()
 export class InvitationsService {
@@ -83,6 +84,10 @@ export class InvitationsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const proposedAmountCents =
+        dto.proposedAmountCents ??
+        event.requirements[0]?.dailyRateCents ??
+        freelancer.dailyRateCents;
       const invitation = await tx.invitation.create({
         data: {
           eventId: event.id,
@@ -90,6 +95,7 @@ export class InvitationsService {
           freelancerId: freelancer.id,
           expiresAt: new Date(dto.expiresAt),
           message: dto.message,
+          proposedAmountCents,
         },
         include: {
           event: true,
@@ -133,6 +139,7 @@ export class InvitationsService {
           freelancerId,
           expiresAt: dto.expiresAt,
           message: dto.message,
+          proposedAmountCents: dto.proposedAmountCents,
         });
         invited.push(invitation);
       } catch (caught) {
@@ -235,6 +242,9 @@ export class InvitationsService {
     }
 
     const amountCents =
+      invitation.agreedAmountCents ??
+      invitation.counterAmountCents ??
+      invitation.proposedAmountCents ??
       invitation.event.requirements[0]?.dailyRateCents ??
       freelancer.dailyRateCents ??
       0;
@@ -313,6 +323,172 @@ export class InvitationsService {
     });
   }
 
+  async proposeAmount(
+    userId: string,
+    invitationId: string,
+    dto: NegotiateInvitationAmountDto,
+  ) {
+    const { invitation, user } = await this.findParticipantInvitation(
+      userId,
+      invitationId,
+    );
+
+    if (invitation.status !== InvitationStatus.PENDING) {
+      throw new BadRequestException("Invitation is not pending");
+    }
+
+    const isCompany = user.role === UserRole.COMPANY;
+    const body =
+      dto.message?.trim() ||
+      `${user.name} propôs ${this.formatCents(dto.amountCents)} para este convite.`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedInvitation = await tx.invitation.update({
+        where: { id: invitation.id },
+        data: isCompany
+          ? {
+              proposedAmountCents: dto.amountCents,
+              agreedAmountCents: null,
+            }
+          : {
+              counterAmountCents: dto.amountCents,
+              agreedAmountCents: null,
+            },
+        include: {
+          event: true,
+          company: {
+            select: {
+              id: true,
+              companyName: true,
+              city: true,
+              state: true,
+            },
+          },
+          freelancer: {
+            select: {
+              id: true,
+              displayName: true,
+              avatarUrl: true,
+              user: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      const chatThread = await tx.chatThread.findFirst({
+        where: { invitationId: invitation.id },
+      });
+
+      if (chatThread) {
+        await tx.chatMessage.create({
+          data: {
+            threadId: chatThread.id,
+            senderId: user.id,
+            body,
+          },
+        });
+
+        await tx.chatThread.update({
+          where: { id: chatThread.id },
+          data: { updatedAt: new Date() },
+        });
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: isCompany
+            ? invitation.freelancer.userId
+            : invitation.company.userId,
+          type: "INVITATION_AMOUNT_PROPOSED",
+          title: "Nova proposta de valor",
+          body,
+        },
+      });
+
+      return updatedInvitation;
+    });
+  }
+
+  async acceptAmount(userId: string, invitationId: string) {
+    const { invitation, user } = await this.findParticipantInvitation(
+      userId,
+      invitationId,
+    );
+
+    if (invitation.status !== InvitationStatus.PENDING) {
+      throw new BadRequestException("Invitation is not pending");
+    }
+
+    const isCompany = user.role === UserRole.COMPANY;
+    const amountCents = isCompany
+      ? invitation.counterAmountCents
+      : invitation.proposedAmountCents;
+
+    if (amountCents === null || amountCents === undefined) {
+      throw new BadRequestException("No amount proposal to accept");
+    }
+
+    const body = `${user.name} aceitou ${this.formatCents(amountCents)} para este convite.`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedInvitation = await tx.invitation.update({
+        where: { id: invitation.id },
+        data: { agreedAmountCents: amountCents },
+        include: {
+          event: true,
+          company: {
+            select: {
+              id: true,
+              companyName: true,
+              city: true,
+              state: true,
+            },
+          },
+          freelancer: {
+            select: {
+              id: true,
+              displayName: true,
+              avatarUrl: true,
+              user: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      const chatThread = await tx.chatThread.findFirst({
+        where: { invitationId: invitation.id },
+      });
+
+      if (chatThread) {
+        await tx.chatMessage.create({
+          data: {
+            threadId: chatThread.id,
+            senderId: user.id,
+            body,
+          },
+        });
+
+        await tx.chatThread.update({
+          where: { id: chatThread.id },
+          data: { updatedAt: new Date() },
+        });
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: isCompany
+            ? invitation.freelancer.userId
+            : invitation.company.userId,
+          type: "INVITATION_AMOUNT_ACCEPTED",
+          title: "Valor acordado",
+          body,
+        },
+      });
+
+      return updatedInvitation;
+    });
+  }
+
   private async findInvitationForFreelancer(
     invitationId: string,
     freelancerId: string,
@@ -330,6 +506,42 @@ export class InvitationsService {
     }
 
     return invitation;
+  }
+
+  private async findParticipantInvitation(userId: string, invitationId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (
+      !user ||
+      (user.role !== UserRole.COMPANY && user.role !== UserRole.FREELANCER)
+    ) {
+      throw new ForbiddenException("Invitation negotiation is unavailable");
+    }
+
+    const invitation = await this.prisma.invitation.findFirst({
+      where: {
+        id: invitationId,
+        OR: [{ company: { userId } }, { freelancer: { userId } }],
+      },
+      include: {
+        company: true,
+        freelancer: true,
+        event: true,
+      },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException("Invitation not found");
+    }
+
+    return { invitation, user };
+  }
+
+  private formatCents(cents: number) {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(cents / 100);
   }
 
   private async hasBlockedAvailability(

@@ -33,6 +33,7 @@ Já implementado:
 - Calendário visual do freelancer com eventos futuros, realizados, indisponibilidades e recebimentos.
 - Fluxo inicial de oportunidades abertas e candidaturas, com aprovação pela empresa gerando contrato.
 - Chat interno por convite ou candidatura para negociação entre empresa e freelancer.
+- Negociação estruturada de valor em convites, com oferta, contraproposta, aceite e contrato usando o valor acordado.
 - Convites individuais ou em lote entre empresa e freelancers.
 - Contratos originados a partir de convites aceitos.
 - Ciclo de contrato com pagamento, conclusão, no-show e cancelamento.
@@ -52,7 +53,6 @@ Já implementado:
 
 Próximas entregas orientadas pelo novo documento:
 
-- Negociação de valor por convite/contrato, preservando a diária base do perfil.
 - Carteira da empresa com carga de saldo e complemento de pagamento.
 - Gateway real com cartão, boleto/Pix quando definido, comprovantes e webhooks.
 - Regras automáticas de pós-evento: prazo de 1 dia útil para no-show, contestação e liberação de pagamento.
@@ -279,12 +279,13 @@ Fluxo empresa:
 2. Completa o perfil da empresa.
 3. Cria um evento.
 4. Busca profissionais compatíveis.
-5. Envia convite ou analisa candidaturas recebidas.
-6. Aprova uma candidatura ou convite aceito para gerar contrato.
-7. Acompanha contrato.
-8. Simula pagamento.
-9. Conclui, cancela ou marca no-show.
-10. Avalia o profissional após contrato concluído ou pago.
+5. Envia convite com oferta de valor ou analisa candidaturas recebidas.
+6. Negocia oferta/contraproposta quando necessário.
+7. Aprova uma candidatura ou convite aceito para gerar contrato.
+8. Acompanha contrato.
+9. Simula pagamento.
+10. Conclui, cancela ou marca no-show.
+11. Avalia o profissional após contrato concluído ou pago.
 
 Evolução prevista do fluxo empresa:
 
@@ -302,7 +303,7 @@ Fluxo freelancer:
 3. Busca oportunidades abertas compatíveis.
 4. Envia candidatura com mensagem e proposta de valor.
 5. Recebe convites.
-6. Aceita ou recusa convites.
+6. Aceita, recusa ou faz contraproposta de valor.
 7. Acompanha contratos e carteira.
 8. Acompanha agenda em calendário visual.
 9. Conclui ou cancela contratos elegíveis.

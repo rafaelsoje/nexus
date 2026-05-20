@@ -1,10 +1,13 @@
 import {
   ArrayNotEmpty,
+  IsInt,
   IsArray,
   IsDateString,
   IsOptional,
   IsString,
+  Min,
 } from "class-validator";
+import { Type } from "class-transformer";
 
 export class CreateBulkInvitationDto {
   @IsString()
@@ -21,4 +24,10 @@ export class CreateBulkInvitationDto {
   @IsOptional()
   @IsString()
   message?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  proposedAmountCents?: number;
 }

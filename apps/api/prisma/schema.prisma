@@ -238,6 +238,9 @@ model Invitation {
   freelancerId String
   status       InvitationStatus  @default(PENDING)
   message      String?
+  proposedAmountCents Int?
+  counterAmountCents  Int?
+  agreedAmountCents   Int?
   expiresAt    DateTime
   respondedAt  DateTime?
   createdAt    DateTime          @default(now())

@@ -9,6 +9,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { CreateBulkInvitationDto } from "./dto/create-bulk-invitation.dto";
 import { CreateInvitationDto } from "./dto/create-invitation.dto";
+import { NegotiateInvitationAmountDto } from "./dto/negotiate-invitation-amount.dto";
 import { InvitationsService } from "./invitations.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -50,6 +51,22 @@ export class InvitationsController {
   @Post(":id/accept")
   accept(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
     return this.invitationsService.accept(user.sub, id);
+  }
+
+  @Roles(UserRole.COMPANY, UserRole.FREELANCER)
+  @Post(":id/propose-amount")
+  proposeAmount(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @Body() dto: NegotiateInvitationAmountDto,
+  ) {
+    return this.invitationsService.proposeAmount(user.sub, id, dto);
+  }
+
+  @Roles(UserRole.COMPANY, UserRole.FREELANCER)
+  @Post(":id/accept-amount")
+  acceptAmount(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.invitationsService.acceptAmount(user.sub, id);
   }
 
   @Roles(UserRole.FREELANCER)

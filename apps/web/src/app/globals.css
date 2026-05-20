@@ -940,6 +940,13 @@ select:focus {
   color: var(--muted);
 }
 
+.inline-negotiation {
+  display: grid;
+  grid-template-columns: minmax(5rem, 0.35fr) minmax(10rem, 1fr) auto;
+  gap: 0.5rem;
+  width: min(100%, 42rem);
+}
+
 .wallet-balance,
 .admin-count {
   margin-top: 1.25rem;
@@ -1415,6 +1422,7 @@ select:focus {
 
   .button-row,
   .form-grid,
+  .inline-negotiation,
   .list-row {
     align-items: stretch;
     grid-template-columns: 1fr;
