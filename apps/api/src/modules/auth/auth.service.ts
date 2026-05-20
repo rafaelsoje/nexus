@@ -12,6 +12,7 @@ import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { EmailService } from "./email/email.service";
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -100,19 +102,26 @@ export class AuthService {
       return { ok: true };
     }
 
+    const expiresInMinutes = 30;
     const resetToken = randomBytes(32).toString("hex");
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
         resetTokenHash: await bcrypt.hash(resetToken, 12),
-        resetTokenExpiresAt: new Date(Date.now() + 1000 * 60 * 30),
+        resetTokenExpiresAt: new Date(Date.now() + 1000 * 60 * expiresInMinutes),
       },
     });
 
-    return {
-      ok: true,
+    await this.emailService.sendPasswordResetEmail({
+      email: user.email,
+      name: user.name,
       resetToken,
-    };
+      expiresInMinutes,
+    });
+
+    return this.emailService.shouldExposeDevTokens()
+      ? { ok: true, resetToken }
+      : { ok: true };
   }
 
   async resetPassword(token: string, password: string) {

@@ -42,7 +42,8 @@ export default function RecoverPasswordPage() {
 
   async function resetPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -54,7 +55,7 @@ export default function RecoverPasswordPage() {
           password: String(form.get("password")),
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setResetToken("");
       setSuccess("Senha atualizada. Você já pode entrar com a nova senha.");
     } catch (caught) {

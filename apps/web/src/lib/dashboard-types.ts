@@ -13,6 +13,7 @@ export type EventItem = {
   description?: string;
   eventType?: string;
   desiredProfessionals?: number;
+  openSpots?: number;
   status: string;
   company?: { companyName: string; city?: string; state?: string };
   invitations?: Array<{ id: string; status: string }>;
@@ -29,8 +30,11 @@ export type EventItem = {
 export type Freelancer = {
   id: string;
   displayName?: string;
+  user?: { name: string };
   city?: string;
   state?: string;
+  tools?: string;
+  transportation?: string;
   dailyRateCents?: number;
   ratingAverage?: string;
   isAvailable?: boolean;
@@ -47,14 +51,50 @@ export type Invitation = {
   freelancer?: Freelancer;
 };
 
+export type Application = {
+  id: string;
+  status: string;
+  message?: string;
+  proposedAmountCents?: number;
+  createdAt: string;
+  event?: EventItem;
+  company?: { companyName: string; city?: string; state?: string };
+  freelancer?: Freelancer;
+  contract?: Contract;
+};
+
+export type ChatMessage = {
+  id: string;
+  body: string;
+  createdAt: string;
+  sender?: { id: string; name: string; role: string };
+};
+
+export type ChatThread = {
+  id: string;
+  event?: EventItem;
+  company?: { id: string; companyName: string; city?: string; state?: string };
+  freelancer?: Freelancer;
+  application?: Application;
+  invitation?: Invitation;
+  messages: ChatMessage[];
+};
+
 export type Contract = {
   id: string;
   status: string;
   amountCents: number;
   startsAt: string;
+  endsAt: string;
   event?: EventItem;
   company?: { companyName: string };
   freelancer?: Freelancer;
+  payment?: {
+    id: string;
+    status: string;
+    grossAmountCents: number;
+    freelancerAmountCents: number;
+  };
 };
 
 export type Payment = {
@@ -110,6 +150,16 @@ export type AvailabilityItem = {
   reason?: string;
 };
 
+export type VerificationDocument = {
+  id: string;
+  category: string;
+  originalName: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
 export type FreelancerProfile = {
   id: string;
   displayName?: string;
@@ -120,6 +170,7 @@ export type FreelancerProfile = {
   transportation?: string;
   dailyRateCents?: number;
   skills: Array<{ skill: Skill; dailyRateCents?: number }>;
+  verificationDocuments?: VerificationDocument[];
 };
 
 export type CompanyProfile = {
@@ -132,6 +183,7 @@ export type CompanyProfile = {
   logoUrl?: string;
   city?: string;
   state?: string;
+  verificationDocuments?: VerificationDocument[];
 };
 
 export type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
@@ -153,6 +205,7 @@ export type AdminFreelancer = Freelancer & {
   avatarUrl?: string;
   tools?: string;
   transportation?: string;
+  verificationDocuments?: VerificationDocument[];
   user?: {
     id: string;
     name: string;
@@ -178,4 +231,13 @@ export type ReportSummary = {
   totals: Record<string, number>;
   contractStatus: Array<{ status: string; count: number }>;
   eventStatus: Array<{ status: string; count: number }>;
+  paymentStatus: Array<{ status: string; count: number }>;
+  paymentTrend: Array<{
+    month: string;
+    label: string;
+    grossAmountCents: number;
+    freelancerAmountCents: number;
+    platformFeeCents: number;
+    payments: number;
+  }>;
 };

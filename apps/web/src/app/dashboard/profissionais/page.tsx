@@ -71,16 +71,37 @@ export default function ProfessionalsPage() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const eventId = String(form.get("eventId") ?? "");
+    const params = new URLSearchParams({
+      startsAt: String(form.get("startsAt")),
+      endsAt: String(form.get("endsAt")),
+    });
+    const optionalFilters = [
+      ["skillId", String(form.get("skillId") ?? "")],
+      ["city", String(form.get("city") ?? "")],
+      ["search", String(form.get("search") ?? "")],
+      ["tools", String(form.get("tools") ?? "")],
+      ["transportation", String(form.get("transportation") ?? "")],
+      [
+        "minDailyRateCents",
+        centsFromCurrencyInput(form.get("minDailyRate")),
+      ],
+      [
+        "maxDailyRateCents",
+        centsFromCurrencyInput(form.get("maxDailyRate")),
+      ],
+    ];
     setError("");
     setSelectedEventId(eventId);
 
     try {
+      optionalFilters.forEach(([key, value]) => {
+        if (value) {
+          params.set(key, value);
+        }
+      });
+
       const data = await apiRequest<Freelancer[]>(
-        `/api/events/available-freelancers?startsAt=${encodeURIComponent(
-          String(form.get("startsAt")),
-        )}&endsAt=${encodeURIComponent(String(form.get("endsAt")))}&skillId=${encodeURIComponent(
-          String(form.get("skillId")),
-        )}`,
+        `/api/events/available-freelancers?${params.toString()}`,
       );
       setFreelancers(data);
       setSelectedFreelancerIds([]);
@@ -214,7 +235,8 @@ export default function ProfessionalsPage() {
                 </Field>
               </div>
               <Field label="Especialidade">
-                <select name="skillId" required>
+                <select name="skillId" defaultValue="">
+                  <option value="">Todas</option>
                   {skills.map((skill) => (
                     <option key={skill.id} value={skill.id}>
                       {skill.name}
@@ -222,8 +244,35 @@ export default function ProfessionalsPage() {
                   ))}
                 </select>
               </Field>
+              <div className="form-grid">
+                <Field label="Nome ou apelido">
+                  <input
+                    name="search"
+                    placeholder="Ex.: Alexandre, DJ, foto..."
+                  />
+                </Field>
+                <Field label="Cidade">
+                  <input name="city" placeholder="Ex.: Aracaju" />
+                </Field>
+              </div>
+              <div className="form-grid">
+                <Field label="Diária mínima">
+                  <input min={0} name="minDailyRate" type="number" />
+                </Field>
+                <Field label="Diária máxima">
+                  <input min={0} name="maxDailyRate" type="number" />
+                </Field>
+              </div>
+              <div className="form-grid">
+                <Field label="Ferramentas/habilidades">
+                  <input name="tools" placeholder="Ex.: mesa, câmera, LED" />
+                </Field>
+                <Field label="Transporte">
+                  <input name="transportation" placeholder="Ex.: carro" />
+                </Field>
+              </div>
               <button className="secondary-button full" type="submit">
-                Buscar disponíveis
+                Buscar profissionais
               </button>
             </form>
           </article>
@@ -262,7 +311,11 @@ export default function ProfessionalsPage() {
                     />
                   ) : null}
                   <div>
-                    <strong>{freelancer.displayName ?? "Profissional"}</strong>
+                    <strong>
+                      {freelancer.displayName ??
+                        freelancer.user?.name ??
+                        "Profissional"}
+                    </strong>
                     <span>
                       {freelancer.city ?? "Cidade não informada"}
                       {freelancer.dailyRateCents
@@ -270,6 +323,19 @@ export default function ProfessionalsPage() {
                         : ""}
                       {freelancer.isAvailable === false
                         ? ` - ${freelancer.blockingReason}`
+                        : ""}
+                    </span>
+                    <span>
+                      {(freelancer.skills ?? [])
+                        .map(({ skill }) => skill.name)
+                        .join(", ") || "Especialidades não informadas"}
+                    </span>
+                    <span>
+                      {freelancer.tools
+                        ? `Ferramentas: ${freelancer.tools}`
+                        : "Ferramentas não informadas"}
+                      {freelancer.transportation
+                        ? ` - Transporte: ${freelancer.transportation}`
                         : ""}
                     </span>
                   </div>
@@ -292,4 +358,9 @@ export default function ProfessionalsPage() {
       </section>
     </DashboardShell>
   );
+}
+
+function centsFromCurrencyInput(value: FormDataEntryValue | null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? String(parsed * 100) : "";
 }

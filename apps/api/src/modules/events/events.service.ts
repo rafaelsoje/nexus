@@ -139,10 +139,33 @@ export class EventsService {
     this.assertValidRange(query.startsAt, query.endsAt);
     const startsAt = new Date(query.startsAt);
     const endsAt = new Date(query.endsAt);
+    const normalizedSearch = query.search?.trim();
+    const normalizedTools = query.tools?.trim();
+    const normalizedTransportation = query.transportation?.trim();
 
     const freelancers = await this.prisma.freelancerProfile.findMany({
       where: {
-        city: query.city,
+        city: query.city || undefined,
+        dailyRateCents: {
+          gte: query.minDailyRateCents,
+          lte: query.maxDailyRateCents,
+        },
+        tools: normalizedTools
+          ? { contains: normalizedTools, mode: "insensitive" }
+          : undefined,
+        transportation: normalizedTransportation
+          ? { contains: normalizedTransportation, mode: "insensitive" }
+          : undefined,
+        OR: normalizedSearch
+          ? [
+              { displayName: { contains: normalizedSearch, mode: "insensitive" } },
+              {
+                user: {
+                  name: { contains: normalizedSearch, mode: "insensitive" },
+                },
+              },
+            ]
+          : undefined,
         skills: query.skillId
           ? { some: { skillId: query.skillId } }
           : undefined,
@@ -153,9 +176,12 @@ export class EventsService {
         avatarUrl: true,
         city: true,
         state: true,
+        tools: true,
+        transportation: true,
         dailyRateCents: true,
         ratingAverage: true,
         verificationStatus: true,
+        user: { select: { name: true } },
         skills: {
           select: {
             dailyRateCents: true,

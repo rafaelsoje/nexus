@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -11,10 +12,15 @@ import {
   UserRole,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { PAYMENT_GATEWAY, PaymentGateway } from "./gateways/payment-gateway";
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(PAYMENT_GATEWAY)
+    private readonly paymentGateway: PaymentGateway,
+  ) {}
 
   async listMine(userId: string, role: UserRole) {
     if (role === UserRole.ADMIN) {
@@ -52,7 +58,7 @@ export class PaymentsService {
     });
   }
 
-  async simulatePayment(userId: string, contractId: string) {
+  async processPayment(userId: string, contractId: string) {
     const company = await this.findCompanyByUserId(userId);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
@@ -74,39 +80,38 @@ export class PaymentsService {
     const freelancerAmountCents = contract.amountCents;
     const platformFeeCents = contract.platformFeeCents;
     const grossAmountCents = freelancerAmountCents + platformFeeCents;
+    const gatewayPayment = await this.paymentGateway.charge({
+      contractId: contract.id,
+      companyId: contract.companyId,
+      freelancerId: contract.freelancerId,
+      grossAmountCents,
+      freelancerAmountCents,
+      platformFeeCents,
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({
         data: {
           contractId: contract.id,
-          status: PaymentStatus.PAID,
+          status: gatewayPayment.status,
           grossAmountCents,
           freelancerAmountCents,
           platformFeeCents,
-          gatewayTransactionId: `sim_${Date.now()}`,
-          paidAt: new Date(),
+          gatewayTransactionId: gatewayPayment.gatewayTransactionId,
+          paidAt: gatewayPayment.paidAt,
           splits: {
-            create: [
-              {
-                recipientType: "FREELANCER",
-                amountCents: freelancerAmountCents,
-                gatewayRecipientId: `freelancer_${contract.freelancerId}`,
-              },
-              {
-                recipientType: "PLATFORM",
-                amountCents: platformFeeCents,
-                gatewayRecipientId: "platform",
-              },
-            ],
+            create: gatewayPayment.splits,
           },
         },
         include: { splits: true },
       });
 
-      await tx.contract.update({
-        where: { id: contract.id },
-        data: { status: ContractStatus.CONFIRMED },
-      });
+      if (gatewayPayment.status === PaymentStatus.PAID) {
+        await tx.contract.update({
+          where: { id: contract.id },
+          data: { status: ContractStatus.CONFIRMED },
+        });
+      }
 
       await tx.notification.create({
         data: {
@@ -119,6 +124,10 @@ export class PaymentsService {
 
       return payment;
     });
+  }
+
+  simulatePayment(userId: string, contractId: string) {
+    return this.processPayment(userId, contractId);
   }
 
   async releaseToFreelancer(paymentId: string) {

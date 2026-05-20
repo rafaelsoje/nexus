@@ -10,3 +10,6 @@ coverage
 pnpm-debug.log*
 *.tsbuildinfo
 apps/api/generated
+apps/api/uploads
+playwright-report
+test-results

@@ -3,11 +3,11 @@
 import {
   Bell,
   CalendarDays,
+  MessageCircle,
   CreditCard,
   LayoutDashboard,
   LogOut,
   Settings,
-  Search,
   ShieldAlert,
   ShieldCheck,
   Star,
@@ -19,10 +19,14 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { clearSession, getSession, type AuthSession } from "../lib/api";
+import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/eventos", label: "Eventos", icon: CalendarDays },
+  { href: "/dashboard/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/dashboard/oportunidades", label: "Oportunidades", icon: UsersRound },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageCircle },
   {
     href: "/dashboard/profissionais",
     label: "Profissionais",
@@ -32,7 +36,7 @@ const navItems = [
   { href: "/dashboard/notificacoes", label: "Notificações", icon: Bell },
   { href: "/dashboard/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/dashboard/avaliacoes", label: "Avaliações", icon: Star },
-  { href: "/dashboard/disputas", label: "Disputas", icon: ShieldAlert },
+  { href: "/dashboard/disputas", label: "Contestações", icon: ShieldAlert },
   {
     href: "/dashboard/verificacoes",
     label: "Verificações",
@@ -118,12 +122,10 @@ export function DashboardShell({
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
           </div>
-          {action ?? (
-            <button className="primary-button" type="button">
-              <Search size={18} />
-              Atualizar
-            </button>
-          )}
+          <div className="topbar-actions">
+            {action}
+            <ThemeToggle />
+          </div>
         </header>
         {children}
       </section>
@@ -134,10 +136,24 @@ export function DashboardShell({
 export function ModuleHeaderAction({
   onRefresh,
 }: Readonly<{ onRefresh: () => void }>) {
-  return (
-    <button className="primary-button" onClick={onRefresh} type="button">
-      <Search size={18} />
-      Atualizar
-    </button>
-  );
+  useEffect(() => {
+    const refreshOnFocus = () => onRefresh();
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") {
+        onRefresh();
+      }
+    };
+    const interval = window.setInterval(onRefresh, 60_000);
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
+    };
+  }, [onRefresh]);
+
+  return null;
 }

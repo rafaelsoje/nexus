@@ -37,6 +37,13 @@ enum InvitationStatus {
   CANCELLED
 }
 
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
 enum ContractStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -73,71 +80,100 @@ enum DisputeStatus {
 }
 
 model User {
-  id                  String             @id @default(cuid())
-  name                String
-  email               String             @unique
-  passwordHash        String
-  role                UserRole
-  phone               String?
-  refreshTokenHash    String?
-  resetTokenHash      String?
-  resetTokenExpiresAt DateTime?
-  isActive            Boolean            @default(true)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  companyProfile      CompanyProfile?
-  freelancerProfile   FreelancerProfile?
-  notifications       Notification[]
-  auditLogs           AuditLog[]
+  id                    String                 @id @default(cuid())
+  name                  String
+  email                 String                 @unique
+  passwordHash          String
+  role                  UserRole
+  phone                 String?
+  refreshTokenHash      String?
+  resetTokenHash        String?
+  resetTokenExpiresAt   DateTime?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  companyProfile        CompanyProfile?
+  freelancerProfile     FreelancerProfile?
+  verificationDocuments VerificationDocument[]
+  notifications         Notification[]
+  chatMessages          ChatMessage[]
+  auditLogs             AuditLog[]
 }
 
 model CompanyProfile {
-  id                 String             @id @default(cuid())
-  userId             String             @unique
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName        String
-  document           String?
-  responsibleName    String
-  phone              String?
-  email              String
-  logoUrl            String?
-  city               String?
-  state              String?
-  verificationStatus VerificationStatus @default(PENDING)
-  ratingAverage      Decimal            @default(0) @db.Decimal(3, 2)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  events             Event[]
-  invitations        Invitation[]
-  contracts          Contract[]
-  wallet             Wallet?
-  reviewsGiven       Review[]           @relation("CompanyReviewsGiven")
-  reviewsReceived    Review[]           @relation("CompanyReviewsReceived")
+  id                    String                 @id @default(cuid())
+  userId                String                 @unique
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName           String
+  document              String?
+  responsibleName       String
+  phone                 String?
+  email                 String
+  logoUrl               String?
+  city                  String?
+  state                 String?
+  verificationStatus    VerificationStatus     @default(PENDING)
+  ratingAverage         Decimal                @default(0) @db.Decimal(3, 2)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  events                Event[]
+  invitations           Invitation[]
+  applications          Application[]
+  contracts             Contract[]
+  chatThreads           ChatThread[]
+  wallet                Wallet?
+  verificationDocuments VerificationDocument[]
+  reviewsGiven          Review[]               @relation("CompanyReviewsGiven")
+  reviewsReceived       Review[]               @relation("CompanyReviewsReceived")
 }
 
 model FreelancerProfile {
-  id                 String             @id @default(cuid())
-  userId             String             @unique
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  displayName        String?
-  avatarUrl          String?
-  city               String?
-  state              String?
-  tools              String?
-  transportation     String?
-  dailyRateCents     Int?
-  bankData           Json?
-  verificationStatus VerificationStatus @default(PENDING)
-  ratingAverage      Decimal            @default(0) @db.Decimal(3, 2)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  skills             FreelancerSkill[]
-  invitations        Invitation[]
-  contracts          Contract[]
-  availability       Availability[]
-  wallet             Wallet?
-  reviewsGiven       Review[]           @relation("FreelancerReviewsGiven")
-  reviewsReceived    Review[]           @relation("FreelancerReviewsReceived")
+  id                    String                 @id @default(cuid())
+  userId                String                 @unique
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName           String?
+  avatarUrl             String?
+  city                  String?
+  state                 String?
+  tools                 String?
+  transportation        String?
+  dailyRateCents        Int?
+  bankData              Json?
+  verificationStatus    VerificationStatus     @default(PENDING)
+  ratingAverage         Decimal                @default(0) @db.Decimal(3, 2)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  skills                FreelancerSkill[]
+  invitations           Invitation[]
+  applications          Application[]
+  contracts             Contract[]
+  chatThreads           ChatThread[]
+  availability          Availability[]
+  wallet                Wallet?
+  verificationDocuments VerificationDocument[]
+  reviewsGiven          Review[]               @relation("FreelancerReviewsGiven")
+  reviewsReceived       Review[]               @relation("FreelancerReviewsReceived")
+}
+
+model VerificationDocument {
+  id           String             @id @default(cuid())
+  companyId    String?
+  freelancerId String?
+  uploadedById String
+  category     String
+  originalName String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  createdAt    DateTime           @default(now())
+  company      CompanyProfile?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer   FreelancerProfile? @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  uploadedBy   User               @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([freelancerId])
+  @@index([uploadedById])
 }
 
 model Skill {
@@ -180,7 +216,9 @@ model Event {
   updatedAt            DateTime           @updatedAt
   requirements         EventRequirement[]
   invitations          Invitation[]
+  applications         Application[]
   contracts            Contract[]
+  chatThreads          ChatThread[]
 }
 
 model EventRequirement {
@@ -207,6 +245,29 @@ model Invitation {
   company      CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   contract     Contract?
+  chatThread   ChatThread?
+}
+
+model Application {
+  id                  String             @id @default(cuid())
+  eventId             String
+  companyId           String
+  freelancerId        String
+  status              ApplicationStatus  @default(PENDING)
+  message             String?
+  proposedAmountCents Int?
+  respondedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  event               Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company             CompanyProfile     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer          FreelancerProfile  @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  contract            Contract?
+  chatThread          ChatThread?
+
+  @@unique([eventId, freelancerId])
+  @@index([companyId])
+  @@index([freelancerId])
 }
 
 model Contract {
@@ -215,6 +276,7 @@ model Contract {
   companyId        String
   freelancerId     String
   invitationId     String?           @unique
+  applicationId    String?           @unique
   status           ContractStatus    @default(PENDING_PAYMENT)
   amountCents      Int
   platformFeeCents Int               @default(0)
@@ -226,9 +288,48 @@ model Contract {
   company          CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   freelancer       FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   invitation       Invitation?       @relation(fields: [invitationId], references: [id])
+  application      Application?      @relation(fields: [applicationId], references: [id])
+  chatThread       ChatThread?
   payment          Payment?
   reviews          Review[]
   disputes         Dispute[]
+}
+
+model ChatThread {
+  id            String            @id @default(cuid())
+  eventId       String
+  companyId     String
+  freelancerId  String
+  invitationId  String?           @unique
+  applicationId String?           @unique
+  contractId    String?           @unique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company       CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer    FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  invitation    Invitation?       @relation(fields: [invitationId], references: [id])
+  application   Application?      @relation(fields: [applicationId], references: [id])
+  contract      Contract?         @relation(fields: [contractId], references: [id])
+  messages      ChatMessage[]
+
+  @@index([companyId])
+  @@index([freelancerId])
+  @@index([eventId])
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  senderId  String
+  body      String
+  createdAt DateTime   @default(now())
+  readAt    DateTime?
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    User       @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([senderId])
 }
 
 model Availability {

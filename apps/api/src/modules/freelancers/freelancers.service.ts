@@ -26,6 +26,7 @@ export class FreelancersService {
         user: { select: { id: true, name: true, email: true, phone: true } },
         wallet: true,
         skills: { include: { skill: true } },
+        verificationDocuments: { orderBy: { createdAt: "desc" } },
       },
     });
 

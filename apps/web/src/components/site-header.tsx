@@ -1,5 +1,6 @@
 import { UsersRound } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "./theme-toggle";
 
 export function SiteHeader() {
   return (
@@ -14,10 +15,13 @@ export function SiteHeader() {
         <Link href="/#pagamentos">Pagamentos</Link>
         <Link href="/login">Login</Link>
       </nav>
-      <Link className="primary-button" href="/cadastro/empresa">
-        <UsersRound size={18} />
-        Começar
-      </Link>
+      <div className="site-actions">
+        <ThemeToggle />
+        <Link className="primary-button" href="/cadastro/empresa">
+          <UsersRound size={18} />
+          Começar
+        </Link>
+      </div>
     </header>
   );
 }

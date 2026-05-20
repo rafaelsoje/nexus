@@ -6,9 +6,11 @@
     "dev": "dotenv -e ../../.env -- nest start --watch",
     "build": "nest build",
     "start": "dotenv -e ../../.env -- node dist/main.js",
+    "test": "tsx --test \"src/**/*.spec.ts\"",
     "lint": "tsc --noEmit",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "prisma:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
   },
   "dependencies": {

@@ -7,7 +7,7 @@ import {
   CalendarDays,
   CreditCard,
   LogOut,
-  Search,
+  MessageCircle,
   Settings,
   ShieldCheck,
   ShieldAlert,
@@ -19,6 +19,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type React from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { EmptyState, Field, StatusMessage } from "../../components/ui";
 import {
   apiRequest,
@@ -122,6 +137,15 @@ type ReportSummary = {
   totals: Record<string, number>;
   contractStatus: Array<{ status: string; count: number }>;
   eventStatus: Array<{ status: string; count: number }>;
+  paymentStatus: Array<{ status: string; count: number }>;
+  paymentTrend: Array<{
+    month: string;
+    label: string;
+    grossAmountCents: number;
+    freelancerAmountCents: number;
+    platformFeeCents: number;
+    payments: number;
+  }>;
 };
 
 export default function DashboardPage() {
@@ -165,6 +189,29 @@ export default function DashboardPage() {
     }
 
     void loadDashboard(session.user.role);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const refresh = () => void loadDashboard(session.user.role);
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    const interval = window.setInterval(refresh, 60_000);
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
+    };
   }, [session]);
 
   async function loadDashboard(currentRole = role) {
@@ -268,7 +315,8 @@ export default function DashboardPage() {
 
   async function handleCreateEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -292,7 +340,7 @@ export default function DashboardPage() {
           ],
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setSuccess("Evento criado.");
       await loadDashboard("COMPANY");
     } catch (caught) {
@@ -416,7 +464,8 @@ export default function DashboardPage() {
 
   async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -429,7 +478,7 @@ export default function DashboardPage() {
           reason: String(form.get("reason") || "Indisponível"),
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setSuccess("Indisponibilidade adicionada.");
       await loadDashboard("FREELANCER");
     } catch (caught) {
@@ -534,6 +583,18 @@ export default function DashboardPage() {
             <BriefcaseBusiness size={18} />
             Eventos
           </Link>
+          <Link href="/dashboard/agenda">
+            <CalendarDays size={18} />
+            Agenda
+          </Link>
+          <Link href="/dashboard/oportunidades">
+            <UsersRound size={18} />
+            Oportunidades
+          </Link>
+          <Link href="/dashboard/chat">
+            <MessageCircle size={18} />
+            Chat
+          </Link>
           <Link href="/dashboard/profissionais">
             <UsersRound size={18} />
             Profissionais
@@ -556,7 +617,7 @@ export default function DashboardPage() {
           </Link>
           <Link href="/dashboard/disputas">
             <ShieldAlert size={18} />
-            Disputas
+            Contestações
           </Link>
           <Link href="/dashboard/perfil">
             <Settings size={18} />
@@ -575,10 +636,9 @@ export default function DashboardPage() {
             <p className="eyebrow">{session.user.role}</p>
             <h1>Olá, {session.user.name}</h1>
           </div>
-          <button className="primary-button" onClick={() => loadDashboard()}>
-            <Search size={18} />
-            Atualizar
-          </button>
+          <div className="topbar-actions">
+            <ThemeToggle />
+          </div>
         </header>
 
         {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
@@ -1066,7 +1126,7 @@ function AdminDashboard({
       />
       <AdminPanel
         icon={<Bell size={18} />}
-        title="Disputas"
+        title="Contestações"
         value={data.disputes.length}
       />
       <ListPanel icon={<CreditCard size={18} />} title="Pagamentos">
@@ -1098,6 +1158,24 @@ function ReportPanel({
   reportSummary,
 }: Readonly<{ reportSummary: ReportSummary | null }>) {
   const totals = reportSummary?.totals ?? {};
+  const financialEntries = [
+    {
+      key: "freelancerAmountCents",
+      label: "Repasse",
+      value: totals.freelancerAmountCents ?? 0,
+    },
+    {
+      key: "platformFeeCents",
+      label: "Taxa",
+      value: totals.platformFeeCents ?? 0,
+    },
+  ];
+  const financialTotal = financialEntries.reduce(
+    (sum, entry) => sum + entry.value,
+    0,
+  );
+  const paidVolume = totals.grossAmountCents ?? 0;
+  const financialTrend = reportSummary?.paymentTrend ?? [];
   const moneyKeys = new Set([
     "grossAmountCents",
     "freelancerAmountCents",
@@ -1116,6 +1194,18 @@ function ReportPanel({
     platformFeeCents: "Taxa plataforma",
     balanceCents: "Saldo",
   };
+  const statusLabels: Record<string, string> = {
+    CANCELLED: "Cancelado",
+    COMPLETED: "Concluído",
+    CONFIRMED: "Confirmado",
+    DRAFT: "Rascunho",
+    NO_SHOW: "No-show",
+    PAID: "Pago",
+    PENDING: "Pendente",
+    PENDING_PAYMENT: "Aguardando pagamento",
+    PUBLISHED: "Publicado",
+    RELEASED_TO_FREELANCER: "Repassado",
+  };
 
   return (
     <article className="panel report-panel">
@@ -1133,17 +1223,237 @@ function ReportPanel({
           </div>
         ))}
       </div>
-      {reportSummary?.contractStatus.length ? (
-        <div className="status-strip">
-          {reportSummary.contractStatus.map((item) => (
-            <span key={item.status}>
-              {item.status}: {item.count}
-            </span>
-          ))}
+
+      <div className="report-charts">
+        <DonutStatusChart
+          items={reportSummary?.contractStatus ?? []}
+          labels={statusLabels}
+          title="Contratos por status"
+        />
+        <BarStatusChart
+          items={reportSummary?.paymentStatus ?? []}
+          labels={statusLabels}
+          title="Pagamentos por status"
+        />
+        {reportSummary?.eventStatus.length ? (
+          <BarStatusChart
+            items={reportSummary.eventStatus}
+            labels={statusLabels}
+            title="Eventos por status"
+          />
+        ) : null}
+      </div>
+
+      {financialTotal > 0 ? (
+        <div className="financial-chart">
+          <div className="financial-chart-header">
+            <span>Composição financeira</span>
+            <strong>{formatCurrency(paidVolume)}</strong>
+          </div>
+          <div className="area-chart-shell">
+            <ResponsiveContainer height={180} width="100%">
+              <AreaChart
+                data={financialTrend}
+                margin={{ bottom: 0, left: 0, right: 8, top: 12 }}
+              >
+                <defs>
+                  <linearGradient
+                    id="paidVolumeFill"
+                    x1="0"
+                    x2="0"
+                    y1="0"
+                    y2="1"
+                  >
+                    <stop offset="5%" stopColor="#7c3cff" stopOpacity={0.5} />
+                    <stop offset="95%" stopColor="#00bfff" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis
+                  axisLine={false}
+                  dataKey="label"
+                  tick={{ fill: "var(--muted)", fontSize: 11 }}
+                  tickLine={false}
+                />
+                <YAxis hide />
+                <Tooltip
+                  content={<ChartTooltip valueFormatter={formatCurrency} />}
+                  cursor={{ stroke: "rgba(0, 191, 255, 0.28)" }}
+                />
+                <Area
+                  dataKey="grossAmountCents"
+                  fill="url(#paidVolumeFill)"
+                  name="Volume"
+                  stroke="#7c3cff"
+                  strokeWidth={3}
+                  type="monotone"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="chart-legend">
+            {financialEntries.map((entry) => (
+              <span key={entry.key}>
+                <i className={entry.key} />
+                {entry.label}: {formatCurrency(entry.value)}
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
     </article>
   );
+}
+
+function DonutStatusChart({
+  items,
+  labels,
+  title,
+}: Readonly<{
+  items: Array<{ status: string; count: number }>;
+  labels: Record<string, string>;
+  title: string;
+}>) {
+  const chartData = buildStatusChartData(items, labels);
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="status-chart">
+      <div className="chart-title">
+        <span>{title}</span>
+        <strong>{total}</strong>
+      </div>
+      {chartData.length ? (
+        <div className="donut-layout">
+          <ResponsiveContainer height={180} width="100%">
+            <PieChart>
+              <Pie
+                cx="50%"
+                cy="50%"
+                data={chartData}
+                dataKey="value"
+                innerRadius={52}
+                outerRadius={72}
+                paddingAngle={3}
+                stroke="var(--background)"
+                strokeWidth={4}
+              >
+                {chartData.map((entry) => (
+                  <Cell fill={entry.color} key={entry.name} />
+                ))}
+              </Pie>
+              <Tooltip content={<ChartTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="chart-legend compact">
+            {chartData.map((entry) => (
+              <span key={entry.name}>
+                <i style={{ background: entry.color }} />
+                {entry.name}: {entry.value}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <EmptyState>Nenhum dado para exibir.</EmptyState>
+      )}
+    </div>
+  );
+}
+
+function BarStatusChart({
+  items,
+  labels,
+  title,
+}: Readonly<{
+  items: Array<{ status: string; count: number }>;
+  labels: Record<string, string>;
+  title: string;
+}>) {
+  const chartData = buildStatusChartData(items, labels);
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="status-chart">
+      <div className="chart-title">
+        <span>{title}</span>
+        <strong>{total}</strong>
+      </div>
+      {chartData.length ? (
+        <ResponsiveContainer height={220} width="100%">
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ bottom: 0, left: 0, right: 16, top: 16 }}
+          >
+            <CartesianGrid horizontal={false} stroke="var(--chart-grid)" />
+            <XAxis allowDecimals={false} axisLine={false} hide type="number" />
+            <YAxis
+              axisLine={false}
+              dataKey="name"
+              tick={{ fill: "var(--muted)", fontSize: 11 }}
+              tickLine={false}
+              type="category"
+              width={104}
+            />
+            <Tooltip
+              content={<ChartTooltip />}
+              cursor={{ fill: "rgba(0, 191, 255, 0.06)" }}
+            />
+            <Bar dataKey="value" name="Total" radius={[0, 8, 8, 0]}>
+              {chartData.map((entry) => (
+                <Cell fill={entry.color} key={entry.name} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <EmptyState>Nenhum dado para exibir.</EmptyState>
+      )}
+    </div>
+  );
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  valueFormatter,
+}: Readonly<{
+  active?: boolean;
+  payload?: Array<{
+    name?: string;
+    value?: number;
+    payload?: { name?: string };
+  }>;
+  valueFormatter?: (value?: number) => string;
+}>) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const item = payload[0];
+  const label = item.payload?.name ?? item.name ?? "Total";
+  const value = valueFormatter ? valueFormatter(item.value) : item.value;
+
+  return (
+    <div className="chart-tooltip">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function buildStatusChartData(
+  items: Array<{ status: string; count: number }>,
+  labels: Record<string, string>,
+) {
+  const colors = ["#7c3cff", "#00bfff", "#35d399", "#ffb84d", "#ff6b9d"];
+
+  return items.map((item, index) => ({
+    color: colors[index % colors.length],
+    name: labels[item.status] ?? item.status,
+    value: item.count,
+  }));
 }
 
 function AdminPanel({

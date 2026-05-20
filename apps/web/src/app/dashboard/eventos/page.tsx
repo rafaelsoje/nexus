@@ -85,7 +85,8 @@ export default function EventsPage() {
 
   async function handleSubmitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -127,7 +128,7 @@ export default function EventsPage() {
           }),
         },
       );
-      event.currentTarget.reset();
+      formElement.reset();
       resetEventForm();
       setSuccess(editingEvent ? "Evento atualizado." : "Evento criado.");
       await loadEvents();

@@ -94,7 +94,9 @@ export default function DisputesPage() {
       setDisputes(loadedDisputes);
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Erro ao carregar disputas.",
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao carregar contestações.",
       );
     } finally {
       setLoading(false);
@@ -103,7 +105,8 @@ export default function DisputesPage() {
 
   async function handleCreateDispute(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -116,12 +119,14 @@ export default function DisputesPage() {
           details: String(form.get("details")),
         }),
       });
-      event.currentTarget.reset();
-      setSuccess("Disputa aberta.");
+      formElement.reset();
+      setSuccess("Contestação aberta.");
       await loadDisputes();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Erro ao abrir disputa.",
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao abrir contestação.",
       );
     }
   }
@@ -135,11 +140,13 @@ export default function DisputesPage() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-      setSuccess("Status da disputa atualizado.");
+      setSuccess("Status da contestação atualizado.");
       await loadDisputes();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Erro ao atualizar disputa.",
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao atualizar contestação.",
       );
     }
   }
@@ -152,17 +159,17 @@ export default function DisputesPage() {
     <DashboardShell
       action={<ModuleHeaderAction onRefresh={loadDisputes} />}
       eyebrow={session.user.role}
-      title="Disputas"
+      title="Contestações"
     >
       {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
-      {loading ? <EmptyState>Carregando disputas...</EmptyState> : null}
+      {loading ? <EmptyState>Carregando contestações...</EmptyState> : null}
 
       {session.user.role === "ADMIN" ? (
         <>
           <section className="metrics">
             <article className="metric">
-              <span>Disputas</span>
+              <span>Contestações</span>
               <strong>{adminMetrics.total}</strong>
             </article>
             <article className="metric">
@@ -216,7 +223,7 @@ export default function DisputesPage() {
 
             <ListPanel
               icon={<BriefcaseBusiness size={18} />}
-              title="Disputas da plataforma"
+              title="Contestações da plataforma"
             >
               {filteredDisputes.map((dispute) => (
                 <div className="list-row" key={dispute.id}>
@@ -278,7 +285,7 @@ export default function DisputesPage() {
         <section className="dashboard-grid">
           <article className="panel">
             <div className="panel-header">
-              <h2>Abrir disputa</h2>
+              <h2>Abrir contestação</h2>
               <ShieldAlert size={18} />
             </div>
             <form className="form compact" onSubmit={handleCreateDispute}>
@@ -310,7 +317,7 @@ export default function DisputesPage() {
                 disabled={!disputableContracts.length}
                 type="submit"
               >
-                Abrir disputa
+                Abrir contestação
               </button>
             </form>
           </article>

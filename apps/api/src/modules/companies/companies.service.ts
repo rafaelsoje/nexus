@@ -21,7 +21,10 @@ export class CompaniesService {
   async findMyPrivateProfile(userId: string) {
     const profile = await this.prisma.companyProfile.findUnique({
       where: { userId },
-      include: { wallet: true },
+      include: {
+        wallet: true,
+        verificationDocuments: { orderBy: { createdAt: "desc" } },
+      },
     });
 
     if (!profile) {
@@ -43,6 +46,7 @@ export class CompaniesService {
             isActive: true,
           },
         },
+        verificationDocuments: { orderBy: { createdAt: "desc" } },
       },
     });
   }

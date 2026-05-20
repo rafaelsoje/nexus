@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @nexus/api --filter @nexus/web dev",
     "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "e2e": "playwright test",
+    "ci:check": "pnpm prisma:generate && pnpm --filter @nexus/api lint && pnpm --filter @nexus/web exec tsc --noEmit && pnpm --filter @nexus/api test && pnpm build && pnpm e2e",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\" && pnpm --filter @nexus/api exec prisma format",
     "prisma:generate": "pnpm --filter @nexus/api prisma:generate",
     "prisma:migrate": "pnpm --filter @nexus/api prisma:migrate",
+    "prisma:deploy": "pnpm --filter @nexus/api prisma:deploy",
     "prisma:seed": "pnpm --filter @nexus/api prisma:seed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "dotenv-cli": "^11.0.0",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3"

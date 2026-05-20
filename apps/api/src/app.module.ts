@@ -3,11 +3,15 @@ import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./modules/auth/auth.module";
 import { AvailabilityModule } from "./modules/availability/availability.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { ApplicationsModule } from "./modules/applications/applications.module";
+import { ChatModule } from "./modules/chat/chat.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
 import { DisputesModule } from "./modules/disputes/disputes.module";
+import { DocumentsModule } from "./modules/documents/documents.module";
 import { EventsModule } from "./modules/events/events.module";
 import { FreelancersModule } from "./modules/freelancers/freelancers.module";
+import { HealthModule } from "./modules/health/health.module";
 import { InvitationsModule } from "./modules/invitations/invitations.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
@@ -37,7 +41,11 @@ import { WalletModule } from "./modules/wallet/wallet.module";
     ReportsModule,
     NotificationsModule,
     DisputesModule,
+    DocumentsModule,
+    HealthModule,
     AdminModule,
+    ApplicationsModule,
+    ChatModule,
   ],
 })
 export class AppModule {}

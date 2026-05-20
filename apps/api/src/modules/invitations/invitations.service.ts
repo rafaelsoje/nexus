@@ -99,6 +99,15 @@ export class InvitationsService {
         },
       });
 
+      await tx.chatThread.create({
+        data: {
+          eventId: event.id,
+          companyId: company.id,
+          freelancerId: freelancer.id,
+          invitationId: invitation.id,
+        },
+      });
+
       await tx.notification.create({
         data: {
           userId: freelancer.userId,
@@ -251,6 +260,11 @@ export class InvitationsService {
           startsAt: invitation.event.startsAt,
           endsAt: invitation.event.endsAt,
         },
+      });
+
+      await tx.chatThread.updateMany({
+        where: { invitationId: invitation.id },
+        data: { contractId: contract.id },
       });
 
       await tx.notification.create({

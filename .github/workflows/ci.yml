@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      PAYMENT_GATEWAY_PROVIDER: simulated
+      PAYMENT_GATEWAY_TRANSACTION_PREFIX: ci
+      PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID: platform
+      EMAIL_PROVIDER: local
+      EMAIL_EXPOSE_DEV_TOKENS: "true"
+      JSON_BODY_LIMIT: 8mb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create environment file
+        run: |
+          cat > .env <<EOF
+          DATABASE_URL="${DATABASE_URL}"
+          REDIS_URL="${REDIS_URL}"
+          JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}"
+          JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET}"
+          JWT_ACCESS_EXPIRES_IN="${JWT_ACCESS_EXPIRES_IN}"
+          JWT_REFRESH_EXPIRES_IN="${JWT_REFRESH_EXPIRES_IN}"
+          NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}"
+          PAYMENT_GATEWAY_PROVIDER="${PAYMENT_GATEWAY_PROVIDER}"
+          PAYMENT_GATEWAY_TRANSACTION_PREFIX="${PAYMENT_GATEWAY_TRANSACTION_PREFIX}"
+          PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID="${PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID}"
+          EMAIL_PROVIDER="${EMAIL_PROVIDER}"
+          EMAIL_EXPOSE_DEV_TOKENS="${EMAIL_EXPOSE_DEV_TOKENS}"
+          JSON_BODY_LIMIT="${JSON_BODY_LIMIT}"
+          EOF
+
+      - name: Apply database migrations
+        run: pnpm prisma:deploy
+
+      - name: Run checks
+        run: pnpm ci:check

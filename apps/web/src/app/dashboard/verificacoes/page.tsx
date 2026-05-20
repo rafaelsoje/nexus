@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ShieldCheck, UserCheck } from "lucide-react";
+import { Building2, FileText, UserCheck } from "lucide-react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -9,7 +9,7 @@ import {
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
 import { EmptyState, StatusMessage } from "../../../components/ui";
-import { apiRequest, formatCurrency } from "../../../lib/api";
+import { apiFileRequest, apiRequest, formatCurrency } from "../../../lib/api";
 import type {
   AdminCompany,
   AdminFreelancer,
@@ -123,6 +123,21 @@ export default function VerificationsPage() {
     }
   }
 
+  async function openDocument(documentId: string) {
+    setError("");
+
+    try {
+      const blob = await apiFileRequest(`/api/documents/${documentId}/file`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao abrir documento.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -192,6 +207,10 @@ export default function VerificationsPage() {
                         Responsável: {company.responsibleName} -{" "}
                         {company.user?.email ?? company.email}
                       </span>
+                      <DocumentSummary
+                        documents={company.verificationDocuments ?? []}
+                        onOpenDocument={openDocument}
+                      />
                     </div>
                     <VerificationActions
                       currentStatus={company.verificationStatus}
@@ -229,6 +248,10 @@ export default function VerificationsPage() {
                           .map(({ skill }) => skill.name)
                           .join(", ") || "Especialidades não informadas"}
                       </span>
+                      <DocumentSummary
+                        documents={freelancer.verificationDocuments ?? []}
+                        onOpenDocument={openDocument}
+                      />
                     </div>
                     <VerificationActions
                       currentStatus={freelancer.verificationStatus}
@@ -252,6 +275,43 @@ export default function VerificationsPage() {
         </>
       )}
     </DashboardShell>
+  );
+}
+
+function DocumentSummary({
+  documents,
+  onOpenDocument,
+}: Readonly<{
+  documents: Array<{
+    id: string;
+    category: string;
+    originalName: string;
+    sizeBytes: number;
+  }>;
+  onOpenDocument: (documentId: string) => void;
+}>) {
+  if (!documents.length) {
+    return (
+      <span className="inline-note">
+        <FileText size={14} /> Sem documentos enviados
+      </span>
+    );
+  }
+
+  return (
+    <div className="document-links">
+      {documents.map((document) => (
+        <button
+          className="inline-link-button"
+          key={document.id}
+          onClick={() => onOpenDocument(document.id)}
+          type="button"
+        >
+          <FileText size={14} />
+          {document.originalName}
+        </button>
+      ))}
+    </div>
   );
 }
 

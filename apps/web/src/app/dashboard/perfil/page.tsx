@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Settings, Star } from "lucide-react";
+import { CalendarDays, FileText, Settings, Star } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import {
   DashboardShell,
@@ -9,12 +9,13 @@ import {
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
-import { apiRequest, formatCurrency } from "../../../lib/api";
+import { apiFileRequest, apiRequest, formatCurrency } from "../../../lib/api";
 import type {
   AvailabilityItem,
   CompanyProfile,
   FreelancerProfile,
   Skill,
+  VerificationDocument,
 } from "../../../lib/dashboard-types";
 
 export default function ProfilePage() {
@@ -154,7 +155,8 @@ export default function ProfilePage() {
 
   async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setError("");
     setSuccess("");
 
@@ -167,7 +169,7 @@ export default function ProfilePage() {
           reason: String(form.get("reason") || "Indisponível"),
         }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setSuccess("Indisponibilidade adicionada.");
       await loadProfile();
     } catch (caught) {
@@ -198,6 +200,69 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleUploadDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const file = form.get("file");
+    setError("");
+    setSuccess("");
+
+    if (!(file instanceof File)) {
+      setError("Selecione um arquivo.");
+      return;
+    }
+
+    try {
+      await apiRequest("/api/documents/verification", {
+        method: "POST",
+        body: JSON.stringify({
+          category: String(form.get("category")),
+          originalName: file.name,
+          mimeType: file.type,
+          data: await readFileAsDataUrl(file),
+        }),
+      });
+      formElement.reset();
+      setSuccess("Documento enviado para verificação.");
+      await loadProfile();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao enviar documento.",
+      );
+    }
+  }
+
+  async function handleDeleteDocument(documentId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/documents/${documentId}`, { method: "DELETE" });
+      setSuccess("Documento removido.");
+      await loadProfile();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao remover documento.",
+      );
+    }
+  }
+
+  async function handleOpenDocument(documentId: string) {
+    setError("");
+
+    try {
+      const blob = await apiFileRequest(`/api/documents/${documentId}/file`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao abrir documento.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -215,7 +280,10 @@ export default function ProfilePage() {
       {session.user.role === "COMPANY" && companyProfile ? (
         <CompanyProfileForm
           profile={companyProfile}
+          onDeleteDocument={handleDeleteDocument}
+          onOpenDocument={handleOpenDocument}
           onSubmit={handleSaveCompany}
+          onUploadDocument={handleUploadDocument}
         />
       ) : null}
 
@@ -225,15 +293,18 @@ export default function ProfilePage() {
           profile={freelancerProfile}
           skills={skills}
           onCreateAvailability={handleCreateAvailability}
+          onDeleteDocument={handleDeleteDocument}
+          onOpenDocument={handleOpenDocument}
           onRemoveAvailability={removeAvailability}
           onSaveProfile={handleSaveFreelancer}
           onSaveSkill={handleSaveSkill}
+          onUploadDocument={handleUploadDocument}
         />
       ) : null}
 
       {session.user.role === "ADMIN" ? (
         <EmptyState>
-          Administradores gerenciam verificações, pagamentos e disputas pelas
+          Administradores gerenciam verificações, pagamentos e contestações pelas
           telas operacionais.
         </EmptyState>
       ) : null}
@@ -243,10 +314,16 @@ export default function ProfilePage() {
 
 function CompanyProfileForm({
   profile,
+  onDeleteDocument,
+  onOpenDocument,
   onSubmit,
+  onUploadDocument,
 }: Readonly<{
   profile: CompanyProfile;
+  onDeleteDocument: (documentId: string) => void;
+  onOpenDocument: (documentId: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
   return (
     <section className="dashboard-grid">
@@ -301,6 +378,12 @@ function CompanyProfileForm({
           </button>
         </form>
       </article>
+      <VerificationDocumentsPanel
+        documents={profile.verificationDocuments ?? []}
+        onDeleteDocument={onDeleteDocument}
+        onOpenDocument={onOpenDocument}
+        onUploadDocument={onUploadDocument}
+      />
     </section>
   );
 }
@@ -310,17 +393,23 @@ function FreelancerProfileSection({
   profile,
   skills,
   onCreateAvailability,
+  onDeleteDocument,
+  onOpenDocument,
   onRemoveAvailability,
   onSaveProfile,
   onSaveSkill,
+  onUploadDocument,
 }: Readonly<{
   availability: AvailabilityItem[];
   profile: FreelancerProfile | null;
   skills: Skill[];
   onCreateAvailability: (event: FormEvent<HTMLFormElement>) => void;
+  onDeleteDocument: (documentId: string) => void;
+  onOpenDocument: (documentId: string) => void;
   onRemoveAvailability: (availabilityId: string) => void;
   onSaveProfile: (event: FormEvent<HTMLFormElement>) => void;
   onSaveSkill: (event: FormEvent<HTMLFormElement>) => void;
+  onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
   return (
     <section className="dashboard-grid">
@@ -422,6 +511,13 @@ function FreelancerProfileSection({
         </div>
       </article>
 
+      <VerificationDocumentsPanel
+        documents={profile?.verificationDocuments ?? []}
+        onDeleteDocument={onDeleteDocument}
+        onOpenDocument={onOpenDocument}
+        onUploadDocument={onUploadDocument}
+      />
+
       <article className="panel report-panel">
         <div className="panel-header">
           <h2>Indisponibilidade</h2>
@@ -465,4 +561,103 @@ function FreelancerProfileSection({
       </article>
     </section>
   );
+}
+
+function VerificationDocumentsPanel({
+  documents,
+  onDeleteDocument,
+  onOpenDocument,
+  onUploadDocument,
+}: Readonly<{
+  documents: VerificationDocument[];
+  onDeleteDocument: (documentId: string) => void;
+  onOpenDocument: (documentId: string) => void;
+  onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
+}>) {
+  return (
+    <article className="panel">
+      <div className="panel-header">
+        <h2>Documentos</h2>
+        <FileText size={18} />
+      </div>
+      <form className="form compact" onSubmit={onUploadDocument}>
+        <Field label="Tipo">
+          <select name="category" required defaultValue="document">
+            <option value="document">Documento cadastral</option>
+            <option value="identity">Identidade</option>
+            <option value="address">Comprovante de endereço</option>
+            <option value="portfolio">Portfólio ou imagem</option>
+          </select>
+        </Field>
+        <Field label="Arquivo">
+          <input
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            name="file"
+            required
+            type="file"
+          />
+        </Field>
+        <button className="secondary-button full" type="submit">
+          Enviar documento
+        </button>
+      </form>
+      <div className="list">
+        {documents.length ? (
+          documents.map((document) => (
+            <div className="list-row" key={document.id}>
+              <div>
+                <strong>{document.originalName}</strong>
+                <span>
+                  {documentLabels[document.category] ?? document.category} -{" "}
+                  {formatFileSize(document.sizeBytes)}
+                </span>
+              </div>
+              <div className="row-actions">
+                <button
+                  className="icon-action"
+                  onClick={() => onOpenDocument(document.id)}
+                  type="button"
+                >
+                  Abrir
+                </button>
+                <button
+                  className="icon-action ghost"
+                  onClick={() => onDeleteDocument(document.id)}
+                  type="button"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyState>Nenhum documento enviado.</EmptyState>
+        )}
+      </div>
+    </article>
+  );
+}
+
+const documentLabels: Record<string, string> = {
+  document: "Documento cadastral",
+  identity: "Identidade",
+  address: "Comprovante de endereço",
+  portfolio: "Portfólio ou imagem",
+};
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
+  }
+
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
 }

@@ -2,7 +2,20 @@
 
 Marketplace/API-first para contratação, agenda, reputação e pagamento de freelancers do mercado de eventos.
 
-A NEXO conecta empresas que produzem eventos a profissionais freelancers, com fluxo de cadastro, busca, convite, contrato, pagamento simulado, carteira, avaliações, notificações, disputas e operação administrativa.
+A NEXO conecta empresas que produzem eventos a profissionais freelancers, com fluxo de cadastro, busca, convite, contrato, pagamento simulado, carteira, avaliações, notificações, contestações e operação administrativa.
+
+## Direção do Produto
+
+O produto segue o documento de referência mais recente `../Esse APP de freelancers.txt`, mantendo o nome NEXO como marca provisória até decisão final.
+
+Prioridade funcional do produto:
+
+- Reduzir ligações, WhatsApp, planilhas e pagamentos manuais na montagem de equipes para eventos.
+- Permitir busca de freelancers por nome/apelido, especialidade, localização, faixa de diária, disponibilidade, ferramentas e habilidades.
+- Organizar eventos com múltiplas funções e contratação de vários profissionais por evento ou data.
+- Dar ao freelancer perfil forte, agenda profissional, controle de ganhos, reputação e recebimento mais seguro.
+- Centralizar pagamento pela plataforma, com carteira, meios de pagamento reais, repasse e comprovantes.
+- Criar regras claras para aceite, confirmação, no-show, contestação, avaliação e liberação de pagamento.
 
 ## Estado do Projeto
 
@@ -11,31 +24,47 @@ MVP em validação local.
 Já implementado:
 
 - Site público responsivo de apresentação da plataforma.
+- Alternância global entre tema claro e escuro com preferência salva no navegador.
 - Cadastro e login para empresas, freelancers e admin.
 - Recuperação de senha com token temporário para ambiente local.
 - Dashboard logado separado por perfil.
 - Gestão de eventos.
-- Busca de profissionais disponíveis por cidade, especialidade e agenda.
+- Busca avançada de profissionais disponíveis por nome/apelido, cidade, especialidade, faixa de diária, ferramentas, transporte e agenda.
+- Calendário visual do freelancer com eventos futuros, realizados, indisponibilidades e recebimentos.
+- Fluxo inicial de oportunidades abertas e candidaturas, com aprovação pela empresa gerando contrato.
+- Chat interno por convite ou candidatura para negociação entre empresa e freelancer.
 - Convites individuais ou em lote entre empresa e freelancers.
 - Contratos originados a partir de convites aceitos.
 - Ciclo de contrato com pagamento, conclusão, no-show e cancelamento.
 - Pagamento simulado, split da plataforma e carteira do freelancer.
+- Gateway de pagamento abstraído com provider simulado configurável.
 - Avaliações pós-contrato com atualização automática da média de reputação.
-- Central de notificações com avisos automáticos para convites, pagamentos, avaliações e disputas.
-- Abertura e resolução administrativa de disputas.
+- Central de notificações com avisos automáticos para convites, pagamentos, avaliações e contestações.
+- Abertura e resolução administrativa de contestações.
 - Verificação administrativa de empresas e profissionais.
-- Relatórios operacionais básicos por perfil.
+- Upload local autenticado de documentos e imagens para verificação cadastral.
+- Relatórios operacionais por perfil com KPIs, gráficos de status e série temporal financeira real.
+- Base inicial de testes automatizados para regras de contrato, pagamento e avaliação.
+- Testes e2e de fluxos principais com Playwright.
+- Healthcheck público da API em `/api/health`.
+- Pipeline inicial de CI com lint, testes, build e e2e.
 - Seed com contas e cenário demo.
 
-Ainda pendente para produção:
+Próximas entregas orientadas pelo novo documento:
 
-- Gateway real de pagamento.
-- Envio de e-mail para recuperação de senha.
-- Upload e validação de documentos/imagens.
-- Testes automatizados dos fluxos principais.
+- Negociação de valor por convite/contrato, preservando a diária base do perfil.
+- Carteira da empresa com carga de saldo e complemento de pagamento.
+- Gateway real com cartão, boleto/Pix quando definido, comprovantes e webhooks.
+- Regras automáticas de pós-evento: prazo de 1 dia útil para no-show, contestação e liberação de pagamento.
+- Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
+- Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
+- Upload específico de foto/logo/avatar, além dos documentos de verificação.
+- Provider real de e-mail para recuperação de senha e notificações.
 - Notificações em tempo real, e-mail ou WhatsApp.
-- Deploy, CI e monitoramento.
-- Políticas completas de saque, chargeback e auditoria.
+- Storage externo para documentos/imagens, como S3 ou R2, com retenção e auditoria.
+- Auditoria real de ações administrativas e financeiras.
+- Deploy, monitoramento e política completa de produção.
+- PWA/mobile responsivo avançado.
 
 ## Stack
 
@@ -85,7 +114,40 @@ JWT_REFRESH_SECRET="change-me-refresh"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 NEXT_PUBLIC_API_URL="http://localhost:3001"
+PAYMENT_GATEWAY_PROVIDER="simulated"
+PAYMENT_GATEWAY_TRANSACTION_PREFIX="sim"
+PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID="platform"
+EMAIL_PROVIDER="local"
+EMAIL_EXPOSE_DEV_TOKENS="true"
+JSON_BODY_LIMIT="8mb"
 ```
+
+## Pagamentos
+
+O fluxo de pagamento já passa por uma camada genérica de gateway. Em ambiente local, use:
+
+```env
+PAYMENT_GATEWAY_PROVIDER="simulated"
+```
+
+Quando a administração de pagamentos estiver definida, o próximo ajuste fica concentrado no módulo de pagamentos: adicionar o provider real, mapear `gatewayTransactionId`, recebedores do split e eventos de confirmação/estorno do gateway.
+
+## E-mail
+
+O fluxo de recuperação de senha já passa por uma camada de e-mail configurável. Em ambiente local, use:
+
+```env
+EMAIL_PROVIDER="local"
+EMAIL_EXPOSE_DEV_TOKENS="true"
+```
+
+Nesse modo, a API registra o token no log e também o retorna para facilitar testes manuais. Para produção, o próximo ajuste fica concentrado no serviço de e-mail: adicionar um provider SMTP ou transacional e desativar `EMAIL_EXPOSE_DEV_TOKENS`.
+
+## Documentos
+
+Empresas e freelancers podem enviar documentos na tela de perfil. O ambiente local aceita PDF, JPG, PNG e WebP até 5 MB por arquivo e salva em `apps/api/uploads/verification-documents`.
+
+A tela administrativa de verificações lista os documentos enviados e abre os arquivos por endpoint autenticado. Para produção, o próximo ajuste fica concentrado no módulo de documentos: trocar o armazenamento local por S3/R2, adicionar antivírus/validação documental e definir retenção/auditoria dos arquivos.
 
 ## Rodando Localmente
 
@@ -124,10 +186,14 @@ URLs:
 ```bash
 pnpm dev
 pnpm build
+pnpm test
+pnpm e2e
+pnpm ci:check
 pnpm lint
 pnpm format
 pnpm prisma:generate
 pnpm prisma:migrate
+pnpm prisma:deploy
 pnpm prisma:seed
 ```
 
@@ -136,8 +202,17 @@ Checks usados durante o desenvolvimento:
 ```bash
 pnpm --filter @nexus/web exec tsc --noEmit
 pnpm --filter @nexus/api lint
+pnpm --filter @nexus/api test
+pnpm e2e
+pnpm ci:check
 git diff --check
 ```
+
+## CI
+
+O workflow `.github/workflows/ci.yml` sobe PostgreSQL e Redis, cria um `.env` temporário, aplica migrations com `pnpm prisma:deploy` e executa `pnpm ci:check`.
+
+O comando `pnpm ci:check` roda Prisma generate, typecheck da API, typecheck da Web, testes unitários da API, build do monorepo e testes e2e.
 
 ## Contas Demo
 
@@ -165,7 +240,7 @@ Contas extras de freelancers:
 - `streaming@nexo.local` / `Nexo@12345`
 - `montagem@nexo.local` / `Nexo@12345`
 
-O seed cria uma base de testes com 4 empresas, 10 freelancers, 5 eventos, múltiplas especialidades, convites pendentes/aceitos/recusados, contratos em diferentes status, pagamentos simulados, carteira com repasse, avaliações, notificações, disponibilidade bloqueada e disputa em análise.
+O seed cria uma base de testes com 4 empresas, 10 freelancers, 5 eventos, múltiplas especialidades, convites pendentes/aceitos/recusados, contratos em diferentes status, pagamentos simulados, carteira com repasse, avaliações, notificações, disponibilidade bloqueada e contestação em análise.
 
 ## Rotas Web
 
@@ -183,12 +258,15 @@ Dashboard:
 
 - `/dashboard`: visão geral por perfil.
 - `/dashboard/eventos`: criação/listagem de eventos para empresas e visão operacional para admin.
+- `/dashboard/agenda`: calendário visual do freelancer com eventos, bloqueios de agenda e recebimentos.
+- `/dashboard/oportunidades`: eventos abertos para freelancers e candidaturas recebidas para empresas.
+- `/dashboard/chat`: conversas de negociação criadas por convite ou candidatura.
 - `/dashboard/profissionais`: busca de profissionais e envio de convites.
 - `/dashboard/convites`: convites enviados e recebidos.
 - `/dashboard/notificacoes`: central de notificações.
 - `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse e carteira.
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
-- `/dashboard/disputas`: abertura, histórico, filtros e resolução admin de disputas.
+- `/dashboard/disputas`: abertura, histórico, filtros e resolução admin de contestações.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.
 - `/dashboard/usuarios`: listagem admin com filtros e ativação/desativação de acessos.
 - `/dashboard/perfil`: dados de perfil, especialidades e disponibilidade.
@@ -201,21 +279,40 @@ Fluxo empresa:
 2. Completa o perfil da empresa.
 3. Cria um evento.
 4. Busca profissionais compatíveis.
-5. Envia convite.
-6. Acompanha contrato.
-7. Simula pagamento.
-8. Conclui, cancela ou marca no-show.
-9. Avalia o profissional após contrato concluído ou pago.
+5. Envia convite ou analisa candidaturas recebidas.
+6. Aprova uma candidatura ou convite aceito para gerar contrato.
+7. Acompanha contrato.
+8. Simula pagamento.
+9. Conclui, cancela ou marca no-show.
+10. Avalia o profissional após contrato concluído ou pago.
+
+Evolução prevista do fluxo empresa:
+
+- Buscar profissionais por nome/apelido, faixa de diária, ferramentas, habilidades e transporte.
+- Contratar múltiplos profissionais de especialidades diferentes no mesmo evento com mais controle operacional.
+- Carregar carteira da empresa ou complementar saldo no pagamento.
+- Usar cartão/boleto/Pix quando gateway real for conectado.
+- Receber alerta pós-evento para avaliar e marcar no-show dentro do prazo operacional.
+- Visualizar comprovantes, custos por evento e relatórios financeiros mais completos.
 
 Fluxo freelancer:
 
 1. Cadastra ou acessa a conta.
 2. Completa perfil, especialidades, diária e agenda.
-3. Recebe convites.
-4. Aceita ou recusa convites.
-5. Acompanha contratos e carteira.
-6. Conclui ou cancela contratos elegíveis.
-7. Avalia a empresa após contrato concluído ou pago.
+3. Busca oportunidades abertas compatíveis.
+4. Envia candidatura com mensagem e proposta de valor.
+5. Recebe convites.
+6. Aceita ou recusa convites.
+7. Acompanha contratos e carteira.
+8. Acompanha agenda em calendário visual.
+9. Conclui ou cancela contratos elegíveis.
+10. Avalia a empresa após contrato concluído ou pago.
+
+Evolução prevista do fluxo freelancer:
+
+- Negociar valor em chat interno quando a empresa permitir.
+- Informar dados bancários completos ligados ao provedor de pagamento.
+- Acompanhar ganhos, recebimentos pendentes, repasses e comprovantes.
 
 Fluxo admin:
 
@@ -224,7 +321,7 @@ Fluxo admin:
 3. Ativa ou desativa usuários.
 4. Visualiza pagamentos.
 5. Libera repasses simulados.
-6. Analisa e resolve disputas.
+6. Analisa e resolve contestações.
 
 ## API
 
@@ -240,13 +337,17 @@ Módulos principais:
 - `availability`: bloqueios de agenda do freelancer.
 - `events`: eventos, requisitos e busca de profissionais disponíveis.
 - `invitations`: convites e respostas.
+- `applications`: oportunidades abertas, candidaturas, aprovação/recusa e geração de contrato.
 - `contracts`: contratos por perfil.
+- `calendar`: experiência web inicial entregue com contratos, disponibilidade e carteira; módulo dedicado previsto para evolução.
+- `chat`: conversas internas vinculadas a convites, candidaturas e contratos.
 - `payments`: pagamento simulado, split e liberação.
 - `wallet`: carteira e transações.
 - `reviews`: avaliações e cálculo de reputação.
 - `notifications`: notificações e leitura.
-- `disputes`: abertura e acompanhamento de disputas.
-- `admin`: listagens operacionais, verificações e disputas.
+- `disputes`: abertura e acompanhamento técnico de contestações.
+- `admin`: listagens operacionais, verificações e contestações.
+- `audit`: previsto para trilha de auditoria real.
 - `reports`: resumo operacional por perfil.
 
 ## Modelo de Dados
@@ -266,7 +367,8 @@ Entidades centrais:
 - `Payment`
 - `PaymentSplit`
 - `Wallet`
-- `WalletTransaction`
+- `Transaction`
+- `Payout`
 - `Review`
 - `Dispute`
 - `Notification`
@@ -276,4 +378,4 @@ Entidades centrais:
 
 Os arquivos de referência de marca/produto ficam fora deste repositório. A imagem de apoio usada pelo site público está em `apps/web/public/nexo-brand-board.jpeg`.
 
-O nome técnico do repositório ainda é `nexus`, mas a marca apresentada na interface é NEXO.
+O nome técnico do repositório ainda é `nexus`, mas a marca apresentada na interface é NEXO. Os materiais de referência usam nomes diferentes (`nexus`, `NEXO`, `NEXOX` e `Tratuz`); a decisão final de marca fica pendente e não deve bloquear a evolução funcional do MVP.

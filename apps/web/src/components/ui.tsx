@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 export function Field({
   label,
@@ -26,5 +29,26 @@ export function StatusMessage({
   type: "error" | "success";
   children: ReactNode;
 }>) {
-  return <p className={`status-message ${type}`}>{children}</p>;
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    setIsVisible(true);
+    const timeout = window.setTimeout(() => setIsVisible(false), 4500);
+
+    return () => window.clearTimeout(timeout);
+  }, [children, type]);
+
+  if (!isVisible) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-live={type === "error" ? "assertive" : "polite"}
+      className={`status-message ${type}`}
+      role={type === "error" ? "alert" : "status"}
+    >
+      {children}
+    </div>
+  );
 }

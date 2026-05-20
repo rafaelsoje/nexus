@@ -46,6 +46,7 @@ export class AdminService {
       include: {
         user: { select: { id: true, name: true, email: true, isActive: true } },
         wallet: true,
+        verificationDocuments: { orderBy: { createdAt: "desc" } },
       },
     });
   }
@@ -65,6 +66,7 @@ export class AdminService {
         },
         wallet: true,
         skills: { include: { skill: true } },
+        verificationDocuments: { orderBy: { createdAt: "desc" } },
       },
     });
   }

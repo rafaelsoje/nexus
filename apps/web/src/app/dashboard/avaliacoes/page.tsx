@@ -66,7 +66,8 @@ export default function ReviewsPage() {
 
   async function handleCreateReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const rating = Number(form.get("overallRating"));
     const role = session?.user.role;
     setError("");
@@ -98,7 +99,7 @@ export default function ReviewsPage() {
         method: "POST",
         body: JSON.stringify({ ...basePayload, ...rolePayload }),
       });
-      event.currentTarget.reset();
+      formElement.reset();
       setSuccess("Avaliação enviada.");
       await loadReviews();
     } catch (caught) {

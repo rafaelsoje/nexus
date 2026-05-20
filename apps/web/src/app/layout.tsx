@@ -17,9 +17,24 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const themeScript = `
+    (() => {
+      try {
+        const storedTheme = window.localStorage.getItem("nexo-theme");
+        const systemTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = storedTheme || systemTheme;
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
+    })();
+  `;
+
   return (
-    <html lang="pt-BR">
-      <body className={poppins.variable}>{children}</body>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <body className={poppins.variable}>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {children}
+      </body>
     </html>
   );
 }

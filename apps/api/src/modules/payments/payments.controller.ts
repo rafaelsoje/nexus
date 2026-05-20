@@ -26,7 +26,7 @@ export class PaymentsController {
     @CurrentUser() user: CurrentUserPayload,
     @Param("contractId") contractId: string,
   ) {
-    return this.paymentsService.simulatePayment(user.sub, contractId);
+    return this.paymentsService.processPayment(user.sub, contractId);
   }
 
   @Roles(UserRole.ADMIN)
