@@ -320,6 +320,21 @@ export default function ProfessionalsPage() {
                       type="checkbox"
                     />
                   ) : null}
+                  <div className="profile-avatar small" aria-hidden="true">
+                    {freelancer.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt=""
+                        src={freelancer.avatarUrl}
+                      />
+                    ) : (
+                      <span>
+                        {getInitials(
+                          freelancer.displayName ?? freelancer.user?.name,
+                        )}
+                      </span>
+                    )}
+                  </div>
                   <div>
                     <strong>
                       {freelancer.displayName ??
@@ -337,8 +352,33 @@ export default function ProfessionalsPage() {
                     </span>
                     <span>
                       {(freelancer.skills ?? [])
-                        .map(({ skill }) => skill.name)
+                        .map(
+                          ({ dailyRateCents, knowledgeLevel, skill }) =>
+                            `${skill.name}${knowledgeLevel ? ` (${knowledgeLevel})` : ""}${
+                              dailyRateCents
+                                ? ` - ${formatCurrency(dailyRateCents)}`
+                                : ""
+                            }`,
+                        )
                         .join(", ") || "Especialidades não informadas"}
+                    </span>
+                    {freelancer.professionalSummary ? (
+                      <span>{freelancer.professionalSummary}</span>
+                    ) : null}
+                    <span>
+                      {[
+                        freelancer.experienceYears
+                          ? `${freelancer.experienceYears} ano(s) de experiência`
+                          : "",
+                        freelancer.eventTypes
+                          ? `Eventos: ${freelancer.eventTypes}`
+                          : "",
+                        freelancer.travelAvailability
+                          ? `Viagem: ${freelancer.travelAvailability}`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" - ") || "Currículo técnico não informado"}
                     </span>
                     <span>
                       {freelancer.tools
@@ -348,6 +388,60 @@ export default function ProfessionalsPage() {
                         ? ` - Transporte: ${freelancer.transportation}`
                         : ""}
                     </span>
+                    {freelancer.skills?.some(
+                      (item) =>
+                        item.abilities?.length ||
+                        item.equipment ||
+                        item.courses ||
+                        item.experienceSummary,
+                    ) ? (
+                      <span>
+                        Detalhes técnicos:{" "}
+                        {freelancer.skills
+                          .filter(
+                            (item) =>
+                              item.abilities?.length ||
+                              item.equipment ||
+                              item.courses ||
+                              item.experienceSummary,
+                          )
+                          .map((item) =>
+                            [
+                              item.skill.name,
+                              item.abilities?.length
+                                ? item.abilities.join(", ")
+                                : "",
+                              item.equipment ? `equip.: ${item.equipment}` : "",
+                              item.courses ? `cursos: ${item.courses}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" - "),
+                          )
+                          .join(" | ")}
+                      </span>
+                    ) : null}
+                    {freelancer.certifications ? (
+                      <span>Certificações: {freelancer.certifications}</span>
+                    ) : null}
+                    {freelancer.portfolioUrl ? (
+                      <span>Portfólio: {freelancer.portfolioUrl}</span>
+                    ) : null}
+                    {freelancer.contracts?.length ? (
+                      <span>
+                        Histórico na plataforma:{" "}
+                        {freelancer.contracts
+                          .map((contract) =>
+                            [
+                              contract.event?.name ?? "Evento",
+                              contract.event?.company?.companyName,
+                              contract.event?.city,
+                            ]
+                              .filter(Boolean)
+                              .join(" - "),
+                          )
+                          .join(" | ")}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 {session.user.role === "COMPANY" ? (
@@ -373,4 +467,15 @@ export default function ProfessionalsPage() {
 function centsFromCurrencyInput(value: FormDataEntryValue | null) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? String(parsed * 100) : "";
+}
+
+function getInitials(name?: string) {
+  return (
+    name
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "N"
+  );
 }

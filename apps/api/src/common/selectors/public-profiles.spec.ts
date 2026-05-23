@@ -4,9 +4,16 @@ import { publicCompanySelect, publicFreelancerSelect } from "./public-profiles";
 
 const privateKeys = [
   "bankData",
+  "addressComplement",
+  "addressNumber",
+  "addressStreet",
+  "cpf",
   "document",
   "email",
+  "identityDocument",
+  "neighborhood",
   "phone",
+  "postalCode",
   "responsibleName",
   "refreshTokenHash",
   "resetTokenHash",

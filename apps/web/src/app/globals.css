@@ -191,6 +191,10 @@ h1 {
   letter-spacing: 0;
 }
 
+.workspace h1 {
+  font-size: clamp(2rem, 3vw, 3.25rem);
+}
+
 h2 {
   margin-bottom: 0;
   color: var(--white);
@@ -293,6 +297,36 @@ input.compact-checkbox {
   accent-color: var(--primary);
 }
 
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
+.profile-avatar.small {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 0.82rem;
+}
+
+.profile-avatar.large {
+  width: 4.5rem;
+  height: 4.5rem;
+  font-size: 1rem;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .full {
   width: 100%;
 }
@@ -338,6 +372,79 @@ input.compact-checkbox {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem 0.25rem 0.3rem;
+  background: var(--control-background);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-button:hover {
+  border-color: rgba(0, 191, 255, 0.52);
+  color: var(--white);
+}
+
+.account-dropdown {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 70;
+  display: grid;
+  gap: 0.35rem;
+  width: min(16rem, calc(100vw - 2rem));
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: var(--panel-background);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(1rem);
+}
+
+.account-dropdown a,
+.account-dropdown button,
+.account-dropdown .theme-toggle {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 2.45rem;
+  border: 0;
+  border-radius: 0.4rem;
+  padding: 0 0.65rem;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.account-dropdown a,
+.account-dropdown button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-dropdown a:hover,
+.account-dropdown button:hover,
+.account-dropdown .theme-toggle:hover {
+  background: var(--surface-soft);
+  color: var(--white);
 }
 
 .site-nav {
@@ -1245,6 +1352,70 @@ input.compact-checkbox {
   gap: 0.65rem;
 }
 
+.avatar-editor {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 1rem;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.75rem;
+  background: var(--surface-soft);
+}
+
+.avatar-preview {
+  display: grid;
+  place-items: center;
+  width: 12rem;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--input-background);
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center;
+}
+
+.avatar-controls {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 4.5rem;
+}
+
+.file-button {
+  min-width: 11rem;
+}
+
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.form-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .field {
   display: grid;
   gap: 0.4rem;
@@ -1257,7 +1428,8 @@ input.compact-checkbox {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 2.7rem;
   border: 1px solid var(--line);
@@ -1266,12 +1438,60 @@ select {
   background: var(--input-background);
   color: var(--text);
   font: inherit;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+textarea {
+  min-height: 6rem;
+  padding-block: 0.7rem;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 191, 255, 0.12);
   outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.72;
+}
+
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+input[type="file"] {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem;
+}
+
+input[type="file"]::file-selector-button {
+  min-height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  margin-right: 0.75rem;
+  padding: 0 0.75rem;
+  background: var(--control-background);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .auth-links {
@@ -1787,6 +2007,11 @@ select:focus {
   width: min(100%, 42rem);
 }
 
+.avatar-modal {
+  max-width: 48rem;
+  width: min(100%, 48rem);
+}
+
 .agenda-modal-header {
   align-items: flex-start;
   display: flex;
@@ -1825,6 +2050,13 @@ select:focus {
 
 .agenda-modal-close:hover {
   border-color: var(--primary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .agenda-detail-grid {
@@ -2075,6 +2307,7 @@ select:focus {
   }
 
   .button-row,
+  .avatar-editor,
   .form-grid,
   .inline-negotiation,
   .list-row {
@@ -2086,6 +2319,10 @@ select:focus {
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+
+  .avatar-preview {
+    justify-self: center;
   }
 
   .report-grid {

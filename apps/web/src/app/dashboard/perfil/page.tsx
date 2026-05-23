@@ -1,27 +1,22 @@
 "use client";
 
-import { CalendarDays, FileText, Settings, Star } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FileText, Settings, Upload, X } from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
   useRequiredSession,
 } from "../../../components/dashboard-shell";
-import { ListPanel } from "../../../components/dashboard-widgets";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
-import { apiFileRequest, apiRequest, formatCurrency } from "../../../lib/api";
+import { apiFileRequest, apiRequest } from "../../../lib/api";
 import type {
-  AvailabilityItem,
   CompanyProfile,
   FreelancerProfile,
-  Skill,
   VerificationDocument,
 } from "../../../lib/dashboard-types";
 
 export default function ProfilePage() {
   const session = useRequiredSession();
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(
     null,
   );
@@ -51,14 +46,9 @@ export default function ProfilePage() {
       }
 
       if (session?.user.role === "FREELANCER") {
-        const [loadedSkills, profile, availabilityData] = await Promise.all([
-          apiRequest<Skill[]>("/api/skills"),
-          apiRequest<FreelancerProfile>("/api/freelancers/profile"),
-          apiRequest<AvailabilityItem[]>("/api/availability"),
-        ]);
-        setSkills(loadedSkills);
-        setFreelancerProfile(profile);
-        setAvailability(availabilityData);
+        setFreelancerProfile(
+          await apiRequest<FreelancerProfile>("/api/freelancers/profile"),
+        );
       }
     } catch (caught) {
       setError(
@@ -100,19 +90,38 @@ export default function ProfilePage() {
   async function handleSaveFreelancer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const cpf = onlyDigits(String(form.get("cpf")));
+    const postalCode = onlyDigits(String(form.get("postalCode")));
     setError("");
     setSuccess("");
+
+    if (cpf && cpf.length !== 11) {
+      setError("CPF inválido. Informe 11 números.");
+      return;
+    }
+
+    if (postalCode && postalCode.length !== 8) {
+      setError("CEP inválido. Informe 8 números.");
+      return;
+    }
 
     try {
       await apiRequest("/api/freelancers/profile", {
         method: "PATCH",
         body: JSON.stringify({
           displayName: String(form.get("displayName")),
+          avatarUrl: String(form.get("avatarUrl")),
+          fullName: String(form.get("fullName")),
+          cpf,
+          identityDocument: String(form.get("identityDocument")),
+          postalCode,
+          addressStreet: String(form.get("addressStreet")),
+          addressNumber: String(form.get("addressNumber")),
+          addressComplement: String(form.get("addressComplement")),
+          neighborhood: String(form.get("neighborhood")),
           city: String(form.get("city")),
           state: String(form.get("state")),
-          tools: String(form.get("tools")),
           transportation: String(form.get("transportation")),
-          dailyRateCents: Number(form.get("dailyRate")) * 100,
         }),
       });
       setSuccess("Perfil profissional atualizado.");
@@ -120,82 +129,6 @@ export default function ProfilePage() {
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao salvar perfil.",
-      );
-    }
-  }
-
-  async function handleSaveSkill(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest("/api/freelancers/skills", {
-        method: "POST",
-        body: JSON.stringify({
-          skills: [
-            {
-              skillId: String(form.get("skillId")),
-              dailyRateCents: Number(form.get("dailyRate")) * 100,
-            },
-          ],
-        }),
-      });
-      setSuccess("Especialidade atualizada.");
-      await loadProfile();
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao salvar especialidade.",
-      );
-    }
-  }
-
-  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest("/api/availability", {
-        method: "POST",
-        body: JSON.stringify({
-          startsAt: String(form.get("startsAt")),
-          endsAt: String(form.get("endsAt")),
-          reason: String(form.get("reason") || "Indisponível"),
-        }),
-      });
-      formElement.reset();
-      setSuccess("Indisponibilidade adicionada.");
-      await loadProfile();
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao adicionar indisponibilidade.",
-      );
-    }
-  }
-
-  async function removeAvailability(availabilityId: string) {
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest(`/api/availability/${availabilityId}`, {
-        method: "DELETE",
-      });
-      setSuccess("Indisponibilidade removida.");
-      await loadProfile();
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao remover indisponibilidade.",
       );
     }
   }
@@ -289,23 +222,18 @@ export default function ProfilePage() {
 
       {session.user.role === "FREELANCER" ? (
         <FreelancerProfileSection
-          availability={availability}
           profile={freelancerProfile}
-          skills={skills}
-          onCreateAvailability={handleCreateAvailability}
           onDeleteDocument={handleDeleteDocument}
           onOpenDocument={handleOpenDocument}
-          onRemoveAvailability={removeAvailability}
           onSaveProfile={handleSaveFreelancer}
-          onSaveSkill={handleSaveSkill}
           onUploadDocument={handleUploadDocument}
         />
       ) : null}
 
       {session.user.role === "ADMIN" ? (
         <EmptyState>
-          Administradores gerenciam verificações, pagamentos e contestações pelas
-          telas operacionais.
+          Administradores gerenciam verificações, pagamentos e contestações
+          pelas telas operacionais.
         </EmptyState>
       ) : null}
     </DashboardShell>
@@ -389,40 +317,214 @@ function CompanyProfileForm({
 }
 
 function FreelancerProfileSection({
-  availability,
   profile,
-  skills,
-  onCreateAvailability,
   onDeleteDocument,
   onOpenDocument,
-  onRemoveAvailability,
   onSaveProfile,
-  onSaveSkill,
   onUploadDocument,
 }: Readonly<{
-  availability: AvailabilityItem[];
   profile: FreelancerProfile | null;
-  skills: Skill[];
-  onCreateAvailability: (event: FormEvent<HTMLFormElement>) => void;
   onDeleteDocument: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
-  onRemoveAvailability: (availabilityId: string) => void;
   onSaveProfile: (event: FormEvent<HTMLFormElement>) => void;
-  onSaveSkill: (event: FormEvent<HTMLFormElement>) => void;
   onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
+  const [avatarSource, setAvatarSource] = useState("");
+  const [avatarValue, setAvatarValue] = useState("");
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const [avatarOffsetX, setAvatarOffsetX] = useState(0);
+  const [avatarOffsetY, setAvatarOffsetY] = useState(0);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [cpfValue, setCpfValue] = useState("");
+  const [cepValue, setCepValue] = useState("");
+  const [cepMessage, setCepMessage] = useState("");
+
+  useEffect(() => {
+    setAvatarValue(profile?.avatarUrl ?? "");
+    setAvatarSource("");
+    setAvatarZoom(1);
+    setAvatarOffsetX(0);
+    setAvatarOffsetY(0);
+    setIsAvatarModalOpen(false);
+    setCpfValue(formatCpf(profile?.cpf ?? ""));
+    setCepValue(formatCep(profile?.postalCode ?? ""));
+  }, [profile?.avatarUrl, profile?.cpf, profile?.postalCode]);
+
+  async function handleAvatarFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    setAvatarSource(dataUrl);
+    setAvatarZoom(1);
+    setAvatarOffsetX(0);
+    setAvatarOffsetY(0);
+    setIsAvatarModalOpen(true);
+    event.target.value = "";
+  }
+
+  async function applyAvatarAdjustment() {
+    if (!avatarSource) {
+      return;
+    }
+
+    const adjustedAvatar = await createAdjustedAvatar(
+      avatarSource,
+      avatarZoom,
+      avatarOffsetX,
+      avatarOffsetY,
+    );
+    setAvatarValue(adjustedAvatar);
+    setAvatarSource(adjustedAvatar);
+    setAvatarZoom(1);
+    setAvatarOffsetX(0);
+    setAvatarOffsetY(0);
+    setIsAvatarModalOpen(false);
+  }
+
+  async function lookupCep(value: string) {
+    const postalCode = onlyDigits(value);
+    setCepMessage("");
+
+    if (!postalCode) {
+      return;
+    }
+
+    if (postalCode.length !== 8) {
+      setCepMessage("CEP inválido. Informe 8 números.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://viacep.com.br/ws/${postalCode}/json/`,
+      );
+      const data = (await response.json()) as {
+        erro?: boolean;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+      };
+
+      if (!response.ok || data.erro) {
+        setCepMessage("CEP não encontrado.");
+        return;
+      }
+
+      setFieldValue("addressStreet", data.logradouro ?? "");
+      setFieldValue("neighborhood", data.bairro ?? "");
+      setFieldValue("city", data.localidade ?? "");
+      setFieldValue("state", data.uf ?? "");
+      setCepValue(formatCep(postalCode));
+      setCepMessage("Endereço preenchido pelo CEP.");
+    } catch {
+      setCepMessage("Não foi possível consultar o CEP agora.");
+    }
+  }
+
   return (
     <section className="dashboard-grid">
       <article className="panel">
         <div className="panel-header">
-          <h2>Dados profissionais</h2>
+          <h2>Dados pessoais</h2>
           <Settings size={18} />
         </div>
         <form className="form compact" onSubmit={onSaveProfile}>
+          <Field label="Nome completo">
+            <input name="fullName" defaultValue={profile?.fullName ?? ""} />
+          </Field>
           <Field label="Nome profissional">
             <input
               name="displayName"
               defaultValue={profile?.displayName ?? ""}
+            />
+          </Field>
+          <div className="form-grid">
+            <Field label="CPF">
+              <input
+                name="cpf"
+                inputMode="numeric"
+                maxLength={14}
+                onChange={(event) =>
+                  setCpfValue(formatCpf(event.target.value))
+                }
+                placeholder="000.000.000-00"
+                value={cpfValue}
+              />
+            </Field>
+            <Field label="Documento de identidade">
+              <input
+                name="identityDocument"
+                defaultValue={profile?.identityDocument ?? ""}
+                placeholder="RG, CNH ou outro documento"
+              />
+            </Field>
+          </div>
+          <input name="avatarUrl" readOnly type="hidden" value={avatarValue} />
+          <Field label="Foto de perfil / avatar">
+            <div className="avatar-upload-row">
+              <div className="profile-avatar large" aria-hidden="true">
+                {avatarValue ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" src={avatarValue} />
+                ) : (
+                  <span>{getInitials(profile?.displayName)}</span>
+                )}
+              </div>
+              <label className="secondary-button file-button">
+                <Upload size={16} />
+                Escolher foto
+                <input
+                  accept="image/*"
+                  className="file-input-hidden"
+                  onChange={handleAvatarFile}
+                  type="file"
+                />
+              </label>
+            </div>
+          </Field>
+          <Field label="CEP">
+            <input
+              inputMode="numeric"
+              maxLength={9}
+              name="postalCode"
+              onBlur={() => void lookupCep(cepValue)}
+              onChange={(event) => setCepValue(formatCep(event.target.value))}
+              placeholder="00000-000"
+              value={cepValue}
+            />
+          </Field>
+          {cepMessage ? (
+            <small className="form-note">{cepMessage}</small>
+          ) : null}
+          <Field label="Endereço">
+            <input
+              name="addressStreet"
+              defaultValue={profile?.addressStreet ?? ""}
+            />
+          </Field>
+          <div className="form-grid">
+            <Field label="Número">
+              <input
+                name="addressNumber"
+                defaultValue={profile?.addressNumber ?? ""}
+              />
+            </Field>
+            <Field label="Complemento">
+              <input
+                name="addressComplement"
+                defaultValue={profile?.addressComplement ?? ""}
+              />
+            </Field>
+          </div>
+          <Field label="Bairro">
+            <input
+              name="neighborhood"
+              defaultValue={profile?.neighborhood ?? ""}
             />
           </Field>
           <div className="form-grid">
@@ -437,78 +539,112 @@ function FreelancerProfileSection({
               />
             </Field>
           </div>
-          <Field label="Ferramentas/equipamentos">
-            <input name="tools" defaultValue={profile?.tools ?? ""} />
-          </Field>
-          <Field label="Transporte">
+          <Field label="Transporte para eventos">
             <input
               name="transportation"
               defaultValue={profile?.transportation ?? ""}
-            />
-          </Field>
-          <Field label="Diária base">
-            <input
-              name="dailyRate"
-              type="number"
-              min={0}
-              defaultValue={(profile?.dailyRateCents ?? 0) / 100}
+              placeholder="Ex.: carro próprio, moto, app, transporte público"
             />
           </Field>
           <button className="primary-button full" type="submit">
             Salvar perfil
           </button>
         </form>
-      </article>
-
-      <article className="panel">
-        <div className="panel-header">
-          <h2>Especialidade e diária</h2>
-          <Star size={18} />
-        </div>
-        <form className="form compact" onSubmit={onSaveSkill}>
-          <Field label="Especialidade principal">
-            <select
-              name="skillId"
-              defaultValue={profile?.skills[0]?.skill.id ?? ""}
-              required
+        {isAvatarModalOpen ? (
+          <div className="agenda-modal-backdrop" role="presentation">
+            <div
+              aria-modal="true"
+              className="agenda-modal avatar-modal"
+              role="dialog"
             >
-              <option value="" disabled>
-                Selecione uma especialidade
-              </option>
-              {skills.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Diária para essa função">
-            <input
-              name="dailyRate"
-              type="number"
-              min={0}
-              defaultValue={
-                (profile?.skills[0]?.dailyRateCents ??
-                  profile?.dailyRateCents ??
-                  0) / 100
-              }
-              required
-            />
-          </Field>
-          <button className="primary-button full" type="submit">
-            Salvar especialidade
-          </button>
-        </form>
-        <div className="list">
-          {profile?.skills.map((item) => (
-            <div className="list-row" key={item.skill.id}>
-              <div>
-                <strong>{item.skill.name}</strong>
-                <span>{formatCurrency(item.dailyRateCents)}</span>
+              <div className="agenda-modal-header">
+                <div>
+                  <span>Foto de perfil</span>
+                  <h2>Ajustar avatar</h2>
+                </div>
+                <button
+                  aria-label="Fechar ajuste de foto"
+                  className="agenda-modal-close"
+                  onClick={() => setIsAvatarModalOpen(false)}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="avatar-editor">
+                <div className="avatar-preview">
+                  {avatarSource ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt="Prévia do avatar"
+                      src={avatarSource}
+                      style={{
+                        transform: `translate(${avatarOffsetX}px, ${avatarOffsetY}px) scale(${avatarZoom})`,
+                      }}
+                    />
+                  ) : (
+                    <span>Sem foto</span>
+                  )}
+                </div>
+                <div className="avatar-controls">
+                  <Field label="Zoom">
+                    <input
+                      max={3}
+                      min={1}
+                      onChange={(event) =>
+                        setAvatarZoom(Number(event.target.value))
+                      }
+                      step={0.05}
+                      type="range"
+                      value={avatarZoom}
+                    />
+                  </Field>
+                  <div className="form-grid">
+                    <Field label="Horizontal">
+                      <input
+                        max={100}
+                        min={-100}
+                        onChange={(event) =>
+                          setAvatarOffsetX(Number(event.target.value))
+                        }
+                        type="range"
+                        value={avatarOffsetX}
+                      />
+                    </Field>
+                    <Field label="Vertical">
+                      <input
+                        max={100}
+                        min={-100}
+                        onChange={(event) =>
+                          setAvatarOffsetY(Number(event.target.value))
+                        }
+                        type="range"
+                        value={avatarOffsetY}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => setIsAvatarModalOpen(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={!avatarSource}
+                  onClick={applyAvatarAdjustment}
+                  type="button"
+                >
+                  Aplicar foto
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : null}
       </article>
 
       <VerificationDocumentsPanel
@@ -517,48 +653,6 @@ function FreelancerProfileSection({
         onOpenDocument={onOpenDocument}
         onUploadDocument={onUploadDocument}
       />
-
-      <article className="panel report-panel">
-        <div className="panel-header">
-          <h2>Indisponibilidade</h2>
-          <CalendarDays size={18} />
-        </div>
-        <form className="form compact" onSubmit={onCreateAvailability}>
-          <div className="form-grid">
-            <Field label="Início">
-              <input name="startsAt" type="datetime-local" required />
-            </Field>
-            <Field label="Fim">
-              <input name="endsAt" type="datetime-local" required />
-            </Field>
-          </div>
-          <Field label="Motivo">
-            <input name="reason" placeholder="Outro evento, viagem..." />
-          </Field>
-          <button className="secondary-button full" type="submit">
-            Bloquear agenda
-          </button>
-        </form>
-        <div className="list">
-          {availability.map((item) => (
-            <div className="list-row" key={item.id}>
-              <div>
-                <strong>{item.reason ?? "Indisponível"}</strong>
-                <span>
-                  {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
-                  {new Date(item.endsAt).toLocaleString("pt-BR")}
-                </span>
-              </div>
-              <button
-                className="icon-action ghost"
-                onClick={() => onRemoveAvailability(item.id)}
-              >
-                Remover
-              </button>
-            </div>
-          ))}
-        </div>
-      </article>
     </section>
   );
 }
@@ -660,4 +754,82 @@ function readFileAsDataUrl(file: File) {
     reader.addEventListener("error", () => reject(reader.error));
     reader.readAsDataURL(file);
   });
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatCpf(value: string) {
+  const digits = onlyDigits(value).slice(0, 11);
+
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+function formatCep(value: string) {
+  const digits = onlyDigits(value).slice(0, 8);
+
+  return digits.replace(/^(\d{5})(\d)/, "$1-$2");
+}
+
+function getInitials(name?: string) {
+  return (
+    name
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "N"
+  );
+}
+
+function setFieldValue(name: string, value: string) {
+  const field = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
+
+  if (field) {
+    field.value = value;
+  }
+}
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", () => reject(new Error("Imagem inválida.")));
+    image.src = src;
+  });
+}
+
+async function createAdjustedAvatar(
+  src: string,
+  zoom: number,
+  offsetX: number,
+  offsetY: number,
+) {
+  const image = await loadImage(src);
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  canvas.width = size;
+  canvas.height = size;
+
+  if (!context) {
+    return src;
+  }
+
+  const scale = Math.max(size / image.width, size / image.height) * zoom;
+  const width = image.width * scale;
+  const height = image.height * scale;
+  const x = (size - width) / 2 + offsetX;
+  const y = (size - height) / 2 + offsetY;
+
+  context.fillStyle = "#f8fafc";
+  context.fillRect(0, 0, size, size);
+  context.drawImage(image, x, y, width, height);
+
+  return canvas.toDataURL("image/jpeg", 0.9);
 }

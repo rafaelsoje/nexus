@@ -16,6 +16,27 @@ class FreelancerSkillInput {
   @IsInt()
   @Min(0)
   dailyRateCents?: number;
+
+  @IsOptional()
+  @IsString()
+  knowledgeLevel?: string;
+
+  @IsOptional()
+  @IsString()
+  experienceSummary?: string;
+
+  @IsOptional()
+  @IsString()
+  equipment?: string;
+
+  @IsOptional()
+  @IsString()
+  courses?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  abilities?: string[];
 }
 
 export class SetFreelancerSkillsDto {

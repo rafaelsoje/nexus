@@ -31,6 +31,8 @@ Já implementado:
 - Gestão de eventos.
 - Busca avançada de profissionais disponíveis por nome/apelido, cidade, especialidade, faixa de diária, ferramentas, transporte e agenda.
 - Calendário visual do freelancer com eventos futuros, realizados, indisponibilidades e recebimentos.
+- Currículo profissional do freelancer com resumo, experiência, cursos, portfólio, disponibilidade de viagem e detalhes técnicos por especialidade.
+- Histórico público resumido de eventos realizados pela plataforma para análise da empresa.
 - Fluxo inicial de oportunidades abertas e candidaturas, com aprovação pela empresa gerando contrato.
 - Chat interno por convite ou candidatura para negociação entre empresa e freelancer.
 - Negociação estruturada de valor em convites, com oferta, contraproposta, aceite e contrato usando o valor acordado.
@@ -46,6 +48,8 @@ Já implementado:
 - Abertura e resolução administrativa de contestações.
 - Verificação administrativa de empresas e profissionais.
 - Upload local autenticado de documentos e imagens para verificação cadastral.
+- Perfil privado do freelancer com nome completo, CPF, documento, endereço completo com busca por CEP e upload/ajuste de avatar.
+- Exibição de avatar do freelancer nas telas de análise de profissionais.
 - Relatórios operacionais por perfil com KPIs, gráficos de status e série temporal financeira real.
 - Base inicial de testes automatizados para regras de contrato, pagamento e avaliação.
 - Testes e2e de fluxos principais com Playwright.
@@ -59,8 +63,8 @@ Próximas entregas orientadas pelo novo documento:
 - Automação agendada das regras pós-evento, sem depender de acionamento administrativo manual.
 - Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
 - Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
-- Upload específico de foto/logo/avatar, além dos documentos de verificação.
 - Separação progressiva entre perfil público e privado, evitando expor carteira, documentos, dados bancários e contato fora das telas autorizadas.
+- Upload de logo da empresa e storage externo para fotos, logos e documentos.
 - Provider real de e-mail para recuperação de senha e notificações.
 - Notificações em tempo real, e-mail ou WhatsApp.
 - Storage externo para documentos/imagens, como S3 ou R2, com retenção e auditoria.
@@ -280,9 +284,11 @@ Contas extras de freelancers:
 - `streaming@nexo.local` / `Nexo@12345`
 - `montagem@nexo.local` / `Nexo@12345`
 
-O seed cria uma base de testes com 4 empresas, 10 freelancers, 5 eventos, múltiplas especialidades, convites pendentes/aceitos/recusados, contratos em diferentes status, pagamentos simulados, carteira com repasse, avaliações, notificações, disponibilidade bloqueada e contestação em análise.
+O seed cria uma base de testes com 4 empresas, 10 freelancers, 19 eventos, múltiplas oportunidades abertas de várias empresas, múltiplas especialidades, convites pendentes/aceitos/recusados, candidaturas, chats com mensagens, contratos em diferentes status, pagamentos simulados, carteira com saldo/repasse/saque, avaliações, notificações, disponibilidade bloqueada e contestação em análise. As contas principais `empresa@nexo.local` e `freelancer@nexo.local` concentram mais dados para testar o fluxo completo sem preparar cenário manual.
 
 ## Rotas Web
+
+Para uma explicação prática de como empresas, freelancers e admin usam o app no MVP, consulte [docs/FLUXO_DE_USO.md](docs/FLUXO_DE_USO.md).
 
 Site público:
 
@@ -302,6 +308,7 @@ Dashboard:
 - `/dashboard/oportunidades`: eventos abertos para freelancers e candidaturas recebidas para empresas.
 - `/dashboard/chat`: conversas de negociação criadas por convite ou candidatura.
 - `/dashboard/profissionais`: busca de profissionais e envio de convites.
+- `/dashboard/especialidades`: currículo, especialidades, níveis, habilidades e diárias do freelancer.
 - `/dashboard/convites`: convites enviados e recebidos.
 - `/dashboard/notificacoes`: central de notificações.
 - `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse e carteira.
@@ -373,7 +380,7 @@ Módulos principais:
 - `auth`: cadastro, login e refresh token.
 - `users`: dados de usuário.
 - `companies`: perfil de empresa.
-- `freelancers`: perfil, especialidades e busca pública.
+- `freelancers`: perfil, currículo técnico, especialidades e busca pública.
 - `skills`: especialidades.
 - `availability`: bloqueios de agenda do freelancer.
 - `events`: eventos, requisitos e busca de profissionais disponíveis.

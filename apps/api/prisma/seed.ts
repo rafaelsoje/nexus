@@ -60,7 +60,7 @@ const companySeeds = [
     phone: "(71) 97722-3311",
     city: "Salvador",
     state: "BA",
-    verificationStatus: "PENDING",
+    verificationStatus: "VERIFIED",
   },
   {
     email: "sertao@nexo.local",
@@ -86,6 +86,14 @@ const freelancerSeeds = [
     dailyRateCents: 45000,
     tools: "Notebook, controladora e interface de vídeo",
     transportation: "Carro próprio",
+    professionalSummary:
+      "Operadora de LED e apoio de áudio para eventos corporativos, shows e festivais. Atua com preparação de mídia, operação de painel e integração com equipes de palco.",
+    experienceYears: 6,
+    eventTypes: "Festivais, congressos, feiras, shows e ativações de marca",
+    certifications:
+      "Curso de operação de LED indoor/outdoor, workshop de sinal HDMI/SDI e treinamento básico de áudio digital",
+    portfolioUrl: "https://instagram.com/marinaled.demo",
+    travelAvailability: "Disponível para Sergipe, Bahia e Pernambuco",
     verificationStatus: "VERIFIED",
     skills: [
       ["operador-de-led", 45000],
@@ -330,7 +338,20 @@ async function createEventOnce(data: {
   });
 
   if (existing) {
-    return existing;
+    return prisma.event.update({
+      where: { id: existing.id },
+      data: {
+        status: data.status,
+        startsAt: data.startsAt,
+        endsAt: data.endsAt,
+        location: data.location,
+        city: data.city,
+        state: data.state,
+        description: data.description,
+        eventType: data.eventType,
+      },
+      include: { requirements: true },
+    });
   }
 
   return prisma.event.create({
@@ -369,16 +390,64 @@ async function createInvitationOnce(data: {
   expiresAt: Date;
   respondedAt?: Date;
   message: string;
+  proposedAmountCents?: number;
+  counterAmountCents?: number;
+  agreedAmountCents?: number;
 }) {
   const existing = await prisma.invitation.findFirst({
     where: { eventId: data.eventId, freelancerId: data.freelancerId },
   });
 
   if (existing) {
+    await prisma.invitation.update({
+      where: { id: existing.id },
+      data: {
+        status: data.status,
+        respondedAt: data.respondedAt,
+        message: data.message,
+        proposedAmountCents: data.proposedAmountCents,
+        counterAmountCents: data.counterAmountCents,
+        agreedAmountCents: data.agreedAmountCents,
+      },
+    });
     return existing;
   }
 
   return prisma.invitation.create({ data });
+}
+
+async function createApplicationOnce(data: {
+  eventId: string;
+  companyId: string;
+  freelancerId: string;
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+  message: string;
+  proposedAmountCents?: number;
+  respondedAt?: Date;
+}) {
+  const existing = await prisma.application.findUnique({
+    where: {
+      eventId_freelancerId: {
+        eventId: data.eventId,
+        freelancerId: data.freelancerId,
+      },
+    },
+  });
+
+  if (existing) {
+    await prisma.application.update({
+      where: { id: existing.id },
+      data: {
+        status: data.status,
+        message: data.message,
+        proposedAmountCents: data.proposedAmountCents,
+        respondedAt: data.respondedAt,
+      },
+    });
+    return existing;
+  }
+
+  return prisma.application.create({ data });
 }
 
 async function createContractOnce(data: {
@@ -386,6 +455,7 @@ async function createContractOnce(data: {
   companyId: string;
   freelancerId: string;
   invitationId?: string;
+  applicationId?: string;
   status:
     | "PENDING_PAYMENT"
     | "CONFIRMED"
@@ -411,7 +481,14 @@ async function createContractOnce(data: {
       });
 
   if (existing) {
-    return existing;
+    return prisma.contract.update({
+      where: { id: existing.id },
+      data: {
+        status: data.status,
+        amountCents: data.amountCents,
+        platformFeeCents: Math.round(data.amountCents * 0.08),
+      },
+    });
   }
 
   return prisma.contract.create({
@@ -420,6 +497,7 @@ async function createContractOnce(data: {
       companyId: data.companyId,
       freelancerId: data.freelancerId,
       invitationId: data.invitationId,
+      applicationId: data.applicationId,
       status: data.status,
       amountCents: data.amountCents,
       platformFeeCents: Math.round(data.amountCents * 0.08),
@@ -434,12 +512,24 @@ async function createPaymentOnce(data: {
   status: "PAID" | "RELEASED_TO_FREELANCER";
   freelancerAmountCents: number;
   platformFeeCents: number;
+  walletAmountCents?: number;
+  gatewayAmountCents?: number;
 }) {
   const existing = await prisma.payment.findUnique({
     where: { contractId: data.contractId },
   });
 
   if (existing) {
+    await prisma.payment.update({
+      where: { id: existing.id },
+      data: {
+        status: data.status,
+        walletAmountCents: data.walletAmountCents ?? 0,
+        gatewayAmountCents:
+          data.gatewayAmountCents ??
+          data.freelancerAmountCents + data.platformFeeCents,
+      },
+    });
     return existing;
   }
 
@@ -459,8 +549,8 @@ async function createPaymentOnce(data: {
       freelancerNetAmountCents: data.freelancerAmountCents,
       amountToChargeCompanyCents: grossAmountCents,
       amountToReleaseFreelancerCents: data.freelancerAmountCents,
-      walletAmountCents: 0,
-      gatewayAmountCents: grossAmountCents,
+      walletAmountCents: data.walletAmountCents ?? 0,
+      gatewayAmountCents: data.gatewayAmountCents ?? grossAmountCents,
       gatewayTransactionId: `seed_${data.contractId}`,
       paidAt: new Date(),
       splits: {
@@ -603,6 +693,96 @@ async function createAvailabilityOnce(data: {
   await prisma.availability.create({ data });
 }
 
+async function createChatThreadOnce(data: {
+  eventId: string;
+  companyId: string;
+  freelancerId: string;
+  invitationId?: string;
+  applicationId?: string;
+  contractId?: string;
+}) {
+  const existing = await prisma.chatThread.findFirst({
+    where: {
+      OR: [
+        data.invitationId ? { invitationId: data.invitationId } : undefined,
+        data.applicationId ? { applicationId: data.applicationId } : undefined,
+        data.contractId ? { contractId: data.contractId } : undefined,
+      ].filter(Boolean) as Array<{
+        invitationId?: string;
+        applicationId?: string;
+        contractId?: string;
+      }>,
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.chatThread.create({ data });
+}
+
+async function createChatMessageOnce(data: {
+  threadId: string;
+  senderId: string;
+  body: string;
+}) {
+  if (
+    await prisma.chatMessage.findFirst({
+      where: {
+        threadId: data.threadId,
+        senderId: data.senderId,
+        body: data.body,
+      },
+    })
+  ) {
+    return;
+  }
+
+  await prisma.chatMessage.create({ data });
+}
+
+async function createWalletTransactionOnce(data: {
+  walletId: string;
+  type: "CREDIT" | "DEBIT" | "FEE" | "PAYOUT" | "REFUND";
+  amountCents: number;
+  description: string;
+}) {
+  if (
+    await prisma.transaction.findFirst({
+      where: { walletId: data.walletId, description: data.description },
+    })
+  ) {
+    return;
+  }
+
+  await prisma.wallet.update({
+    where: { id: data.walletId },
+    data: {
+      balanceCents: {
+        increment:
+          data.type === "DEBIT" || data.type === "FEE" || data.type === "PAYOUT"
+            ? -data.amountCents
+            : data.amountCents,
+      },
+    },
+  });
+  await prisma.transaction.create({ data });
+}
+
+function createAvatarDataUrl(name: string) {
+  const initials =
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "N";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#00bfff"/><stop offset="1" stop-color="#733ff0"/></linearGradient></defs><rect width="512" height="512" rx="256" fill="url(#g)"/><text x="256" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="150" font-weight="700" fill="#fff">${initials}</text></svg>`;
+
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash(password, 12);
 
@@ -694,25 +874,78 @@ async function main() {
       role: "FREELANCER",
       phone: freelancerSeed.phone,
     });
+    const avatarUrl = createAvatarDataUrl(freelancerSeed.displayName);
     const profile = await prisma.freelancerProfile.upsert({
       where: { userId: user.id },
       update: {
+        fullName: freelancerSeed.name,
         displayName: freelancerSeed.displayName,
+        avatarUrl,
         city: freelancerSeed.city,
         state: freelancerSeed.state,
         tools: freelancerSeed.tools,
         transportation: freelancerSeed.transportation,
         dailyRateCents: freelancerSeed.dailyRateCents,
+        professionalSummary:
+          "professionalSummary" in freelancerSeed
+            ? freelancerSeed.professionalSummary
+            : undefined,
+        experienceYears:
+          "experienceYears" in freelancerSeed
+            ? freelancerSeed.experienceYears
+            : undefined,
+        eventTypes:
+          "eventTypes" in freelancerSeed
+            ? freelancerSeed.eventTypes
+            : undefined,
+        certifications:
+          "certifications" in freelancerSeed
+            ? freelancerSeed.certifications
+            : undefined,
+        portfolioUrl:
+          "portfolioUrl" in freelancerSeed
+            ? freelancerSeed.portfolioUrl
+            : undefined,
+        travelAvailability:
+          "travelAvailability" in freelancerSeed
+            ? freelancerSeed.travelAvailability
+            : undefined,
         verificationStatus: freelancerSeed.verificationStatus,
       },
       create: {
         userId: user.id,
+        fullName: freelancerSeed.name,
         displayName: freelancerSeed.displayName,
+        avatarUrl,
         city: freelancerSeed.city,
         state: freelancerSeed.state,
         tools: freelancerSeed.tools,
         transportation: freelancerSeed.transportation,
         dailyRateCents: freelancerSeed.dailyRateCents,
+        professionalSummary:
+          "professionalSummary" in freelancerSeed
+            ? freelancerSeed.professionalSummary
+            : undefined,
+        experienceYears:
+          "experienceYears" in freelancerSeed
+            ? freelancerSeed.experienceYears
+            : undefined,
+        eventTypes:
+          "eventTypes" in freelancerSeed
+            ? freelancerSeed.eventTypes
+            : undefined,
+        certifications:
+          "certifications" in freelancerSeed
+            ? freelancerSeed.certifications
+            : undefined,
+        portfolioUrl:
+          "portfolioUrl" in freelancerSeed
+            ? freelancerSeed.portfolioUrl
+            : undefined,
+        travelAvailability:
+          "travelAvailability" in freelancerSeed
+            ? freelancerSeed.travelAvailability
+            : undefined,
         verificationStatus: freelancerSeed.verificationStatus,
         wallet: { create: {} },
       },
@@ -741,6 +974,94 @@ async function main() {
     }
 
     freelancers.set(freelancerSeed.displayName, profile);
+  }
+
+  const technicalResumeSeeds = [
+    {
+      freelancer: "Marina LED",
+      skillSlug: "operador-de-led",
+      knowledgeLevel: "Avançado",
+      abilities: [
+        "Opera painel LED indoor e outdoor",
+        "Configura processadora e envio de sinal",
+        "Organiza mídia para VJ e apresentações",
+        "Resolve troca de cabos, sinal e escala",
+      ],
+      equipment: "Novastar, Colorlight, HDMI, SDI, notebooks backup",
+      courses:
+        "Operação de painéis LED indoor/outdoor; workshop de processadoras Novastar",
+      experienceSummary:
+        "Atuou em festivais, congressos e ativações com painel principal, laterais de palco e conteúdo institucional.",
+    },
+    {
+      freelancer: "Marina LED",
+      skillSlug: "tecnico-de-audio",
+      knowledgeLevel: "Intermediário",
+      abilities: [
+        "Monta sistema de som",
+        "Passa cabos e organiza palco",
+        "Apoia operação de mesa digital",
+        "Opera eventos corporativos simples",
+      ],
+      equipment: "Yamaha TF/QL, Behringer X32, Shure sem fio básico",
+      courses: "Introdução a áudio digital e alinhamento básico de sistema",
+      experienceSummary:
+        "Apoia técnicos principais em eventos corporativos e pequenos shows, com foco em montagem e operação básica.",
+    },
+    {
+      freelancer: "Rafa Áudio",
+      skillSlug: "tecnico-de-audio",
+      knowledgeLevel: "Especialista",
+      abilities: [
+        "Opera PA",
+        "Opera monitor",
+        "Opera banda ao vivo",
+        "Coordena RF e microfones sem fio",
+      ],
+      equipment: "Yamaha CL/QL, Midas M32, Behringer X32, Dante, Shure RF",
+      courses: "Mixagem ao vivo avançada; RF para eventos; Dante nível 1",
+      experienceSummary:
+        "Técnico principal em shows, congressos e festivais de médio porte.",
+    },
+    {
+      freelancer: "Paty Luz",
+      skillSlug: "tecnico-de-luz",
+      knowledgeLevel: "Avançado",
+      abilities: [
+        "Opera mesa DMX",
+        "Programa cenas",
+        "Opera moving/head",
+        "Lê mapa de luz",
+      ],
+      equipment: "GrandMA onPC, Avolites, Sunlite, consoles DMX",
+      courses: "Programação de luz para shows; desenho de luz básico",
+      experienceSummary:
+        "Experiência em shows, casamentos e palcos corporativos com programação e operação.",
+    },
+  ] as const;
+
+  for (const resumeSeed of technicalResumeSeeds) {
+    const freelancer = freelancers.get(resumeSeed.freelancer);
+    const skillId = skillMap.get(resumeSeed.skillSlug);
+    if (!freelancer || !skillId) {
+      continue;
+    }
+
+    await prisma.freelancerSkill.update({
+      where: {
+        freelancerId_skillId: {
+          freelancerId: freelancer.id,
+          skillId,
+        },
+      },
+      data: {
+        knowledgeLevel: resumeSeed.knowledgeLevel,
+        abilities: [...resumeSeed.abilities],
+        equipment: resumeSeed.equipment,
+        courses: resumeSeed.courses,
+        experienceSummary: resumeSeed.experienceSummary,
+      },
+    });
   }
 
   const eventSeeds = [
@@ -780,6 +1101,117 @@ async function main() {
       ],
     },
     {
+      company: "Japiassú Eventos",
+      name: "Feira Tech Sergipe",
+      startsAt: "2026-06-27T10:00:00.000-03:00",
+      endsAt: "2026-06-27T22:00:00.000-03:00",
+      location: "Centro de Convenções de Sergipe",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Feira corporativa com auditório principal, LED, áudio, foto e streaming.",
+      eventType: "Feira corporativa",
+      status: "CONFIRMED",
+      requirements: [
+        ["operador-de-led", 2, 48000],
+        ["tecnico-de-audio", 2, 43000],
+        ["fotografo", 1, 65000],
+        ["operador-de-streaming", 1, 56000],
+      ],
+    },
+    {
+      company: "Japiassú Eventos",
+      name: "Convenção Atlântico 2026",
+      startsAt: "2026-05-15T08:00:00.000-03:00",
+      endsAt: "2026-05-15T19:00:00.000-03:00",
+      location: "Hotel Vidam",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Evento empresarial já realizado para testar conclusão, avaliação e repasse.",
+      eventType: "Convenção",
+      status: "FINISHED",
+      requirements: [
+        ["operador-de-led", 1, 46000],
+        ["tecnico-de-audio", 1, 42000],
+        ["recepcionista", 2, 26000],
+      ],
+    },
+    {
+      company: "Japiassú Eventos",
+      name: "Réveillon Preview NEXO",
+      startsAt: "2026-08-30T16:00:00.000-03:00",
+      endsAt: "2026-08-31T01:00:00.000-03:00",
+      location: "Praia Formosa",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Pré-produção de réveillon com vagas abertas para operação técnica e apoio.",
+      eventType: "Show",
+      status: "OPEN",
+      requirements: [
+        ["tecnico-de-audio", 2, 45000],
+        ["operador-de-led", 2, 48000],
+        ["staff-de-apoio", 4, 22000],
+      ],
+    },
+    {
+      company: "Japiassú Eventos",
+      name: "Mostra Empresarial Orla",
+      startsAt: "2026-09-18T09:00:00.000-03:00",
+      endsAt: "2026-09-18T20:00:00.000-03:00",
+      location: "Centro de Convenções de Sergipe",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Oportunidade aberta para operação de LED, áudio e apoio em mostra empresarial.",
+      eventType: "Corporativo",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 2, 48000],
+        ["tecnico-de-audio", 1, 43000],
+        ["staff-de-apoio", 3, 22000],
+      ],
+    },
+    {
+      company: "Japiassú Eventos",
+      name: "Casamento Lagoa Prime",
+      startsAt: "2026-10-03T14:00:00.000-03:00",
+      endsAt: "2026-10-04T01:00:00.000-03:00",
+      location: "Lagoa Eventos",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Oportunidade para fotografia, DJ, recepção e cerimonial em casamento premium.",
+      eventType: "Casamento",
+      status: "OPEN",
+      requirements: [
+        ["fotografo", 1, 68000],
+        ["dj", 1, 72000],
+        ["recepcionista", 2, 28000],
+        ["cerimonialista", 1, 50000],
+      ],
+    },
+    {
+      company: "Japiassú Eventos",
+      name: "Formatura Medicina UNIT",
+      startsAt: "2026-11-21T18:00:00.000-03:00",
+      endsAt: "2026-11-22T03:00:00.000-03:00",
+      location: "Arcus Eventos",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Oportunidade aberta para LED, áudio, luz e equipe de apoio em grande formatura.",
+      eventType: "Formatura",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 2, 50000],
+        ["tecnico-de-audio", 2, 46000],
+        ["tecnico-de-luz", 1, 42000],
+        ["staff-de-apoio", 4, 24000],
+      ],
+    },
+    {
       company: "Aurora Produções",
       name: "Congresso Saúde Nordeste",
       startsAt: "2026-07-02T08:00:00.000-03:00",
@@ -798,6 +1230,98 @@ async function main() {
       ],
     },
     {
+      company: "Aurora Produções",
+      name: "Arena Gamer Nordeste",
+      startsAt: "2026-08-08T12:00:00.000-03:00",
+      endsAt: "2026-08-08T23:00:00.000-03:00",
+      location: "SergipeTec",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Evento gamer com palco, transmissão, LED, áudio e equipe de apoio.",
+      eventType: "Entretenimento",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 2, 50000],
+        ["tecnico-de-audio", 1, 44000],
+        ["operador-de-streaming", 2, 58000],
+      ],
+    },
+    {
+      company: "Aurora Produções",
+      name: "Lançamento Imobiliário Jardins",
+      startsAt: "2026-09-03T15:00:00.000-03:00",
+      endsAt: "2026-09-03T22:00:00.000-03:00",
+      location: "Stand Jardins",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Evento de relacionamento com captação de conteúdo, LED e recepção.",
+      eventType: "Lançamento",
+      status: "INVITING",
+      requirements: [
+        ["operador-de-led", 1, 47000],
+        ["fotografo", 1, 65000],
+        ["recepcionista", 2, 28000],
+      ],
+    },
+    {
+      company: "Aurora Produções",
+      name: "Summit Educação Criativa",
+      startsAt: "2026-09-24T08:00:00.000-03:00",
+      endsAt: "2026-09-24T19:00:00.000-03:00",
+      location: "Teatro Tobias Barreto",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Evento aberto com auditório, transmissão, LED, áudio e cobertura de foto.",
+      eventType: "Summit",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 1, 49000],
+        ["tecnico-de-audio", 1, 44000],
+        ["operador-de-streaming", 1, 59000],
+        ["fotografo", 1, 65000],
+      ],
+    },
+    {
+      company: "Aurora Produções",
+      name: "Festival Food Park",
+      startsAt: "2026-10-17T15:00:00.000-03:00",
+      endsAt: "2026-10-18T00:30:00.000-03:00",
+      location: "Parque da Sementeira",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Oportunidade para equipe de bar, garçons, segurança e social media.",
+      eventType: "Festival gastronômico",
+      status: "OPEN",
+      requirements: [
+        ["bartender", 3, 34000],
+        ["garcom", 6, 25000],
+        ["seguranca", 4, 32000],
+        ["social-media", 1, 38000],
+      ],
+    },
+    {
+      company: "Aurora Produções",
+      name: "Fórum Varejo Nordeste",
+      startsAt: "2026-11-12T08:00:00.000-03:00",
+      endsAt: "2026-11-12T18:30:00.000-03:00",
+      location: "Centro de Convenções AM Malls",
+      city: "Aracaju",
+      state: "SE",
+      description:
+        "Oportunidade para plenária com painel de LED, áudio e transmissão.",
+      eventType: "Fórum",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 1, 49000],
+        ["tecnico-de-audio", 1, 45000],
+        ["operador-de-streaming", 1, 60000],
+      ],
+    },
+    {
       company: "Litoral Live Marketing",
       name: "Lançamento Rooftop Salvador",
       startsAt: "2026-07-10T17:00:00.000-03:00",
@@ -813,6 +1337,62 @@ async function main() {
         ["recepcionista", 4, 26000],
         ["seguranca", 3, 30000],
         ["social-media", 1, 35000],
+      ],
+    },
+    {
+      company: "Litoral Live Marketing",
+      name: "Sunset Tech Salvador",
+      startsAt: "2026-09-12T16:00:00.000-03:00",
+      endsAt: "2026-09-13T00:00:00.000-03:00",
+      location: "Rooftop Comércio",
+      city: "Salvador",
+      state: "BA",
+      description:
+        "Oportunidade aberta para LED, áudio, DJ e captação de conteúdo.",
+      eventType: "Brand experience",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 1, 50000],
+        ["tecnico-de-audio", 1, 45000],
+        ["dj", 1, 70000],
+        ["camera", 1, 45000],
+      ],
+    },
+    {
+      company: "Litoral Live Marketing",
+      name: "Ativação Shopping Barra",
+      startsAt: "2026-11-07T10:00:00.000-03:00",
+      endsAt: "2026-11-07T22:00:00.000-03:00",
+      location: "Shopping Barra",
+      city: "Salvador",
+      state: "BA",
+      description:
+        "Oportunidade para recepção, segurança, staff de apoio e conteúdo social.",
+      eventType: "Ativação",
+      status: "OPEN",
+      requirements: [
+        ["recepcionista", 4, 28000],
+        ["seguranca", 2, 32000],
+        ["staff-de-apoio", 4, 23000],
+        ["social-media", 1, 38000],
+      ],
+    },
+    {
+      company: "Litoral Live Marketing",
+      name: "Experiência Solar Bahia",
+      startsAt: "2026-12-05T15:00:00.000-03:00",
+      endsAt: "2026-12-05T23:30:00.000-03:00",
+      location: "Museu de Arte Moderna da Bahia",
+      city: "Salvador",
+      state: "BA",
+      description:
+        "Oportunidade para operação técnica de LED, áudio e câmera em ação de marca.",
+      eventType: "Brand experience",
+      status: "OPEN",
+      requirements: [
+        ["operador-de-led", 1, 51000],
+        ["tecnico-de-audio", 1, 46000],
+        ["camera", 1, 46000],
       ],
     },
     {
@@ -878,6 +1458,9 @@ async function main() {
       invitationStatus: "ACCEPTED",
       contractStatus: "PENDING_PAYMENT",
       amountCents: 45000,
+      proposedAmountCents: 43000,
+      counterAmountCents: 45000,
+      agreedAmountCents: 45000,
     },
     {
       event: "Festival de Verão NEXO",
@@ -915,6 +1498,63 @@ async function main() {
       review: true,
     },
     {
+      event: "Feira Tech Sergipe",
+      company: "Japiassú Eventos",
+      freelancer: "Marina LED",
+      invitationStatus: "ACCEPTED",
+      contractStatus: "CONFIRMED",
+      amountCents: 48000,
+      paymentStatus: "PAID",
+      walletAmountCents: 18000,
+      gatewayAmountCents: 33840,
+      proposedAmountCents: 46000,
+      counterAmountCents: 48000,
+      agreedAmountCents: 48000,
+    },
+    {
+      event: "Feira Tech Sergipe",
+      company: "Japiassú Eventos",
+      freelancer: "Fábio Stream",
+      invitationStatus: "PENDING",
+      proposedAmountCents: 56000,
+    },
+    {
+      event: "Convenção Atlântico 2026",
+      company: "Japiassú Eventos",
+      freelancer: "Marina LED",
+      invitationStatus: "ACCEPTED",
+      contractStatus: "PAID",
+      amountCents: 46000,
+      paymentStatus: "RELEASED_TO_FREELANCER",
+      review: true,
+      proposedAmountCents: 46000,
+      agreedAmountCents: 46000,
+    },
+    {
+      event: "Convenção Atlântico 2026",
+      company: "Japiassú Eventos",
+      freelancer: "Rafa Áudio",
+      invitationStatus: "ACCEPTED",
+      contractStatus: "COMPLETED",
+      amountCents: 42000,
+      paymentStatus: "PAID",
+      review: true,
+    },
+    {
+      event: "Réveillon Preview NEXO",
+      company: "Japiassú Eventos",
+      freelancer: "Marina LED",
+      invitationStatus: "PENDING",
+      proposedAmountCents: 52000,
+    },
+    {
+      event: "Réveillon Preview NEXO",
+      company: "Japiassú Eventos",
+      freelancer: "Igor Montagem",
+      invitationStatus: "DECLINED",
+      proposedAmountCents: 22000,
+    },
+    {
       event: "Congresso Saúde Nordeste",
       company: "Aurora Produções",
       freelancer: "Fábio Stream",
@@ -923,6 +1563,13 @@ async function main() {
       amountCents: 58000,
       paymentStatus: "PAID",
       dispute: true,
+    },
+    {
+      event: "Lançamento Imobiliário Jardins",
+      company: "Aurora Produções",
+      freelancer: "Marina LED",
+      invitationStatus: "PENDING",
+      proposedAmountCents: 47000,
     },
     {
       event: "Congresso Saúde Nordeste",
@@ -971,7 +1618,39 @@ async function main() {
           ? undefined
           : new Date("2026-05-19T12:00:00.000-03:00"),
       message: `Convite seed para ${scenario.event}.`,
+      proposedAmountCents:
+        "proposedAmountCents" in scenario
+          ? scenario.proposedAmountCents
+          : "amountCents" in scenario
+            ? scenario.amountCents
+            : undefined,
+      counterAmountCents:
+        "counterAmountCents" in scenario
+          ? scenario.counterAmountCents
+          : undefined,
+      agreedAmountCents:
+        "agreedAmountCents" in scenario
+          ? scenario.agreedAmountCents
+          : undefined,
     });
+    const invitationThread = await createChatThreadOnce({
+      eventId: event.id,
+      companyId: company.id,
+      freelancerId: freelancer.id,
+      invitationId: invitation.id,
+    });
+    await createChatMessageOnce({
+      threadId: invitationThread.id,
+      senderId: company.userId,
+      body: `Olá! Temos uma demanda para ${scenario.event}. Pode avaliar disponibilidade e valor?`,
+    });
+    if (scenario.invitationStatus === "PENDING") {
+      await createChatMessageOnce({
+        threadId: invitationThread.id,
+        senderId: freelancer.userId,
+        body: "Recebi o convite. Vou conferir a agenda e respondo por aqui.",
+      });
+    }
 
     if (!("contractStatus" in scenario)) {
       continue;
@@ -995,6 +1674,12 @@ async function main() {
         status: scenario.paymentStatus,
         freelancerAmountCents: scenario.amountCents,
         platformFeeCents,
+        walletAmountCents:
+          "walletAmountCents" in scenario ? scenario.walletAmountCents : 0,
+        gatewayAmountCents:
+          "gatewayAmountCents" in scenario
+            ? scenario.gatewayAmountCents
+            : scenario.amountCents + platformFeeCents,
       });
 
       if (scenario.paymentStatus === "RELEASED_TO_FREELANCER") {
@@ -1022,6 +1707,23 @@ async function main() {
         }
       }
     }
+
+    const contractThread = await createChatThreadOnce({
+      eventId: event.id,
+      companyId: company.id,
+      freelancerId: freelancer.id,
+      contractId: contract.id,
+    });
+    await createChatMessageOnce({
+      threadId: contractThread.id,
+      senderId: company.userId,
+      body: `Contrato criado para ${scenario.event}. Vamos centralizar os combinados por aqui.`,
+    });
+    await createChatMessageOnce({
+      threadId: contractThread.id,
+      senderId: freelancer.userId,
+      body: "Combinado. Já deixei a data reservada na minha agenda.",
+    });
 
     if ("review" in scenario && scenario.review) {
       await createReviewOnce({
@@ -1059,8 +1761,134 @@ async function main() {
     }
   }
 
+  const applicationSeeds = [
+    {
+      event: "Réveillon Preview NEXO",
+      company: "Japiassú Eventos",
+      freelancer: "Rafa Áudio",
+      status: "PENDING",
+      message:
+        "Tenho disponibilidade para operação de áudio e posso levar medidor SPL.",
+      proposedAmountCents: 45000,
+    },
+    {
+      event: "Réveillon Preview NEXO",
+      company: "Japiassú Eventos",
+      freelancer: "Paty Luz",
+      status: "PENDING",
+      message:
+        "Posso assumir desenho básico de luz e operação DMX durante o show.",
+      proposedAmountCents: 52000,
+    },
+    {
+      event: "Feira Tech Sergipe",
+      company: "Japiassú Eventos",
+      freelancer: "JP Foto",
+      status: "DECLINED",
+      message:
+        "Tenho kit completo para cobertura institucional e entrega no dia seguinte.",
+      proposedAmountCents: 68000,
+      respondedAt: new Date("2026-05-20T10:00:00.000-03:00"),
+    },
+    {
+      event: "Arena Gamer Nordeste",
+      company: "Aurora Produções",
+      freelancer: "Marina LED",
+      status: "PENDING",
+      message:
+        "Tenho experiência com painel em evento gamer e levo interface reserva.",
+      proposedAmountCents: 50000,
+    },
+    {
+      event: "Arena Gamer Nordeste",
+      company: "Aurora Produções",
+      freelancer: "DJ LK",
+      status: "PENDING",
+      message: "Posso apoiar streaming e trilhas entre as ativações do palco.",
+      proposedAmountCents: 43000,
+    },
+  ] as const;
+
+  for (const applicationSeed of applicationSeeds) {
+    const event = events.get(applicationSeed.event);
+    const company = companies.get(applicationSeed.company);
+    const freelancer = freelancers.get(applicationSeed.freelancer);
+    if (!event || !company || !freelancer) {
+      continue;
+    }
+
+    const application = await createApplicationOnce({
+      eventId: event.id,
+      companyId: company.id,
+      freelancerId: freelancer.id,
+      status: applicationSeed.status,
+      message: applicationSeed.message,
+      proposedAmountCents: applicationSeed.proposedAmountCents,
+      respondedAt:
+        "respondedAt" in applicationSeed
+          ? applicationSeed.respondedAt
+          : undefined,
+    });
+    const thread = await createChatThreadOnce({
+      eventId: event.id,
+      companyId: company.id,
+      freelancerId: freelancer.id,
+      applicationId: application.id,
+    });
+    await createChatMessageOnce({
+      threadId: thread.id,
+      senderId: freelancer.userId,
+      body: applicationSeed.message,
+    });
+    await createChatMessageOnce({
+      threadId: thread.id,
+      senderId: company.userId,
+      body:
+        applicationSeed.status === "PENDING"
+          ? "Obrigado pela candidatura. Estamos fechando a equipe e retorno por aqui."
+          : "Obrigado pelo envio. Para este evento seguimos com outro perfil, mas manteremos contato.",
+    });
+  }
+
   const marina = freelancers.get("Marina LED");
   const rafa = freelancers.get("Rafa Áudio");
+  const primaryCompany = companies.get("Japiassú Eventos");
+  const primaryCompanyWallet = primaryCompany
+    ? await ensureCompanyWallet(primaryCompany.id)
+    : undefined;
+  if (primaryCompanyWallet) {
+    await createWalletTransactionOnce({
+      walletId: primaryCompanyWallet.id,
+      type: "CREDIT",
+      amountCents: 250000,
+      description: "Seed carga inicial empresa principal",
+    });
+    await createWalletTransactionOnce({
+      walletId: primaryCompanyWallet.id,
+      type: "DEBIT",
+      amountCents: 18000,
+      description: "Seed uso parcial no pagamento Feira Tech Sergipe",
+    });
+  }
+
+  const marinaWallet = marina
+    ? await ensureFreelancerWallet(marina.id)
+    : undefined;
+  if (marinaWallet) {
+    await createWalletTransactionOnce({
+      walletId: marinaWallet.id,
+      type: "CREDIT",
+      amountCents: 46000,
+      description: "Seed repasse Convenção Atlântico 2026",
+    });
+    await createWalletTransactionOnce({
+      walletId: marinaWallet.id,
+      type: "PAYOUT",
+      amountCents: 20000,
+      description: "Seed saque parcial Marina LED",
+    });
+  }
+
   if (marina) {
     await createAvailabilityOnce({
       freelancerId: marina.id,

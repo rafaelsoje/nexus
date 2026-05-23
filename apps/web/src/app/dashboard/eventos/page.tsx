@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays, Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
@@ -27,6 +28,7 @@ const emptyRequirement: RequirementRow = {
 };
 
 export default function EventsPage() {
+  const router = useRouter();
   const session = useRequiredSession();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
@@ -57,12 +59,13 @@ export default function EventsPage() {
     }
 
     if (session.user.role === "FREELANCER") {
+      router.replace("/dashboard/agenda");
       setLoading(false);
       return;
     }
 
     void loadEvents();
-  }, [session]);
+  }, [router, session]);
 
   async function loadEvents() {
     setError("");
@@ -212,10 +215,7 @@ export default function EventsPage() {
   if (session.user.role === "FREELANCER") {
     return (
       <DashboardShell eyebrow={session.user.role} title="Eventos">
-        <EmptyState>
-          Empresas gerenciam eventos por aqui. Para profissionais, use
-          Oportunidades, Convites e Agenda.
-        </EmptyState>
+        <EmptyState>Redirecionando para sua agenda...</EmptyState>
       </DashboardShell>
     );
   }

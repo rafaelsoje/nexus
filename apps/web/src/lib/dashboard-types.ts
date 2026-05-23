@@ -30,16 +30,47 @@ export type EventItem = {
 export type Freelancer = {
   id: string;
   displayName?: string;
+  avatarUrl?: string;
   user?: { name: string };
   city?: string;
   state?: string;
   tools?: string;
   transportation?: string;
   dailyRateCents?: number;
+  professionalSummary?: string;
+  experienceYears?: number;
+  eventTypes?: string;
+  certifications?: string;
+  portfolioUrl?: string;
+  travelAvailability?: string;
   ratingAverage?: string;
   isAvailable?: boolean;
   blockingReason?: string;
-  skills?: Array<{ skill: Skill; dailyRateCents?: number }>;
+  skills?: FreelancerSkillDetail[];
+  contracts?: FreelancerPublicContract[];
+};
+
+export type FreelancerSkillDetail = {
+  skill: Skill;
+  dailyRateCents?: number;
+  knowledgeLevel?: string;
+  experienceSummary?: string;
+  equipment?: string;
+  courses?: string;
+  abilities?: string[];
+};
+
+export type FreelancerPublicContract = {
+  id: string;
+  status: string;
+  startsAt: string;
+  event?: {
+    name: string;
+    eventType?: string;
+    city?: string;
+    state?: string;
+    company?: { companyName: string };
+  };
 };
 
 export type Invitation = {
@@ -182,14 +213,28 @@ export type VerificationDocument = {
 
 export type FreelancerProfile = {
   id: string;
+  fullName?: string;
+  cpf?: string;
+  identityDocument?: string;
   displayName?: string;
   avatarUrl?: string;
+  postalCode?: string;
+  addressStreet?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  neighborhood?: string;
   city?: string;
   state?: string;
   tools?: string;
   transportation?: string;
   dailyRateCents?: number;
-  skills: Array<{ skill: Skill; dailyRateCents?: number }>;
+  professionalSummary?: string;
+  experienceYears?: number;
+  eventTypes?: string;
+  certifications?: string;
+  portfolioUrl?: string;
+  travelAvailability?: string;
+  skills: FreelancerSkillDetail[];
   verificationDocuments?: VerificationDocument[];
 };
 

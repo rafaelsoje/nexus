@@ -9,10 +9,7 @@ import {
 } from "../../../components/dashboard-shell";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
-import type {
-  Application,
-  EventItem,
-} from "../../../lib/dashboard-types";
+import type { Application, EventItem } from "../../../lib/dashboard-types";
 
 const statusLabels: Record<string, string> = {
   PENDING: "Pendente",
@@ -167,20 +164,25 @@ export default function OpportunitiesPage() {
                   >
                     <input name="eventId" type="hidden" value={event.id} />
                     <div>
-                      <strong>{event.name}</strong>
+                      <strong>{event.company?.companyName ?? "Empresa"}</strong>
                       <span>
-                        {event.company?.companyName ?? "Empresa"} -{" "}
-                        {formatDateTime(event.startsAt)} -{" "}
+                        {event.name} - {formatDateTime(event.startsAt)} -{" "}
                         {event.city ?? "Cidade não informada"}
                       </span>
                       <small>
                         {event.openSpots ?? event.desiredProfessionals ?? 1}{" "}
                         vaga(s) - {formatRequirements(event)}
                       </small>
+                      <small>
+                        Cachê indicado pela empresa: {formatEventBudget(event)}
+                      </small>
                     </div>
                     <div className="form-grid">
-                      <Field label="Proposta de diária">
+                      <Field label="Sua proposta de diária">
                         <input
+                          defaultValue={formatAmountInput(
+                            getLowestRequirementAmount(event),
+                          )}
                           min={0}
                           name="proposedAmount"
                           placeholder="Ex.: 350"
@@ -203,11 +205,16 @@ export default function OpportunitiesPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState>Nenhum evento compatível disponível agora.</EmptyState>
+              <EmptyState>
+                Nenhum evento compatível disponível agora.
+              </EmptyState>
             )}
           </article>
 
-          <ApplicationsPanel applications={applications} title="Minhas candidaturas" />
+          <ApplicationsPanel
+            applications={applications}
+            title="Minhas candidaturas"
+          />
         </section>
       ) : null}
 
@@ -312,9 +319,58 @@ function ApplicationsPanel({
 
 function formatRequirements(event: EventItem) {
   const names =
-    event.requirements?.map((item) => item.skill?.name).filter(Boolean) ?? [];
+    event.requirements
+      ?.map((item) => {
+        const name = item.skill?.name;
+
+        if (!name) {
+          return null;
+        }
+
+        return item.dailyRateCents
+          ? `${name} (${formatCurrency(item.dailyRateCents)})`
+          : name;
+      })
+      .filter(Boolean) ?? [];
 
   return names.length ? names.join(", ") : "Sem especialidade definida";
+}
+
+function formatEventBudget(event: EventItem) {
+  const amounts =
+    event.requirements
+      ?.map((item) => item.dailyRateCents)
+      .filter((amount): amount is number => typeof amount === "number") ?? [];
+
+  if (!amounts.length) {
+    return "valor não informado";
+  }
+
+  const lowest = Math.min(...amounts);
+  const highest = Math.max(...amounts);
+
+  if (lowest === highest) {
+    return `${formatCurrency(lowest)} por diária`;
+  }
+
+  return `${formatCurrency(lowest)} a ${formatCurrency(highest)} por diária`;
+}
+
+function getLowestRequirementAmount(event: EventItem) {
+  const amounts =
+    event.requirements
+      ?.map((item) => item.dailyRateCents)
+      .filter((amount): amount is number => typeof amount === "number") ?? [];
+
+  return amounts.length ? Math.min(...amounts) : undefined;
+}
+
+function formatAmountInput(amountCents?: number) {
+  if (!amountCents) {
+    return "";
+  }
+
+  return String(amountCents / 100);
 }
 
 function formatDateTime(date: string) {

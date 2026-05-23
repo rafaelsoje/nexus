@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CreditCard,
+  LayoutDashboard,
   LogOut,
   MessageCircle,
   Settings,
@@ -33,7 +34,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ThemeToggle } from "../../components/theme-toggle";
+import { AccountMenu } from "../../components/dashboard-shell";
 import { EmptyState, Field, StatusMessage } from "../../components/ui";
 import {
   apiRequest,
@@ -114,8 +115,17 @@ type AvailabilityItem = {
 type FreelancerProfile = {
   id: string;
   displayName?: string;
+  avatarUrl?: string;
   dailyRateCents?: number;
-  skills: Array<{ skill: Skill; dailyRateCents?: number }>;
+  skills: Array<{
+    skill: Skill;
+    dailyRateCents?: number;
+    knowledgeLevel?: string;
+    experienceSummary?: string;
+    equipment?: string;
+    courses?: string;
+    abilities?: string[];
+  }>;
 };
 type AdminPayment = Payment & {
   contract?: Contract & {
@@ -147,6 +157,98 @@ type ReportSummary = {
     payments: number;
   }>;
 };
+
+const dashboardNavItems = [
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/eventos",
+    label: "Eventos",
+    icon: BriefcaseBusiness,
+    roles: ["ADMIN", "COMPANY"],
+  },
+  {
+    href: "/dashboard/agenda",
+    label: "Agenda",
+    icon: CalendarDays,
+    roles: ["FREELANCER"],
+  },
+  {
+    href: "/dashboard/especialidades",
+    label: "Especialidades",
+    icon: Star,
+    roles: ["FREELANCER"],
+  },
+  {
+    href: "/dashboard/oportunidades",
+    label: "Oportunidades",
+    icon: UsersRound,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/chat",
+    label: "Chat",
+    icon: MessageCircle,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/profissionais",
+    label: "Profissionais",
+    icon: UsersRound,
+    roles: ["ADMIN", "COMPANY"],
+  },
+  {
+    href: "/dashboard/convites",
+    label: "Convites",
+    icon: Bell,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/notificacoes",
+    label: "Notificações",
+    icon: Bell,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/pagamentos",
+    label: "Pagamentos",
+    icon: CreditCard,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/avaliacoes",
+    label: "Avaliações",
+    icon: Star,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/disputas",
+    label: "Contestações",
+    icon: ShieldAlert,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/verificacoes",
+    label: "Verificações",
+    icon: ShieldCheck,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/dashboard/perfil",
+    label: "Perfil",
+    icon: Settings,
+    roles: ["ADMIN", "COMPANY", "FREELANCER"],
+  },
+] satisfies Array<{
+  href: string;
+  label: string;
+  icon: typeof CalendarDays;
+  roles: UserRole[];
+}>;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -202,13 +304,10 @@ export default function DashboardPage() {
         refresh();
       }
     };
-    const interval = window.setInterval(refresh, 60_000);
-
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refreshOnVisibility);
 
     return () => {
-      window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
@@ -433,35 +532,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleSaveFreelancerSkill(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest("/api/freelancers/skills", {
-        method: "POST",
-        body: JSON.stringify({
-          skills: [
-            {
-              skillId: String(form.get("skillId")),
-              dailyRateCents: Number(form.get("dailyRate")) * 100,
-            },
-          ],
-        }),
-      });
-      setSuccess("Especialidade atualizada.");
-      await loadDashboard("FREELANCER");
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao salvar especialidade.",
-      );
-    }
-  }
-
   async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -572,57 +642,25 @@ export default function DashboardPage() {
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">N</span>
-          <span>nexus</span>
+          <span>NEXO</span>
         </div>
         <nav className="nav">
-          <Link className="active" href="/dashboard">
-            <CalendarDays size={18} />
-            Dashboard
-          </Link>
-          <Link href="/dashboard/eventos">
-            <BriefcaseBusiness size={18} />
-            Eventos
-          </Link>
-          <Link href="/dashboard/agenda">
-            <CalendarDays size={18} />
-            Agenda
-          </Link>
-          <Link href="/dashboard/oportunidades">
-            <UsersRound size={18} />
-            Oportunidades
-          </Link>
-          <Link href="/dashboard/chat">
-            <MessageCircle size={18} />
-            Chat
-          </Link>
-          <Link href="/dashboard/profissionais">
-            <UsersRound size={18} />
-            Profissionais
-          </Link>
-          <Link href="/dashboard/convites">
-            <Bell size={18} />
-            Convites
-          </Link>
-          <Link href="/dashboard/notificacoes">
-            <Bell size={18} />
-            Notificações
-          </Link>
-          <Link href="/dashboard/pagamentos">
-            <CreditCard size={18} />
-            Pagamentos
-          </Link>
-          <Link href="/dashboard/avaliacoes">
-            <Star size={18} />
-            Avaliações
-          </Link>
-          <Link href="/dashboard/disputas">
-            <ShieldAlert size={18} />
-            Contestações
-          </Link>
-          <Link href="/dashboard/perfil">
-            <Settings size={18} />
-            Perfil
-          </Link>
+          {dashboardNavItems
+            .filter((item) => role && item.roles.includes(role))
+            .map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  className={item.href === "/dashboard" ? "active" : ""}
+                  href={item.href}
+                  key={item.href}
+                >
+                  <Icon size={18} />
+                  {item.label}
+                </Link>
+              );
+            })}
           <button className="nav-button" onClick={logout}>
             <LogOut size={18} />
             Sair
@@ -637,7 +675,13 @@ export default function DashboardPage() {
             <h1>Olá, {session.user.name}</h1>
           </div>
           <div className="topbar-actions">
-            <ThemeToggle />
+            <AccountMenu
+              account={{
+                imageUrl: freelancerProfile?.avatarUrl,
+                name: freelancerProfile?.displayName ?? session.user.name,
+              }}
+              onLogout={logout}
+            />
           </div>
         </header>
 
@@ -678,12 +722,10 @@ export default function DashboardPage() {
             freelancerProfile={freelancerProfile}
             invitations={invitations}
             reportSummary={reportSummary}
-            skills={skills}
             onCreateAvailability={handleCreateAvailability}
             onRemoveAvailability={removeAvailability}
             wallet={wallet}
             onRespond={respondInvitation}
-            onSaveSkill={handleSaveFreelancerSkill}
           />
         ) : null}
         {!loading && role === "ADMIN" && adminData ? (
@@ -911,76 +953,51 @@ function FreelancerDashboard({
   freelancerProfile,
   invitations,
   reportSummary,
-  skills,
   wallet,
   onCreateAvailability,
   onRemoveAvailability,
   onRespond,
-  onSaveSkill,
 }: Readonly<{
   availability: AvailabilityItem[];
   contracts: Contract[];
   freelancerProfile: FreelancerProfile | null;
   invitations: Invitation[];
   reportSummary: ReportSummary | null;
-  skills: Skill[];
   wallet: WalletData | null;
   onCreateAvailability: (event: FormEvent<HTMLFormElement>) => void;
   onRemoveAvailability: (availabilityId: string) => void;
   onRespond: (invitationId: string, action: "accept" | "decline") => void;
-  onSaveSkill: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
   return (
     <section className="dashboard-grid">
       <article className="panel">
         <div className="panel-header">
-          <h2>Especialidade e diária</h2>
+          <h2>Especialidades e diárias</h2>
           <Star size={18} />
         </div>
-        <form className="form compact" onSubmit={onSaveSkill}>
-          <Field label="Especialidade principal">
-            <select
-              name="skillId"
-              defaultValue={freelancerProfile?.skills[0]?.skill.id ?? ""}
-              required
-            >
-              <option value="" disabled>
-                Selecione uma especialidade
-              </option>
-              {skills.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Diária para essa função">
-            <input
-              name="dailyRate"
-              type="number"
-              min={0}
-              defaultValue={
-                (freelancerProfile?.skills[0]?.dailyRateCents ??
-                  freelancerProfile?.dailyRateCents ??
-                  0) / 100
-              }
-              required
-            />
-          </Field>
-          <button className="primary-button full" type="submit">
-            Salvar especialidade
-          </button>
-        </form>
         <div className="list">
-          {freelancerProfile?.skills.map((item) => (
-            <div className="list-row" key={item.skill.id}>
-              <div>
-                <strong>{item.skill.name}</strong>
-                <span>{formatCurrency(item.dailyRateCents)}</span>
+          {freelancerProfile?.skills.length ? (
+            freelancerProfile.skills.map((item) => (
+              <div className="list-row" key={item.skill.id}>
+                <div>
+                  <strong>{item.skill.name}</strong>
+                  <span>
+                    {formatCurrency(item.dailyRateCents)}
+                    {item.knowledgeLevel ? ` - ${item.knowledgeLevel}` : ""}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <EmptyState>Nenhuma especialidade adicionada.</EmptyState>
+          )}
         </div>
+        <Link
+          className="secondary-button full"
+          href="/dashboard/especialidades"
+        >
+          Gerenciar especialidades
+        </Link>
       </article>
 
       <article className="panel">

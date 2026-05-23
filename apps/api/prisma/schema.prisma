@@ -185,13 +185,27 @@ model FreelancerProfile {
   id                    String                 @id @default(cuid())
   userId                String                 @unique
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName              String?
+  cpf                   String?
+  identityDocument      String?
   displayName           String?
   avatarUrl             String?
+  postalCode            String?
+  addressStreet         String?
+  addressNumber         String?
+  addressComplement     String?
+  neighborhood          String?
   city                  String?
   state                 String?
   tools                 String?
   transportation        String?
   dailyRateCents        Int?
+  professionalSummary   String?
+  experienceYears       Int?
+  eventTypes            String?
+  certifications        String?
+  portfolioUrl          String?
+  travelAvailability    String?
   bankData              Json?
   verificationStatus    VerificationStatus     @default(PENDING)
   ratingAverage         Decimal                @default(0) @db.Decimal(3, 2)
@@ -242,12 +256,17 @@ model Skill {
 }
 
 model FreelancerSkill {
-  freelancerId   String
-  skillId        String
-  dailyRateCents Int?
-  createdAt      DateTime          @default(now())
-  freelancer     FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
-  skill          Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  freelancerId      String
+  skillId           String
+  dailyRateCents    Int?
+  knowledgeLevel    String?
+  experienceSummary String?
+  equipment         String?
+  courses           String?
+  abilities         Json?
+  createdAt         DateTime          @default(now())
+  freelancer        FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  skill             Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([freelancerId, skillId])
 }
