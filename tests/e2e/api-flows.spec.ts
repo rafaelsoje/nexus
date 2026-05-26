@@ -1,6 +1,8 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
 
-const password = "Nexo@12345";
+const password = process.env.SEED_DEMO_PASSWORD ?? "Nexo@12345";
+const prisma = new PrismaClient();
 const tinyPng =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
@@ -16,9 +18,15 @@ type FreelancerProfile = {
 };
 type CompanyProfile = {
   id: string;
+  email?: string;
+  wallet?: unknown;
   verificationDocuments?: Array<{ id: string; originalName: string }>;
 };
-type EventItem = { id: string; name: string };
+type EventItem = {
+  id: string;
+  name: string;
+  requirements?: Array<{ id: string; skillId: string }>;
+};
 type InvitationItem = {
   id: string;
   event?: EventItem;
@@ -37,11 +45,64 @@ type ChatThreadItem = {
   messages: Array<{ id: string; body: string }>;
 };
 type ContractItem = { id: string; status: string; amountCents?: number };
-type PaymentItem = { id: string; status: string };
+type PaymentItem = {
+  id: string;
+  status: string;
+  gatewayPaymentId?: string;
+  checkoutUrl?: string;
+  splits?: Array<{
+    id: string;
+    freelancerNetAmountCents: number;
+    releaseStatus: string;
+  }>;
+};
 type ReviewItem = { id: string; overallRating: number };
 type DisputeItem = { id: string; status: string };
+type WalletItem = { balanceCents: number };
+type PayoutItem = { id: string; amountCents: number; status: string };
+type GatewayAccountItem = {
+  id: string;
+  documentNumber?: string | null;
+  account?: string | null;
+  pixKey?: string | null;
+  rawGatewayResponse?: unknown;
+  status: string;
+};
+
+const sensitivePublicKeys = [
+  "account",
+  "accountDigit",
+  "addressComplement",
+  "addressNumber",
+  "addressStreet",
+  "agency",
+  "bankCode",
+  "bankData",
+  "cpf",
+  "document",
+  "documentNumber",
+  "email",
+  "gatewayAccounts",
+  "identityDocument",
+  "neighborhood",
+  "phone",
+  "pixKey",
+  "postalCode",
+  "rawGatewayResponse",
+  "responsibleName",
+  "verificationDocuments",
+  "wallet",
+];
+
+test.afterAll(async () => {
+  await prisma.$disconnect();
+});
 
 test.describe.serial("NEXO e2e API flows", () => {
+  test.beforeAll(async () => {
+    await cleanupE2eArtifacts();
+  });
+
   test("company invites freelancer, pays, completes and reviews contract", async ({
     request,
   }) => {
@@ -54,12 +115,19 @@ test.describe.serial("NEXO e2e API flows", () => {
       name: "E2E Contratacao Completa",
     });
 
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e contratacao completa",
+    });
+
     const payment = await post<PaymentItem>(
       request,
       company,
       `/api/payments/contracts/${contractId}/pay`,
     );
     expect(payment.status).toBe("PAID");
+
+    await moveContractToPast(contractId);
 
     const completed = await patch<ContractItem>(
       request,
@@ -266,6 +334,411 @@ test.describe.serial("NEXO e2e API flows", () => {
     );
     expect(resolved.status).toBe("RESOLVED");
   });
+
+  test("public profiles do not expose private company or freelancer data", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+
+    const privateCompany = await get<CompanyProfile>(
+      request,
+      company,
+      "/api/companies/profile",
+    );
+    expect(privateCompany.email).toBeTruthy();
+    expect(privateCompany.wallet).toBeTruthy();
+
+    const publicCompany = await get<Record<string, unknown>>(
+      request,
+      freelancer,
+      `/api/companies/${privateCompany.id}/public`,
+    );
+    expect(publicCompany.id).toBe(privateCompany.id);
+    assertNoSensitivePublicKeys(publicCompany);
+
+    const privateFreelancer = await get<Record<string, unknown>>(
+      request,
+      freelancer,
+      "/api/freelancers/profile",
+    );
+    expect(privateFreelancer.wallet).toBeTruthy();
+    expect(privateFreelancer.gatewayAccounts).toBeTruthy();
+    expect((privateFreelancer.user as { email?: string })?.email).toBeTruthy();
+
+    const publicFreelancers = await get<Array<Record<string, unknown>>>(
+      request,
+      company,
+      "/api/freelancers",
+    );
+    expect(publicFreelancers.length).toBeGreaterThan(0);
+    for (const item of publicFreelancers) {
+      assertNoSensitivePublicKeys(item);
+    }
+
+    const publicFreelancer = await get<Record<string, unknown>>(
+      request,
+      company,
+      `/api/freelancers/${privateFreelancer.id}/public`,
+    );
+    expect(publicFreelancer.id).toBe(privateFreelancer.id);
+    assertNoSensitivePublicKeys(publicFreelancer);
+  });
+
+  test("marketplace split payment releases to wallet and payout is paid", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const admin = await login(request, "admin@nexo.local");
+    const { contractId, eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1560,
+      name: "E2E Marketplace Split",
+    });
+
+    await createFreelancerGatewayAccount(request, freelancer);
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e marketplace",
+    });
+
+    const payment = await post<PaymentItem>(
+      request,
+      company,
+      `/api/payments/events/${eventId}/pay`,
+    );
+    expect(payment.status).toBe("PAID");
+    expect(payment.splits?.length).toBe(1);
+
+    await moveContractToPast(contractId);
+
+    const completed = await patch<ContractItem>(
+      request,
+      company,
+      `/api/contracts/${contractId}/status`,
+      { status: "COMPLETED" },
+    );
+    expect(completed.status).toBe("COMPLETED");
+
+    const walletBefore = await get<WalletItem>(request, freelancer, "/api/wallet");
+    const release = await post<{ released: number; splits: PaymentItem["splits"] }>(
+      request,
+      admin,
+      `/api/payments/${payment.id}/release`,
+    );
+    expect(release.released).toBe(1);
+
+    const releasedAmount =
+      release.splits?.[0]?.freelancerNetAmountCents ??
+      payment.splits?.[0]?.freelancerNetAmountCents ??
+      0;
+    expect(releasedAmount).toBeGreaterThan(0);
+
+    const walletAfter = await get<WalletItem>(request, freelancer, "/api/wallet");
+    expect(walletAfter.balanceCents).toBeGreaterThanOrEqual(
+      walletBefore.balanceCents + releasedAmount,
+    );
+
+    const payout = await post<PayoutItem>(request, freelancer, "/api/wallet/payouts", {
+      amountCents: releasedAmount,
+      description: "Saque e2e marketplace",
+    });
+    expect(payout.status).toBe("SCHEDULED");
+
+    const paidPayout = await patch<PayoutItem>(
+      request,
+      admin,
+      `/api/admin/payouts/${payout.id}/status`,
+      { status: "PAID" },
+    );
+    expect(paidPayout.status).toBe("PAID");
+
+    const audit = await get<Array<{ action: string }>>(
+      request,
+      admin,
+      "/api/admin/audit-logs?action=PAYOUT",
+    );
+    expect(audit.some((item) => item.action === "PAYOUT_STATUS_UPDATED")).toBeTruthy();
+  });
+
+  test("admin applies financial dispute refund for blocked split", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const admin = await login(request, "admin@nexo.local");
+    const { contractId, eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1580,
+      name: "E2E Disputa Financeira",
+    });
+
+    await createFreelancerGatewayAccount(request, freelancer);
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e disputa financeira",
+    });
+
+    const payment = await post<PaymentItem>(
+      request,
+      company,
+      `/api/payments/events/${eventId}/pay`,
+    );
+    expect(payment.status).toBe("PAID");
+
+    const dispute = await post<DisputeItem>(request, company, "/api/disputes", {
+      contractId,
+      reason: "Contestacao financeira e2e",
+      details: "Split deve ser estornado para a empresa.",
+    });
+    expect(dispute.status).toBe("OPEN");
+
+    const resolution = await post<{
+      dispute: DisputeItem;
+      splits: Array<{ releaseStatus: string }>;
+    }>(request, admin, `/api/admin/disputes/${dispute.id}/financial-resolution`, {
+      resolution: "REFUND_COMPANY",
+    });
+
+    expect(resolution.dispute.status).toBe("RESOLVED");
+    expect(resolution.splits.every((split) => split.releaseStatus === "REFUNDED"))
+      .toBeTruthy();
+  });
+
+  test("financial data is isolated by role and owner", async ({ request }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const otherCompany = await login(request, "aurora@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const otherFreelancer = await login(request, "audio@nexo.local");
+    const admin = await login(request, "admin@nexo.local");
+    const { eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1700,
+      name: "E2E Isolamento Financeiro",
+    });
+
+    await createFreelancerGatewayAccount(request, freelancer);
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e isolamento financeiro",
+    });
+
+    const payment = await post<PaymentItem>(
+      request,
+      company,
+      `/api/payments/events/${eventId}/pay`,
+    );
+    expect(payment.status).toBe("PAID");
+
+    const companyPayments = await get<PaymentItem[]>(
+      request,
+      company,
+      "/api/payments",
+    );
+    expect(companyPayments.some((item) => item.id === payment.id)).toBeTruthy();
+
+    const otherCompanyPayments = await get<PaymentItem[]>(
+      request,
+      otherCompany,
+      "/api/payments",
+    );
+    expect(otherCompanyPayments.some((item) => item.id === payment.id)).toBeFalsy();
+
+    const freelancerPayments = await get<PaymentItem[]>(
+      request,
+      freelancer,
+      "/api/payments",
+    );
+    expect(freelancerPayments.some((item) => item.id === payment.id)).toBeTruthy();
+
+    const otherFreelancerPayments = await get<PaymentItem[]>(
+      request,
+      otherFreelancer,
+      "/api/payments",
+    );
+    expect(
+      otherFreelancerPayments.some((item) => item.id === payment.id),
+    ).toBeFalsy();
+
+    const gatewayAccount = await get<GatewayAccountItem>(
+      request,
+      freelancer,
+      "/api/gateway-accounts/freelancer/me",
+    );
+    expect(gatewayAccount.rawGatewayResponse).toBeUndefined();
+    expect(gatewayAccount.documentNumber).toContain("***");
+    expect(gatewayAccount.account).toContain("*");
+    expect(gatewayAccount.pixKey).toContain("***");
+
+    const adminAccounts = await get<GatewayAccountItem[]>(
+      request,
+      admin,
+      "/api/admin/gateway-accounts",
+    );
+    expect(adminAccounts.some((item) => item.id === gatewayAccount.id)).toBeTruthy();
+  });
+
+  test("common users cannot access admin financial endpoints", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+
+    await expectStatus(request, company, "GET", "/api/admin/gateway-accounts", [
+      403,
+    ]);
+    await expectStatus(request, freelancer, "GET", "/api/admin/gateway-accounts", [
+      403,
+    ]);
+    await expectStatus(request, company, "GET", "/api/admin/payments", [403]);
+    await expectStatus(request, freelancer, "GET", "/api/admin/payments", [403]);
+  });
+
+  test("marketplace payment is blocked when freelancer has no active gateway account", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "luz@nexo.local");
+    const { eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1720,
+      name: "E2E Recebedor Obrigatorio",
+    });
+
+    await removeGatewayAccountsForUser("luz@nexo.local");
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e recebedor obrigatorio",
+    });
+
+    const response = await request.post(`/api/payments/events/${eventId}/pay`, {
+      headers: authHeaders(company),
+    });
+    const body = await response.text();
+
+    expect(response.status()).toBe(400);
+    expect(body).toContain("O freelancer ainda não configurou");
+  });
+
+  test("simulated payment webhook is idempotent", async ({ request }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const { eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1740,
+      name: "E2E Webhook Idempotente",
+    });
+
+    await createFreelancerGatewayAccount(request, freelancer);
+    await resetCompanyWallet("empresa@nexo.local");
+
+    const payment = await post<PaymentItem>(
+      request,
+      company,
+      `/api/payments/events/${eventId}/pay`,
+    );
+    expect(payment.status).toBe("WAITING_PAYMENT");
+    expect(payment.gatewayPaymentId).toBeTruthy();
+
+    const payload = {
+      event: "PAYMENT_APPROVED",
+      status: "PAID",
+      transactionId: payment.gatewayPaymentId,
+      gatewayEventId: `${payment.gatewayPaymentId}_E2E_DUPLICATE`,
+    };
+
+    const first = await post<{ processed: boolean; duplicate: boolean }>(
+      request,
+      null,
+      "/api/payment-webhooks/simulated",
+      payload,
+    );
+    expect(first.processed).toBeTruthy();
+    expect(first.duplicate).toBeFalsy();
+
+    const second = await post<{ processed: boolean; duplicate: boolean }>(
+      request,
+      null,
+      "/api/payment-webhooks/simulated",
+      payload,
+    );
+    expect(second.processed).toBeFalsy();
+    expect(second.duplicate).toBeTruthy();
+  });
+
+  test("post-event automation reminds before deadline and releases after it expires", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const admin = await login(request, "admin@nexo.local");
+    const { contractId, eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1760,
+      name: "E2E Automacao Pos Evento",
+    });
+
+    await createFreelancerGatewayAccount(request, freelancer);
+    await post(request, company, "/api/wallet/top-up", {
+      amountCents: 200000,
+      description: "Carga e2e automacao pos evento",
+    });
+
+    const payment = await post<PaymentItem>(
+      request,
+      company,
+      `/api/payments/events/${eventId}/pay`,
+    );
+    expect(payment.status).toBe("PAID");
+
+    await moveContractToRecentlyFinished(contractId);
+
+    const reminderRun = await post<{
+      reminders: { sent: number };
+      releases: { released: number };
+    }>(request, admin, "/api/payments/process-due-releases");
+    expect(reminderRun.reminders.sent).toBeGreaterThanOrEqual(1);
+    expect(reminderRun.releases.released).toBeGreaterThanOrEqual(0);
+    await expectPaymentSplitStatus(contractId, "WAITING_RELEASE");
+
+    const reminderAudit = await get<Array<{ action: string }>>(
+      request,
+      admin,
+      "/api/admin/audit-logs?action=POST_EVENT_REVIEW_REMINDER_SENT",
+    );
+    expect(
+      reminderAudit.some((item) => item.action === "POST_EVENT_REVIEW_REMINDER_SENT"),
+    ).toBeTruthy();
+
+    await moveContractToPast(contractId);
+
+    const walletBefore = await get<WalletItem>(request, freelancer, "/api/wallet");
+    const releaseRun = await post<{
+      reminders: { sent: number };
+      releases: { released: number };
+    }>(request, admin, "/api/payments/process-due-releases");
+    expect(releaseRun.releases.released).toBeGreaterThanOrEqual(1);
+    await expectPaymentSplitStatus(contractId, "PAID");
+
+    const walletAfter = await get<WalletItem>(request, freelancer, "/api/wallet");
+    expect(walletAfter.balanceCents).toBeGreaterThan(walletBefore.balanceCents);
+
+    const releaseAudit = await get<Array<{ action: string }>>(
+      request,
+      admin,
+      "/api/admin/audit-logs?action=AUTO_PAYMENT_SPLIT_RELEASED",
+    );
+    expect(
+      releaseAudit.some((item) => item.action === "AUTO_PAYMENT_SPLIT_RELEASED"),
+    ).toBeTruthy();
+  });
 });
 
 async function createAcceptedContract(
@@ -283,6 +756,14 @@ async function createAcceptedContract(
     input.freelancer,
     "/api/freelancers/profile",
   );
+  const matchingSkillId = freelancerProfile.skills?.[0]?.skill.id ?? skills[0].id;
+
+  if (!freelancerProfile.skills?.length) {
+    await post(api, input.freelancer, "/api/freelancers/skills", {
+      skills: [{ skillId: matchingSkillId, dailyRateCents: 45000 }],
+    });
+  }
+
   const window = futureWindow(input.offsetDays);
   const event = await post<EventItem>(api, input.company, "/api/events", {
     name: `${input.name} ${Date.now()}`,
@@ -295,7 +776,7 @@ async function createAcceptedContract(
     desiredProfessionals: 1,
     requirements: [
       {
-        skillId: skills[0].id,
+        skillId: matchingSkillId,
         quantity: 1,
         dailyRateCents: 45000,
       },
@@ -309,6 +790,7 @@ async function createAcceptedContract(
     {
       eventId: event.id,
       freelancerId: freelancerProfile.id,
+      eventRequirementId: event.requirements?.[0]?.id,
       expiresAt: futureWindow(input.offsetDays - 1).startsAt,
       message: "Convite gerado pelo e2e.",
     },
@@ -354,6 +836,24 @@ async function login(api: APIRequestContext, email: string) {
   return post<Session>(api, null, "/api/auth/login", { email, password });
 }
 
+async function createFreelancerGatewayAccount(
+  api: APIRequestContext,
+  session: Session,
+) {
+  return post(api, session, "/api/gateway-accounts/freelancer/me", {
+    documentType: "CPF",
+    documentNumber: "12345678900",
+    holderName: "Freelancer E2E",
+    bankCode: "001",
+    agency: "1234",
+    account: "12345",
+    accountDigit: "6",
+    accountType: "CHECKING",
+    pixKey: "freelancer@nexo.local",
+    pixKeyType: "EMAIL",
+  });
+}
+
 async function get<T>(api: APIRequestContext, session: Session, path: string) {
   return json<T>(await api.get(path, { headers: authHeaders(session) }));
 }
@@ -392,6 +892,23 @@ async function del(api: APIRequestContext, session: Session, path: string) {
   );
 }
 
+async function expectStatus(
+  api: APIRequestContext,
+  session: Session,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  statuses: number[],
+  data?: unknown,
+) {
+  const response = await api.fetch(path, {
+    method,
+    headers: authHeaders(session),
+    data,
+  });
+
+  expect(statuses, await response.text()).toContain(response.status());
+}
+
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>) {
   const body = await response.text();
   expect(response.ok(), body).toBeTruthy();
@@ -412,4 +929,101 @@ function futureWindow(offsetDays: number) {
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
   };
+}
+
+async function moveContractToPast(contractId: string) {
+  const startsAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  startsAt.setUTCHours(18, 0, 0, 0);
+  const endsAt = new Date(startsAt);
+  endsAt.setUTCHours(23, 0, 0, 0);
+
+  await prisma.contract.update({
+    where: { id: contractId },
+    data: { startsAt, endsAt },
+  });
+}
+
+async function moveContractToRecentlyFinished(contractId: string) {
+  const startsAt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const endsAt = new Date(Date.now() - 60 * 60 * 1000);
+
+  await prisma.contract.update({
+    where: { id: contractId },
+    data: { startsAt, endsAt },
+  });
+}
+
+async function cleanupE2eArtifacts() {
+  await prisma.verificationDocument.deleteMany({
+    where: { originalName: { startsWith: "e2e-" } },
+  });
+  await prisma.event.deleteMany({
+    where: { name: { startsWith: "E2E " } },
+  });
+}
+
+async function removeGatewayAccountsForUser(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { freelancerProfile: true },
+  });
+
+  if (!user?.freelancerProfile) {
+    return;
+  }
+
+  await prisma.gatewayAccount.deleteMany({
+    where: { freelancerId: user.freelancerProfile.id },
+  });
+}
+
+async function resetCompanyWallet(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { companyProfile: { include: { wallet: true } } },
+  });
+
+  const wallet = user?.companyProfile?.wallet;
+  if (!wallet) {
+    return;
+  }
+
+  await prisma.wallet.update({
+    where: { id: wallet.id },
+    data: { balanceCents: 0 },
+  });
+}
+
+async function expectPaymentSplitStatus(contractId: string, releaseStatus: string) {
+  const split = await prisma.paymentSplit.findFirst({
+    where: { contractId },
+    select: { releaseStatus: true },
+  });
+
+  expect(split?.releaseStatus).toBe(releaseStatus);
+}
+
+function assertNoSensitivePublicKeys(value: unknown) {
+  const found = findSensitivePublicKeys(value);
+  expect(found).toEqual([]);
+}
+
+function findSensitivePublicKeys(value: unknown, path = "$"): string[] {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      findSensitivePublicKeys(item, `${path}[${index}]`),
+    );
+  }
+
+  return Object.entries(value as Record<string, unknown>).flatMap(
+    ([key, child]) => {
+      const currentPath = `${path}.${key}`;
+      const current = sensitivePublicKeys.includes(key) ? [currentPath] : [];
+      return [...current, ...findSensitivePublicKeys(child, currentPath)];
+    },
+  );
 }

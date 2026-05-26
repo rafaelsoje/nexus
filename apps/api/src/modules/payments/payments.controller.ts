@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { AdminAccessLevel, UserRole } from "@prisma/client";
+import { AdminAccess } from "../../common/decorators/admin-access.decorator";
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -29,15 +30,67 @@ export class PaymentsController {
     return this.paymentsService.processPayment(user.sub, contractId);
   }
 
+  @Roles(UserRole.COMPANY)
+  @Post("events/:eventId/pay")
+  payEvent(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("eventId") eventId: string,
+  ) {
+    return this.paymentsService.processEventPayment(user.sub, eventId);
+  }
+
   @Roles(UserRole.ADMIN)
+  @AdminAccess(
+    AdminAccessLevel.OWNER,
+    AdminAccessLevel.MANAGER,
+    AdminAccessLevel.FINANCE,
+  )
   @Post("process-due-releases")
   processDueReleases() {
     return this.paymentsService.processPostEventAutomation();
   }
 
   @Roles(UserRole.ADMIN)
+  @AdminAccess(
+    AdminAccessLevel.OWNER,
+    AdminAccessLevel.MANAGER,
+    AdminAccessLevel.FINANCE,
+  )
   @Post(":id/release")
   releaseToFreelancer(@Param("id") id: string) {
     return this.paymentsService.releaseToFreelancer(id);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @AdminAccess(
+    AdminAccessLevel.OWNER,
+    AdminAccessLevel.MANAGER,
+    AdminAccessLevel.FINANCE,
+  )
+  @Post("splits/:id/release")
+  releaseSplit(@Param("id") id: string) {
+    return this.paymentsService.releaseSplit(id);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @AdminAccess(
+    AdminAccessLevel.OWNER,
+    AdminAccessLevel.MANAGER,
+    AdminAccessLevel.FINANCE,
+  )
+  @Post("splits/:id/unblock")
+  unblockSplit(@Param("id") id: string) {
+    return this.paymentsService.unblockSplit(id);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @AdminAccess(
+    AdminAccessLevel.OWNER,
+    AdminAccessLevel.MANAGER,
+    AdminAccessLevel.FINANCE,
+  )
+  @Post("splits/:id/refund")
+  refundSplit(@Param("id") id: string) {
+    return this.paymentsService.refundSplit(id);
   }
 }

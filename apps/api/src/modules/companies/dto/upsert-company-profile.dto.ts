@@ -24,6 +24,26 @@ export class UpsertCompanyProfileDto {
 
   @IsOptional()
   @IsString()
+  postalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  addressStreet?: string;
+
+  @IsOptional()
+  @IsString()
+  addressNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  addressComplement?: string;
+
+  @IsOptional()
+  @IsString()
+  neighborhood?: string;
+
+  @IsOptional()
+  @IsString()
   city?: string;
 
   @IsOptional()

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { ContractStatus, PaymentStatus, UserRole } from "@prisma/client";
+import {
+  ContractStatus,
+  DisputeStatus,
+  PaymentStatus,
+  UserRole,
+} from "@prisma/client";
 import { ContractsService } from "./contracts.service";
 
 function createPrismaMock(overrides: Record<string, unknown> = {}) {
@@ -18,7 +23,16 @@ function createPrismaMock(overrides: Record<string, unknown> = {}) {
             status: data.status,
           }),
         },
+        dispute: {
+          create: async () => ({}),
+        },
+        paymentSplit: {
+          updateMany: async () => ({ count: 0 }),
+        },
         notification: {
+          create: async () => ({}),
+        },
+        auditLog: {
           create: async () => ({}),
         },
       });
@@ -34,6 +48,7 @@ const participantContract = {
   event: { name: "Festival NEXO" },
   company: { userId: "company-user" },
   freelancer: { userId: "freelancer-user" },
+  disputes: [],
 };
 
 const companyAccess = {
@@ -45,7 +60,10 @@ describe("ContractsService", () => {
   it("allows a company to mark a confirmed contract as completed", async () => {
     const prisma = createPrismaMock({
       contract: {
-        findFirst: async () => participantContract,
+        findFirst: async () => ({
+          ...participantContract,
+          endsAt: new Date(Date.now() - 60_000),
+        }),
       },
     });
     const service = new ContractsService(prisma as never, companyAccess as never);
@@ -63,7 +81,10 @@ describe("ContractsService", () => {
   it("blocks freelancers from marking no-show", async () => {
     const prisma = createPrismaMock({
       contract: {
-        findFirst: async () => participantContract,
+        findFirst: async () => ({
+          ...participantContract,
+          endsAt: new Date(Date.now() - 60_000),
+        }),
       },
     });
     const service = new ContractsService(prisma as never, companyAccess as never);
@@ -78,6 +99,118 @@ describe("ContractsService", () => {
         ),
       ForbiddenException,
     );
+  });
+
+  it("creates a dispute automatically when company marks no-show", async () => {
+    let createdDispute:
+      | { contractId: string; reason: string; details?: string }
+      | undefined;
+    let blockedSplitWhere: unknown;
+
+    const prisma = createPrismaMock({
+      contract: {
+        findFirst: async () => ({
+          ...participantContract,
+          endsAt: new Date(Date.now() - 60_000),
+        }),
+      },
+      $transaction: async (callback: (tx: unknown) => unknown) => {
+        return callback({
+          contract: {
+            update: async ({ data }: { data: { status: ContractStatus } }) => ({
+              id: "contract-1",
+              status: data.status,
+            }),
+          },
+          paymentSplit: {
+            updateMany: async ({ where }: { where: unknown }) => {
+              blockedSplitWhere = where;
+              return { count: 1 };
+            },
+          },
+          dispute: {
+            create: async ({ data }: { data: typeof createdDispute }) => {
+              createdDispute = data;
+              return { id: "dispute-1", ...data };
+            },
+          },
+          auditLog: {
+            create: async () => ({}),
+          },
+          notification: {
+            create: async () => ({}),
+          },
+        });
+      },
+    });
+    const service = new ContractsService(prisma as never, companyAccess as never);
+
+    const result = await service.updateStatus(
+      "company-user",
+      UserRole.COMPANY,
+      "contract-1",
+      ContractStatus.NO_SHOW,
+    );
+
+    assert.equal(result.status, ContractStatus.NO_SHOW);
+    assert.deepEqual(createdDispute, {
+      contractId: "contract-1",
+      reason: "NO_SHOW_REPORTED",
+      details:
+        "Disputa aberta automaticamente após a empresa marcar no-show.",
+    });
+    assert.deepEqual(blockedSplitWhere, {
+      contractId: "contract-1",
+      releaseStatus: "WAITING_RELEASE",
+    });
+  });
+
+  it("does not duplicate open no-show disputes", async () => {
+    let disputeCreates = 0;
+    const prisma = createPrismaMock({
+      contract: {
+        findFirst: async () => ({
+          ...participantContract,
+          endsAt: new Date(Date.now() - 60_000),
+          disputes: [{ id: "dispute-1", status: DisputeStatus.OPEN }],
+        }),
+      },
+      $transaction: async (callback: (tx: unknown) => unknown) => {
+        return callback({
+          contract: {
+            update: async ({ data }: { data: { status: ContractStatus } }) => ({
+              id: "contract-1",
+              status: data.status,
+            }),
+          },
+          paymentSplit: {
+            updateMany: async () => ({ count: 1 }),
+          },
+          dispute: {
+            create: async () => {
+              disputeCreates += 1;
+              return {};
+            },
+          },
+          auditLog: {
+            create: async () => ({}),
+          },
+          notification: {
+            create: async () => ({}),
+          },
+        });
+      },
+    });
+    const service = new ContractsService(prisma as never, companyAccess as never);
+
+    await service.updateStatus(
+      "company-user",
+      UserRole.COMPANY,
+      "contract-1",
+      ContractStatus.NO_SHOW,
+    );
+
+    assert.equal(disputeCreates, 0);
   });
 
   it("blocks invalid status transitions", async () => {
@@ -134,7 +267,7 @@ describe("ContractsService", () => {
       contract: {
         findFirst: async () => ({
           id: "contract-1",
-          payment: null,
+          paymentSplits: [],
         }),
       },
     });
@@ -154,7 +287,7 @@ describe("ContractsService", () => {
       contract: {
         findFirst: async () => ({
           id: "contract-1",
-          payment: { status: PaymentStatus.PAID },
+          paymentSplits: [{ payment: { status: PaymentStatus.PAID } }],
         }),
         update: async ({ data }: { data: { status: ContractStatus } }) => ({
           id: "contract-1",

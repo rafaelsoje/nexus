@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, UserRole } from "@prisma/client";
+import { ContractStatus, PaymentSplitStatus, UserRole } from "@prisma/client";
 import {
   publicCompanySelect,
   publicFreelancerSelect,
@@ -60,6 +60,29 @@ export class DisputesService {
       await tx.contract.update({
         where: { id: contract.id },
         data: { status: ContractStatus.DISPUTED },
+      });
+
+      await tx.paymentSplit.updateMany({
+        where: {
+          contractId: contract.id,
+          releaseStatus: PaymentSplitStatus.WAITING_RELEASE,
+        },
+        data: {
+          splitStatus: PaymentSplitStatus.BLOCKED,
+          releaseStatus: PaymentSplitStatus.BLOCKED,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: "PAYMENT_SPLIT_BLOCKED_BY_DISPUTE",
+          entity: "Contract",
+          entityId: contract.id,
+          metadata: {
+            reason: dto.reason,
+          },
+        },
       });
 
       const dispute = await tx.dispute.create({

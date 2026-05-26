@@ -4,7 +4,6 @@ import {
   Bell,
   CalendarCheck,
   CalendarDays,
-  ChartNoAxesCombined,
   CheckCircle2,
   CreditCard,
   Handshake,
@@ -17,7 +16,9 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
+import { SiteFooter } from "../components/site-footer";
 import { SiteHeader } from "../components/site-header";
+import { appName } from "../lib/app-config";
 
 const metrics = [
   { label: "Eventos ativos", value: "32" },
@@ -107,7 +108,7 @@ export default function Home() {
       <section className="home-hero">
         <div className="home-hero-content">
           <p className="eyebrow">Marketplace + pagamentos para eventos</p>
-          <h1>NEXO organiza o encontro entre empresas e freelancers.</h1>
+          <h1>{appName} organiza o encontro entre empresas e freelancers.</h1>
           <p className="hero-text">
             Uma plataforma para substituir improviso por fluxo: busca por
             profissionais disponíveis, convites, agenda, negociação, contrato,
@@ -124,7 +125,7 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <div className="home-hero-panel" aria-label="Indicadores NEXO">
+        <div className="home-hero-panel" aria-label={`Indicadores ${appName}`}>
           {metrics.map((metric) => (
             <div className="home-hero-metric" key={metric.label}>
               <span>{metric.label}</span>
@@ -297,6 +298,7 @@ export default function Home() {
           </Link>
         </div>
       </section>
+      <SiteFooter />
     </main>
   );
 }

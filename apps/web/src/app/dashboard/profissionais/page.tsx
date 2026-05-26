@@ -1,7 +1,7 @@
 "use client";
 
-import { Send, Search, UsersRound } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Send, Search, Star, UsersRound } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -24,24 +24,13 @@ export default function ProfessionalsPage() {
     [],
   );
   const [selectedEventId, setSelectedEventId] = useState("");
+  const [selectedEventRequirementId, setSelectedEventRequirementId] =
+    useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    if (session.user.role === "FREELANCER") {
-      setLoading(false);
-      return;
-    }
-
-    void loadProfessionals();
-  }, [session]);
-
-  async function loadProfessionals() {
+  const loadProfessionals = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -60,6 +49,13 @@ export default function ProfessionalsPage() {
       setSkills(loadedSkills);
       setFreelancers(loadedFreelancers);
       setEvents(loadedEvents);
+      setSelectedEventId((current) => current || loadedEvents[0]?.id || "");
+      setSelectedEventRequirementId(
+        (current) =>
+          current ||
+          loadedEvents[0]?.requirements?.[0]?.id ||
+          "",
+      );
       setSelectedFreelancerIds([]);
     } catch (caught) {
       setError(
@@ -70,12 +66,26 @@ export default function ProfessionalsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    if (session.user.role === "FREELANCER") {
+      setLoading(false);
+      return;
+    }
+
+    void loadProfessionals();
+  }, [loadProfessionals, session]);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const eventId = String(form.get("eventId") ?? "");
+    const eventRequirementId = String(form.get("eventRequirementId") ?? "");
     const params = new URLSearchParams({
       startsAt: String(form.get("startsAt")),
       endsAt: String(form.get("endsAt")),
@@ -91,6 +101,7 @@ export default function ProfessionalsPage() {
     ];
     setError("");
     setSelectedEventId(eventId);
+    setSelectedEventRequirementId(eventRequirementId);
 
     try {
       optionalFilters.forEach(([key, value]) => {
@@ -115,11 +126,22 @@ export default function ProfessionalsPage() {
 
   async function inviteFreelancer(freelancerId: string) {
     const eventId = selectedEventId || events[0]?.id;
+    const eventRequirementId =
+      selectedEventRequirementId || selectedEvent?.requirements?.[0]?.id || "";
 
     if (!eventId) {
       setError("Selecione um evento antes de enviar convites.");
       return;
     }
+
+    if (!eventRequirementId) {
+      setError("Selecione a função do evento antes de enviar convites.");
+      return;
+    }
+
+    const requirement = selectedEvent?.requirements?.find(
+      (item) => item.id === eventRequirementId,
+    );
 
     try {
       await apiRequest("/api/invitations", {
@@ -127,8 +149,10 @@ export default function ProfessionalsPage() {
         body: JSON.stringify({
           eventId,
           freelancerId,
+          eventRequirementId,
           expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
           message: "Convite enviado pela plataforma NEXO.",
+          proposedAmountCents: requirement?.dailyRateCents,
         }),
       });
       setSuccess("Convite enviado.");
@@ -145,9 +169,16 @@ export default function ProfessionalsPage() {
 
   async function inviteSelectedFreelancers() {
     const eventId = selectedEventId || events[0]?.id;
+    const eventRequirementId =
+      selectedEventRequirementId || selectedEvent?.requirements?.[0]?.id || "";
 
     if (!eventId) {
       setError("Selecione um evento antes de enviar convites.");
+      return;
+    }
+
+    if (!eventRequirementId) {
+      setError("Selecione a função do evento antes de enviar convites.");
       return;
     }
 
@@ -155,6 +186,10 @@ export default function ProfessionalsPage() {
       setError("Selecione pelo menos um profissional.");
       return;
     }
+
+    const requirement = selectedEvent?.requirements?.find(
+      (item) => item.id === eventRequirementId,
+    );
 
     setError("");
     setSuccess("");
@@ -166,9 +201,11 @@ export default function ProfessionalsPage() {
         method: "POST",
         body: JSON.stringify({
           eventId,
+          eventRequirementId,
           freelancerIds: selectedFreelancerIds,
           expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
           message: "Convite enviado pela plataforma NEXO.",
+          proposedAmountCents: requirement?.dailyRateCents,
         }),
       });
       setSelectedFreelancerIds([]);
@@ -183,6 +220,42 @@ export default function ProfessionalsPage() {
     }
   }
 
+  async function toggleFavorite(freelancer: Freelancer) {
+    if (session?.user.role !== "COMPANY") {
+      return;
+    }
+
+    const nextFavorite = !freelancer.isFavorite;
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/freelancers/${freelancer.id}/favorite`, {
+        method: nextFavorite ? "POST" : "DELETE",
+      });
+      setFreelancers((current) =>
+        sortFreelancersByFavorite(
+          current.map((item) =>
+            item.id === freelancer.id
+              ? { ...item, isFavorite: nextFavorite }
+              : item,
+          ),
+        ),
+      );
+      setSuccess(
+        nextFavorite
+          ? "Profissional adicionado aos favoritos."
+          : "Profissional removido dos favoritos.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao atualizar favorito.",
+      );
+    }
+  }
+
   function toggleFreelancerSelection(freelancerId: string) {
     setSelectedFreelancerIds((current) =>
       current.includes(freelancerId)
@@ -190,6 +263,9 @@ export default function ProfessionalsPage() {
         : [...current, freelancerId],
     );
   }
+
+  const selectedEvent =
+    events.find((event) => event.id === selectedEventId) ?? events[0];
 
   if (!session) {
     return null;
@@ -225,13 +301,45 @@ export default function ProfessionalsPage() {
             </div>
             <form className="form compact" onSubmit={handleSearch}>
               <Field label="Evento para convite">
-                <select name="eventId" defaultValue={selectedEventId} required>
+                <select
+                  name="eventId"
+                  onChange={(event) => {
+                    const nextEvent = events.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    setSelectedEventId(event.target.value);
+                    setSelectedEventRequirementId(
+                      nextEvent?.requirements?.[0]?.id ?? "",
+                    );
+                  }}
+                  required
+                  value={selectedEventId}
+                >
                   <option value="" disabled>
                     Selecione um evento
                   </option>
                   {events.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Função do convite">
+                <select
+                  name="eventRequirementId"
+                  onChange={(event) =>
+                    setSelectedEventRequirementId(event.target.value)
+                  }
+                  required
+                  value={selectedEventRequirementId}
+                >
+                  <option value="" disabled>
+                    Selecione uma função
+                  </option>
+                  {selectedEvent?.requirements?.map((requirement) => (
+                    <option key={requirement.id} value={requirement.id}>
+                      {formatRequirementOption(requirement)}
                     </option>
                   ))}
                 </select>
@@ -445,15 +553,30 @@ export default function ProfessionalsPage() {
                   </div>
                 </div>
                 {session.user.role === "COMPANY" ? (
-                  <button
-                    className="icon-action"
-                    disabled={freelancer.isAvailable === false}
-                    onClick={() => inviteFreelancer(freelancer.id)}
-                  >
-                    {freelancer.isAvailable === false
-                      ? "Indisponível"
-                      : "Convidar"}
-                  </button>
+                  <div className="row-actions">
+                    <button
+                      className={
+                        freelancer.isFavorite
+                          ? "icon-action favorite active"
+                          : "icon-action favorite"
+                      }
+                      onClick={() => toggleFavorite(freelancer)}
+                      type="button"
+                    >
+                      <Star size={14} />
+                      {freelancer.isFavorite ? "Favorito" : "Favoritar"}
+                    </button>
+                    <button
+                      className="icon-action"
+                      disabled={freelancer.isAvailable === false}
+                      onClick={() => inviteFreelancer(freelancer.id)}
+                      type="button"
+                    >
+                      {freelancer.isAvailable === false
+                        ? "Indisponível"
+                        : "Convidar"}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             ))}
@@ -467,6 +590,23 @@ export default function ProfessionalsPage() {
 function centsFromCurrencyInput(value: FormDataEntryValue | null) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? String(parsed * 100) : "";
+}
+
+function sortFreelancersByFavorite(freelancers: Freelancer[]) {
+  return [...freelancers].sort(
+    (left, right) => Number(right.isFavorite) - Number(left.isFavorite),
+  );
+}
+
+function formatRequirementOption(
+  requirement: NonNullable<EventItem["requirements"]>[number],
+) {
+  const skillName = requirement.skill?.name ?? "Função";
+  const amount = requirement.dailyRateCents
+    ? ` - ${formatCurrency(requirement.dailyRateCents)}`
+    : "";
+
+  return `${skillName}${amount}`;
 }
 
 function getInitials(name?: string) {

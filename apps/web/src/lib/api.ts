@@ -17,6 +17,7 @@ export type AuthSession = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const SESSION_KEY = "nexus.session";
+let refreshSessionPromise: Promise<AuthSession | null> | null = null;
 
 export function getSession(): AuthSession | null {
   if (typeof window === "undefined") {
@@ -39,36 +40,139 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const response = await requestWithSession(path, options);
+
+  if (!response.ok) {
+    const refreshedResponse = await retryAfterAccessTokenRefresh(
+      path,
+      options,
+      response,
+    );
+    if (refreshedResponse) {
+      return parseApiResponse<T>(refreshedResponse);
+    }
+
+    throw new Error(await readApiErrorMessage(response));
+  }
+
+  return parseApiResponse<T>(response);
+}
+
+async function requestWithSession(path: string, options: RequestInit = {}) {
   const session = getSession();
+  return fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: buildHeaders(options, session),
+  });
+}
+
+function buildHeaders(options: RequestInit, session: AuthSession | null) {
+  const headers = new Headers(options.headers);
+
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (session?.accessToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  return headers;
+}
+
+async function retryAfterAccessTokenRefresh(
+  path: string,
+  options: RequestInit,
+  response: Response,
+) {
+  if (response.status !== 401 || path === "/api/auth/refresh") {
+    return null;
+  }
+
+  const message = await readApiErrorMessage(response);
+  if (message !== "Invalid access token") {
+    return null;
+  }
+
+  const refreshedSession = await refreshSession();
+  if (!refreshedSession) {
+    throw new Error("Sua sessão expirou. Entre novamente.");
+  }
+
+  return requestWithSession(path, options);
+}
+
+async function refreshSession() {
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = refreshSessionOnce().finally(() => {
+      refreshSessionPromise = null;
+    });
+  }
+
+  return refreshSessionPromise;
+}
+
+async function refreshSessionOnce() {
+  const session = getSession();
+
+  if (!session?.refreshToken) {
+    return null;
+  }
+
+  const response = await fetch(`${API_URL}/api/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken: session.refreshToken }),
+  });
+
+  if (!response.ok) {
+    clearSession();
+    return null;
+  }
+
+  const nextSession = (await response.json()) as AuthSession;
+  saveSession(nextSession);
+  return nextSession;
+}
+
+async function parseApiResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function readApiErrorMessage(response: Response) {
+  let message = "Não foi possível completar a operação.";
+
+  try {
+    const body = await response.clone().json();
+    const rawMessage = Array.isArray(body.message)
+      ? body.message.join(", ")
+      : body.message || message;
+    message = translateApiMessage(rawMessage);
+  } catch {
+    // Keep the generic message when the API does not return JSON.
+  }
+
+  return message;
+}
+
+export async function publicApiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(session?.accessToken
-        ? { Authorization: `Bearer ${session.accessToken}` }
-        : {}),
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    let message = "Não foi possível completar a operação.";
-
-    try {
-      const body = await response.json();
-      const rawMessage = Array.isArray(body.message)
-        ? body.message.join(", ")
-        : body.message || message;
-      message = translateApiMessage(rawMessage);
-    } catch {
-      // Keep the generic message when the API does not return JSON.
-    }
-
-    throw new Error(message);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
+    throw new Error("Não foi possível completar a operação.");
   }
 
   return response.json() as Promise<T>;
@@ -77,9 +181,18 @@ export async function apiRequest<T>(
 const apiMessageTranslations: Record<string, string> = {
   "End must be after start": "A data final precisa ser posterior ao início.",
   "Invalid credentials": "E-mail ou senha inválidos.",
+  "Invalid access token": "Sua sessão expirou. Entre novamente.",
   "Email already registered": "Este e-mail já está cadastrado.",
   "Admin users cannot self-register":
     "Administradores devem ser criados pela operação da plataforma.",
+  "Admin access is required":
+    "Seu nível administrativo não permite executar esta ação.",
+  "Only admin users can receive admin access":
+    "Somente usuários administradores podem receber nível administrativo.",
+  "You cannot deactivate your own admin user":
+    "Você não pode desativar o seu próprio usuário administrador.",
+  "At least one active owner admin is required":
+    "É necessário manter ao menos um administrador owner ativo.",
   "Invalid refresh token": "Sua sessão expirou. Entre novamente.",
   "Invalid or expired reset token": "Token inválido ou expirado.",
   "Company profile is required": "Complete o perfil da empresa para continuar.",
@@ -97,6 +210,8 @@ const apiMessageTranslations: Record<string, string> = {
   "Freelancer profile not found": "Perfil profissional não encontrado.",
   "Profile not found": "Perfil não encontrado.",
   "Event not found": "Evento não encontrado.",
+  "Event has contracts":
+    "Este evento já possui contrato e não pode ser excluído.",
   "Freelancer not found": "Profissional não encontrado.",
   "Contract not found": "Contrato não encontrado.",
   "Payment not found": "Pagamento não encontrado.",
@@ -108,6 +223,8 @@ const apiMessageTranslations: Record<string, string> = {
   "Invitation not found": "Convite não encontrado.",
   "Invitation is not pending": "Este convite não está mais pendente.",
   "Invitation expired": "Este convite expirou.",
+  "Invitation requirement is required":
+    "Selecione a função do evento para enviar o convite.",
   "No amount proposal to accept": "Não há proposta de valor para aceitar.",
   "Invitation negotiation is unavailable":
     "A negociação deste convite não está disponível.",
@@ -194,14 +311,18 @@ function translateValidationMessage(message: string) {
 }
 
 export async function apiFileRequest(path: string): Promise<Blob> {
-  const session = getSession();
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      ...(session?.accessToken
-        ? { Authorization: `Bearer ${session.accessToken}` }
-        : {}),
-    },
-  });
+  let response = await requestWithSession(path);
+
+  if (!response.ok) {
+    const refreshedResponse = await retryAfterAccessTokenRefresh(
+      path,
+      {},
+      response,
+    );
+    if (refreshedResponse) {
+      response = refreshedResponse;
+    }
+  }
 
   if (!response.ok) {
     throw new Error("Não foi possível abrir o documento.");

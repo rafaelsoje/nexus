@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { appInitial, appName } from "../lib/app-config";
 import { ThemeToggle } from "./theme-toggle";
 
 type AuthCardProps = {
@@ -13,8 +14,8 @@ export function AuthCard({ title, subtitle, children }: AuthCardProps) {
     <main className="auth-shell">
       <div className="auth-topbar">
         <Link href="/" className="brand">
-          <span className="brand-mark">N</span>
-          <span>nexus</span>
+          <span className="brand-mark">{appInitial}</span>
+          <span>{appName}</span>
         </Link>
         <ThemeToggle />
       </div>

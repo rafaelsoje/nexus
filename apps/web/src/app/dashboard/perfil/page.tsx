@@ -1,7 +1,15 @@
 "use client";
 
-import { FileText, Settings, Upload, X } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { CreditCard, FileText, Settings, ShieldCheck, Upload, X } from "lucide-react";
+import {
+  ChangeEvent,
+  FormEvent,
+  PointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -26,15 +34,7 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadProfile();
-  }, [session]);
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -57,13 +57,27 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadProfile();
+  }, [loadProfile, session]);
 
   async function handleSaveCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const postalCode = onlyDigits(String(form.get("postalCode")));
     setError("");
     setSuccess("");
+
+    if (postalCode && postalCode.length !== 8) {
+      setError("CEP inválido. Informe 8 números.");
+      return;
+    }
 
     try {
       await apiRequest("/api/companies/profile", {
@@ -74,6 +88,11 @@ export default function ProfilePage() {
           document: String(form.get("document")),
           phone: String(form.get("phone")),
           email: String(form.get("email")),
+          postalCode,
+          addressStreet: String(form.get("addressStreet")),
+          addressNumber: String(form.get("addressNumber")),
+          addressComplement: String(form.get("addressComplement")),
+          neighborhood: String(form.get("neighborhood")),
           city: String(form.get("city")),
           state: String(form.get("state")),
         }),
@@ -109,9 +128,8 @@ export default function ProfilePage() {
       await apiRequest("/api/freelancers/profile", {
         method: "PATCH",
         body: JSON.stringify({
-          displayName: String(form.get("displayName")),
-          avatarUrl: String(form.get("avatarUrl")),
           fullName: String(form.get("fullName")),
+          displayName: String(form.get("displayName")),
           cpf,
           identityDocument: String(form.get("identityDocument")),
           postalCode,
@@ -124,6 +142,7 @@ export default function ProfilePage() {
           transportation: String(form.get("transportation")),
         }),
       });
+      window.dispatchEvent(new Event("nexus:profile-updated"));
       setSuccess("Perfil profissional atualizado.");
       await loadProfile();
     } catch (caught) {
@@ -215,6 +234,29 @@ export default function ProfilePage() {
           profile={companyProfile}
           onDeleteDocument={handleDeleteDocument}
           onOpenDocument={handleOpenDocument}
+          onSaveLogo={async (logoUrl) => {
+            setError("");
+            setSuccess("");
+
+            try {
+              const updatedProfile = await apiRequest<CompanyProfile>(
+                "/api/companies/profile/logo",
+                {
+                  method: "PATCH",
+                  body: JSON.stringify({ logoUrl }),
+                },
+              );
+              setCompanyProfile(updatedProfile);
+              window.dispatchEvent(new Event("nexus:profile-updated"));
+              setSuccess("Logo da empresa atualizado.");
+            } catch (caught) {
+              setError(
+                caught instanceof Error
+                  ? caught.message
+                  : "Erro ao salvar logo.",
+              );
+            }
+          }}
           onSubmit={handleSaveCompany}
           onUploadDocument={handleUploadDocument}
         />
@@ -225,6 +267,70 @@ export default function ProfilePage() {
           profile={freelancerProfile}
           onDeleteDocument={handleDeleteDocument}
           onOpenDocument={handleOpenDocument}
+          onSyncGatewayAccount={async () => {
+            setError("");
+            setSuccess("");
+
+            try {
+              if (!freelancerProfile?.cpf) {
+                throw new Error("Informe o CPF antes de atualizar o recebedor.");
+              }
+
+              await apiRequest("/api/gateway-accounts/freelancer/me", {
+                method: "POST",
+                body: JSON.stringify({
+                  documentType: "CPF",
+                  documentNumber: freelancerProfile.cpf,
+                  holderName:
+                    freelancerProfile.fullName ??
+                    freelancerProfile.displayName ??
+                    session.user.name,
+                  postalCode: freelancerProfile.postalCode,
+                  addressStreet: freelancerProfile.addressStreet,
+                  addressNumber: freelancerProfile.addressNumber,
+                  addressComplement: freelancerProfile.addressComplement,
+                  neighborhood: freelancerProfile.neighborhood,
+                  city: freelancerProfile.city,
+                  state: freelancerProfile.state,
+                }),
+              });
+              const updatedProfile = await apiRequest<FreelancerProfile>(
+                "/api/freelancers/profile",
+              );
+              setFreelancerProfile(updatedProfile);
+              setSuccess("Recebedor financeiro atualizado.");
+            } catch (caught) {
+              setError(
+                caught instanceof Error
+                  ? caught.message
+                  : "Erro ao atualizar recebedor.",
+              );
+            }
+          }}
+          onSaveAvatar={async (avatarUrl) => {
+            setError("");
+            setSuccess("");
+
+            try {
+              const updatedProfile = await apiRequest<FreelancerProfile>(
+                "/api/freelancers/profile/avatar",
+                {
+                  method: "PATCH",
+                  body: JSON.stringify({ avatarUrl }),
+                },
+              );
+              setFreelancerProfile(updatedProfile);
+              window.dispatchEvent(new Event("nexus:profile-updated"));
+              setSuccess("Foto de perfil atualizada.");
+            } catch (caught) {
+              setError(
+                caught instanceof Error
+                  ? caught.message
+                  : "Erro ao salvar foto.",
+              );
+              throw caught;
+            }
+          }}
           onSaveProfile={handleSaveFreelancer}
           onUploadDocument={handleUploadDocument}
         />
@@ -244,15 +350,194 @@ function CompanyProfileForm({
   profile,
   onDeleteDocument,
   onOpenDocument,
+  onSaveLogo,
   onSubmit,
   onUploadDocument,
 }: Readonly<{
   profile: CompanyProfile;
   onDeleteDocument: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
+  onSaveLogo: (logoUrl: string) => Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
+  const logoDragState = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [logoValue, setLogoValue] = useState(profile.logoUrl ?? "");
+  const [logoSource, setLogoSource] = useState("");
+  const [logoZoom, setLogoZoom] = useState(1);
+  const [logoOffsetX, setLogoOffsetX] = useState(0);
+  const [logoOffsetY, setLogoOffsetY] = useState(0);
+  const [logoImageSize, setLogoImageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const [isSavingLogo, setIsSavingLogo] = useState(false);
+  const [companyCepValue, setCompanyCepValue] = useState("");
+  const [companyCepMessage, setCompanyCepMessage] = useState("");
+
+  useEffect(() => {
+    setLogoValue(profile.logoUrl ?? "");
+    setLogoSource("");
+    setLogoZoom(1);
+    setLogoOffsetX(0);
+    setLogoOffsetY(0);
+    setLogoImageSize(null);
+    setIsLogoModalOpen(false);
+    setIsDraggingLogo(false);
+    setCompanyCepValue("");
+    setCompanyCepMessage("");
+  }, [profile.logoUrl]);
+
+  async function handleLogoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    const image = await loadImage(dataUrl);
+    setLogoSource(dataUrl);
+    setLogoImageSize({ width: image.width, height: image.height });
+    setLogoZoom(1);
+    setLogoOffsetX(0);
+    setLogoOffsetY(0);
+    setIsLogoModalOpen(true);
+    event.target.value = "";
+  }
+
+  async function applyLogoAdjustment() {
+    if (!logoSource) {
+      return;
+    }
+
+    setIsSavingLogo(true);
+
+    try {
+      const adjustedLogo = await createAdjustedAvatar(
+        logoSource,
+        logoZoom,
+        logoOffsetX,
+        logoOffsetY,
+      );
+      await onSaveLogo(adjustedLogo);
+      setLogoValue(adjustedLogo);
+      setLogoSource(adjustedLogo);
+      setLogoImageSize({
+        width: AVATAR_CANVAS_SIZE,
+        height: AVATAR_CANVAS_SIZE,
+      });
+      setLogoZoom(1);
+      setLogoOffsetX(0);
+      setLogoOffsetY(0);
+      setIsLogoModalOpen(false);
+    } finally {
+      setIsSavingLogo(false);
+    }
+  }
+
+  function handleLogoDragStart(event: PointerEvent<HTMLDivElement>) {
+    if (!logoSource) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    logoDragState.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    setIsDraggingLogo(true);
+  }
+
+  function handleLogoDragMove(event: PointerEvent<HTMLDivElement>) {
+    if (
+      !logoDragState.current ||
+      logoDragState.current.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    const deltaX = event.clientX - logoDragState.current.x;
+    const deltaY = event.clientY - logoDragState.current.y;
+    const outputScale = AVATAR_CANVAS_SIZE / AVATAR_PREVIEW_SIZE;
+
+    setLogoOffsetX((current) =>
+      clampAvatarOffset(current + deltaX * outputScale),
+    );
+    setLogoOffsetY((current) =>
+      clampAvatarOffset(current + deltaY * outputScale),
+    );
+    logoDragState.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function handleLogoDragEnd(event: PointerEvent<HTMLDivElement>) {
+    if (logoDragState.current?.pointerId === event.pointerId) {
+      logoDragState.current = null;
+      setIsDraggingLogo(false);
+    }
+  }
+
+  async function lookupCompanyCep(value: string) {
+    const postalCode = onlyDigits(value);
+    setCompanyCepMessage("");
+
+    if (!postalCode) {
+      return;
+    }
+
+    if (postalCode.length !== 8) {
+      setCompanyCepMessage("CEP inválido. Informe 8 números.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://viacep.com.br/ws/${postalCode}/json/`,
+      );
+      const data = (await response.json()) as {
+        erro?: boolean;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+      };
+
+      if (!response.ok || data.erro) {
+        setCompanyCepMessage("CEP não encontrado.");
+        return;
+      }
+
+      setFieldValue("addressStreet", data.logradouro ?? "");
+      setFieldValue("neighborhood", data.bairro ?? "");
+      setFieldValue("city", data.localidade ?? "");
+      setFieldValue("state", data.uf ?? "");
+      setCompanyCepValue(formatCep(postalCode));
+      setCompanyCepMessage("Endereço preenchido pelo CEP.");
+    } catch {
+      setCompanyCepMessage("Não foi possível consultar o CEP agora.");
+    }
+  }
+
+  const logoPreviewSize = logoImageSize
+    ? getAvatarRenderedSize(
+        logoImageSize.width,
+        logoImageSize.height,
+        logoZoom,
+        AVATAR_PREVIEW_SIZE,
+      )
+    : null;
+
   return (
     <section className="dashboard-grid">
       <article className="panel">
@@ -261,14 +546,14 @@ function CompanyProfileForm({
           <Settings size={18} />
         </div>
         <form className="form compact" onSubmit={onSubmit}>
-          <Field label="Empresa">
+          <Field label="Nome fantasia">
             <input
               name="companyName"
               defaultValue={profile.companyName}
               required
             />
           </Field>
-          <Field label="Responsável">
+          <Field label="Responsável legal">
             <input
               name="responsibleName"
               defaultValue={profile.responsibleName}
@@ -278,22 +563,71 @@ function CompanyProfileForm({
           <Field label="CNPJ">
             <input name="document" defaultValue={profile.document ?? ""} />
           </Field>
+          <Field label="Logo da empresa">
+            <div className="avatar-upload-row">
+              <div className="company-logo-preview" aria-hidden="true">
+                {logoValue ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" src={logoValue} />
+                ) : (
+                  <span>{getInitials(profile.companyName)}</span>
+                )}
+              </div>
+              <label className="secondary-button file-button">
+                <Upload size={16} />
+                {isSavingLogo ? "Salvando..." : "Escolher logo"}
+                <input
+                  accept="image/*"
+                  className="file-input-hidden"
+                  disabled={isSavingLogo}
+                  onChange={handleLogoFile}
+                  type="file"
+                />
+              </label>
+            </div>
+          </Field>
+          <Field label="CEP da empresa">
+            <input
+              inputMode="numeric"
+              maxLength={9}
+              name="postalCode"
+              onBlur={() => void lookupCompanyCep(companyCepValue)}
+              onChange={(event) =>
+                setCompanyCepValue(formatCep(event.target.value))
+              }
+              placeholder="00000-000"
+              value={companyCepValue}
+            />
+          </Field>
+          {companyCepMessage ? (
+            <small className="form-note">{companyCepMessage}</small>
+          ) : null}
+          <Field label="Endereço comercial">
+            <input name="addressStreet" defaultValue="" />
+          </Field>
           <div className="form-grid">
-            <Field label="Cidade">
-              <input name="city" defaultValue={profile.city ?? ""} />
+            <Field label="Número">
+              <input name="addressNumber" defaultValue="" />
             </Field>
-            <Field label="UF">
-              <input
-                name="state"
-                defaultValue={profile.state ?? ""}
-                maxLength={2}
-              />
+            <Field label="Complemento">
+              <input name="addressComplement" defaultValue="" />
             </Field>
           </div>
-          <Field label="Telefone">
+          <Field label="Bairro">
+            <input name="neighborhood" defaultValue="" />
+          </Field>
+          <div className="form-grid">
+            <Field label="Cidade">
+              <input name="city" defaultValue="" />
+            </Field>
+            <Field label="UF">
+              <input name="state" defaultValue="" maxLength={2} />
+            </Field>
+          </div>
+          <Field label="Telefone comercial">
             <input name="phone" defaultValue={profile.phone ?? ""} />
           </Field>
-          <Field label="E-mail">
+          <Field label="E-mail corporativo">
             <input
               name="email"
               type="email"
@@ -302,15 +636,137 @@ function CompanyProfileForm({
             />
           </Field>
           <button className="primary-button full" type="submit">
-            Salvar empresa
+            Salvar dados da empresa
           </button>
         </form>
+        {isLogoModalOpen ? (
+          <div className="agenda-modal-backdrop" role="presentation">
+            <div
+              aria-modal="true"
+              className="agenda-modal avatar-modal"
+              role="dialog"
+            >
+              <div className="agenda-modal-header">
+                <div>
+                  <span>Logo da empresa</span>
+                  <h2>Ajustar imagem</h2>
+                </div>
+                <button
+                  aria-label="Fechar ajuste de logo"
+                  className="agenda-modal-close"
+                  onClick={() => setIsLogoModalOpen(false)}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="avatar-editor">
+                <div className="avatar-preview">
+                  {logoSource ? (
+                    <div
+                      aria-label="Arraste para reposicionar o logo"
+                      className={
+                        isDraggingLogo
+                          ? "avatar-drag-surface dragging"
+                          : "avatar-drag-surface"
+                      }
+                      onPointerCancel={handleLogoDragEnd}
+                      onPointerDown={handleLogoDragStart}
+                      onPointerMove={handleLogoDragMove}
+                      onPointerUp={handleLogoDragEnd}
+                      role="application"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt="Prévia do logo"
+                        draggable={false}
+                        src={logoSource}
+                        style={{
+                          height: logoPreviewSize
+                            ? `${logoPreviewSize.height}px`
+                            : undefined,
+                          transform: `translate(${logoOffsetX * AVATAR_PREVIEW_SCALE}px, ${logoOffsetY * AVATAR_PREVIEW_SCALE}px)`,
+                          width: logoPreviewSize
+                            ? `${logoPreviewSize.width}px`
+                            : undefined,
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <span>Sem imagem</span>
+                  )}
+                </div>
+                <div className="avatar-controls">
+                  <small className="form-note">
+                    Arraste a imagem dentro do círculo para ajustar o
+                    enquadramento.
+                  </small>
+                  <Field label="Zoom">
+                    <input
+                      max={4}
+                      min={1}
+                      onChange={(event) =>
+                        setLogoZoom(Number(event.target.value))
+                      }
+                      step={0.05}
+                      type="range"
+                      value={logoZoom}
+                    />
+                  </Field>
+                  <div className="form-grid">
+                    <Field label="Horizontal">
+                      <input
+                        max={AVATAR_MAX_OFFSET}
+                        min={-AVATAR_MAX_OFFSET}
+                        onChange={(event) =>
+                          setLogoOffsetX(Number(event.target.value))
+                        }
+                        type="range"
+                        value={logoOffsetX}
+                      />
+                    </Field>
+                    <Field label="Vertical">
+                      <input
+                        max={AVATAR_MAX_OFFSET}
+                        min={-AVATAR_MAX_OFFSET}
+                        onChange={(event) =>
+                          setLogoOffsetY(Number(event.target.value))
+                        }
+                        type="range"
+                        value={logoOffsetY}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => setIsLogoModalOpen(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={!logoSource || isSavingLogo}
+                  onClick={applyLogoAdjustment}
+                  type="button"
+                >
+                  {isSavingLogo ? "Salvando..." : "Aplicar logo"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </article>
       <VerificationDocumentsPanel
         documents={profile.verificationDocuments ?? []}
+        documentOptions={companyDocumentOptions}
         onDeleteDocument={onDeleteDocument}
         onOpenDocument={onOpenDocument}
         onUploadDocument={onUploadDocument}
+        submitLabel="Enviar documento da empresa"
       />
     </section>
   );
@@ -320,21 +776,34 @@ function FreelancerProfileSection({
   profile,
   onDeleteDocument,
   onOpenDocument,
+  onSaveAvatar,
   onSaveProfile,
+  onSyncGatewayAccount,
   onUploadDocument,
 }: Readonly<{
   profile: FreelancerProfile | null;
   onDeleteDocument: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
+  onSaveAvatar: (avatarUrl: string) => Promise<void>;
   onSaveProfile: (event: FormEvent<HTMLFormElement>) => void;
+  onSyncGatewayAccount: () => Promise<void>;
   onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
+  const dragState = useRef<{ pointerId: number; x: number; y: number } | null>(
+    null,
+  );
   const [avatarSource, setAvatarSource] = useState("");
   const [avatarValue, setAvatarValue] = useState("");
   const [avatarZoom, setAvatarZoom] = useState(1);
   const [avatarOffsetX, setAvatarOffsetX] = useState(0);
   const [avatarOffsetY, setAvatarOffsetY] = useState(0);
+  const [avatarImageSize, setAvatarImageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [cpfValue, setCpfValue] = useState("");
   const [cepValue, setCepValue] = useState("");
   const [cepMessage, setCepMessage] = useState("");
@@ -345,7 +814,9 @@ function FreelancerProfileSection({
     setAvatarZoom(1);
     setAvatarOffsetX(0);
     setAvatarOffsetY(0);
+    setAvatarImageSize(null);
     setIsAvatarModalOpen(false);
+    setIsDraggingAvatar(false);
     setCpfValue(formatCpf(profile?.cpf ?? ""));
     setCepValue(formatCep(profile?.postalCode ?? ""));
   }, [profile?.avatarUrl, profile?.cpf, profile?.postalCode]);
@@ -358,7 +829,9 @@ function FreelancerProfileSection({
     }
 
     const dataUrl = await readFileAsDataUrl(file);
+    const image = await loadImage(dataUrl);
     setAvatarSource(dataUrl);
+    setAvatarImageSize({ width: image.width, height: image.height });
     setAvatarZoom(1);
     setAvatarOffsetX(0);
     setAvatarOffsetY(0);
@@ -371,18 +844,72 @@ function FreelancerProfileSection({
       return;
     }
 
-    const adjustedAvatar = await createAdjustedAvatar(
-      avatarSource,
-      avatarZoom,
-      avatarOffsetX,
-      avatarOffsetY,
+    setIsSavingAvatar(true);
+
+    try {
+      const adjustedAvatar = await createAdjustedAvatar(
+        avatarSource,
+        avatarZoom,
+        avatarOffsetX,
+        avatarOffsetY,
+      );
+      await onSaveAvatar(adjustedAvatar);
+      setAvatarValue(adjustedAvatar);
+      setAvatarSource(adjustedAvatar);
+      setAvatarImageSize({
+        width: AVATAR_CANVAS_SIZE,
+        height: AVATAR_CANVAS_SIZE,
+      });
+      setAvatarZoom(1);
+      setAvatarOffsetX(0);
+      setAvatarOffsetY(0);
+      setIsAvatarModalOpen(false);
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  }
+
+  function handleAvatarDragStart(event: PointerEvent<HTMLDivElement>) {
+    if (!avatarSource) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragState.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    setIsDraggingAvatar(true);
+  }
+
+  function handleAvatarDragMove(event: PointerEvent<HTMLDivElement>) {
+    if (!dragState.current || dragState.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.current.x;
+    const deltaY = event.clientY - dragState.current.y;
+    const outputScale = AVATAR_CANVAS_SIZE / AVATAR_PREVIEW_SIZE;
+
+    setAvatarOffsetX((current) =>
+      clampAvatarOffset(current + deltaX * outputScale),
     );
-    setAvatarValue(adjustedAvatar);
-    setAvatarSource(adjustedAvatar);
-    setAvatarZoom(1);
-    setAvatarOffsetX(0);
-    setAvatarOffsetY(0);
-    setIsAvatarModalOpen(false);
+    setAvatarOffsetY((current) =>
+      clampAvatarOffset(current + deltaY * outputScale),
+    );
+    dragState.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function handleAvatarDragEnd(event: PointerEvent<HTMLDivElement>) {
+    if (dragState.current?.pointerId === event.pointerId) {
+      dragState.current = null;
+      setIsDraggingAvatar(false);
+    }
   }
 
   async function lookupCep(value: string) {
@@ -426,6 +953,15 @@ function FreelancerProfileSection({
     }
   }
 
+  const avatarPreviewSize = avatarImageSize
+    ? getAvatarRenderedSize(
+        avatarImageSize.width,
+        avatarImageSize.height,
+        avatarZoom,
+        AVATAR_PREVIEW_SIZE,
+      )
+    : null;
+
   return (
     <section className="dashboard-grid">
       <article className="panel">
@@ -464,7 +1000,6 @@ function FreelancerProfileSection({
               />
             </Field>
           </div>
-          <input name="avatarUrl" readOnly type="hidden" value={avatarValue} />
           <Field label="Foto de perfil / avatar">
             <div className="avatar-upload-row">
               <div className="profile-avatar large" aria-hidden="true">
@@ -529,21 +1064,17 @@ function FreelancerProfileSection({
           </Field>
           <div className="form-grid">
             <Field label="Cidade">
-              <input name="city" defaultValue={profile?.city ?? ""} />
+              <input name="city" defaultValue="" />
             </Field>
             <Field label="UF">
-              <input
-                name="state"
-                defaultValue={profile?.state ?? ""}
-                maxLength={2}
-              />
+              <input name="state" defaultValue="" maxLength={2} />
             </Field>
           </div>
           <Field label="Transporte para eventos">
             <input
               name="transportation"
-              defaultValue={profile?.transportation ?? ""}
-              placeholder="Ex.: carro próprio, moto, app, transporte público"
+              defaultValue=""
+              placeholder="Carro próprio"
             />
           </Field>
           <button className="primary-button full" type="submit">
@@ -574,22 +1105,47 @@ function FreelancerProfileSection({
               <div className="avatar-editor">
                 <div className="avatar-preview">
                   {avatarSource ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      alt="Prévia do avatar"
-                      src={avatarSource}
-                      style={{
-                        transform: `translate(${avatarOffsetX}px, ${avatarOffsetY}px) scale(${avatarZoom})`,
-                      }}
-                    />
+                    <div
+                      aria-label="Arraste para reposicionar a foto"
+                      className={
+                        isDraggingAvatar
+                          ? "avatar-drag-surface dragging"
+                          : "avatar-drag-surface"
+                      }
+                      onPointerCancel={handleAvatarDragEnd}
+                      onPointerDown={handleAvatarDragStart}
+                      onPointerMove={handleAvatarDragMove}
+                      onPointerUp={handleAvatarDragEnd}
+                      role="application"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt="Prévia do avatar"
+                        draggable={false}
+                        src={avatarSource}
+                        style={{
+                          height: avatarPreviewSize
+                            ? `${avatarPreviewSize.height}px`
+                            : undefined,
+                          transform: `translate(${avatarOffsetX * AVATAR_PREVIEW_SCALE}px, ${avatarOffsetY * AVATAR_PREVIEW_SCALE}px)`,
+                          width: avatarPreviewSize
+                            ? `${avatarPreviewSize.width}px`
+                            : undefined,
+                        }}
+                      />
+                    </div>
                   ) : (
                     <span>Sem foto</span>
                   )}
                 </div>
                 <div className="avatar-controls">
+                  <small className="form-note">
+                    Arraste a foto dentro do círculo para ajustar o
+                    enquadramento.
+                  </small>
                   <Field label="Zoom">
                     <input
-                      max={3}
+                      max={4}
                       min={1}
                       onChange={(event) =>
                         setAvatarZoom(Number(event.target.value))
@@ -602,8 +1158,8 @@ function FreelancerProfileSection({
                   <div className="form-grid">
                     <Field label="Horizontal">
                       <input
-                        max={100}
-                        min={-100}
+                        max={AVATAR_MAX_OFFSET}
+                        min={-AVATAR_MAX_OFFSET}
                         onChange={(event) =>
                           setAvatarOffsetX(Number(event.target.value))
                         }
@@ -613,8 +1169,8 @@ function FreelancerProfileSection({
                     </Field>
                     <Field label="Vertical">
                       <input
-                        max={100}
-                        min={-100}
+                        max={AVATAR_MAX_OFFSET}
+                        min={-AVATAR_MAX_OFFSET}
                         onChange={(event) =>
                           setAvatarOffsetY(Number(event.target.value))
                         }
@@ -635,11 +1191,11 @@ function FreelancerProfileSection({
                 </button>
                 <button
                   className="primary-button"
-                  disabled={!avatarSource}
+                  disabled={!avatarSource || isSavingAvatar}
                   onClick={applyAvatarAdjustment}
                   type="button"
                 >
-                  Aplicar foto
+                  {isSavingAvatar ? "Salvando..." : "Aplicar foto"}
                 </button>
               </div>
             </div>
@@ -649,25 +1205,140 @@ function FreelancerProfileSection({
 
       <VerificationDocumentsPanel
         documents={profile?.verificationDocuments ?? []}
+        documentOptions={freelancerDocumentOptions}
         onDeleteDocument={onDeleteDocument}
         onOpenDocument={onOpenDocument}
         onUploadDocument={onUploadDocument}
+        submitLabel="Enviar documento"
+      />
+      <GatewayAccountPanel
+        profile={profile}
+        onSyncGatewayAccount={onSyncGatewayAccount}
       />
     </section>
   );
 }
 
+function GatewayAccountPanel({
+  onSyncGatewayAccount,
+  profile,
+}: Readonly<{
+  onSyncGatewayAccount: () => Promise<void>;
+  profile: FreelancerProfile | null;
+}>) {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const account = profile?.gatewayAccounts?.[0];
+  const isProfileVerified = profile?.verificationStatus === "VERIFIED";
+  const canReceive =
+    isProfileVerified &&
+    account?.status === "ACTIVE" &&
+    account?.kycStatus === "APPROVED" &&
+    Boolean(account.gatewayRecipientId);
+
+  async function handleSync() {
+    setIsSyncing(true);
+
+    try {
+      await onSyncGatewayAccount();
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  return (
+    <article className="panel">
+      <div className="panel-header">
+        <h2>Recebedor financeiro</h2>
+        <CreditCard size={18} />
+      </div>
+      <div className="gateway-status-card">
+        <div className={canReceive ? "gateway-status-icon active" : "gateway-status-icon"}>
+          <ShieldCheck size={20} />
+        </div>
+        <div>
+          <strong>{canReceive ? "Apto a receber" : "Recebimento pendente"}</strong>
+          <span>
+            {canReceive
+              ? "Conta gateway ativa e KYC aprovado."
+              : "Finalize a verificação e atualize o recebedor simulado."}
+          </span>
+        </div>
+      </div>
+      <div className="list">
+        <ProfileStatusRow
+          label="Verificação NEXO"
+          value={formatGatewayStatus(profile?.verificationStatus)}
+        />
+        <ProfileStatusRow
+          label="Gateway"
+          value={account?.gateway ?? "simulated"}
+        />
+        <ProfileStatusRow
+          label="Status recebedor"
+          value={formatGatewayStatus(account?.status)}
+        />
+        <ProfileStatusRow
+          label="KYC gateway"
+          value={formatGatewayStatus(account?.kycStatus)}
+        />
+        <ProfileStatusRow
+          label="ID recebedor"
+          value={account?.gatewayRecipientId ?? "-"}
+        />
+        <ProfileStatusRow
+          label="Wallet gateway"
+          value={account?.gatewayWalletId ?? "-"}
+        />
+      </div>
+      <button
+        className="primary-button full"
+        disabled={!isProfileVerified || isSyncing}
+        onClick={handleSync}
+        type="button"
+      >
+        {isSyncing ? "Atualizando..." : "Atualizar recebedor"}
+      </button>
+      {!isProfileVerified ? (
+        <small className="form-note">
+          O recebedor só pode ser criado depois que o perfil for aprovado na
+          verificação.
+        </small>
+      ) : null}
+    </article>
+  );
+}
+
+function ProfileStatusRow({
+  label,
+  value,
+}: Readonly<{ label: string; value: string }>) {
+  return (
+    <div className="detail-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function VerificationDocumentsPanel({
   documents,
+  documentOptions,
   onDeleteDocument,
   onOpenDocument,
   onUploadDocument,
+  submitLabel,
 }: Readonly<{
   documents: VerificationDocument[];
+  documentOptions: DocumentOption[];
   onDeleteDocument: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
   onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
+  submitLabel: string;
 }>) {
+  const panelDocumentLabels = Object.fromEntries(
+    documentOptions.map((option) => [option.value, option.label]),
+  );
+
   return (
     <article className="panel">
       <div className="panel-header">
@@ -676,11 +1347,16 @@ function VerificationDocumentsPanel({
       </div>
       <form className="form compact" onSubmit={onUploadDocument}>
         <Field label="Tipo">
-          <select name="category" required defaultValue="document">
-            <option value="document">Documento cadastral</option>
-            <option value="identity">Identidade</option>
-            <option value="address">Comprovante de endereço</option>
-            <option value="portfolio">Portfólio ou imagem</option>
+          <select
+            name="category"
+            required
+            defaultValue={documentOptions[0]?.value ?? "document"}
+          >
+            {documentOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Arquivo">
@@ -692,7 +1368,7 @@ function VerificationDocumentsPanel({
           />
         </Field>
         <button className="secondary-button full" type="submit">
-          Enviar documento
+          {submitLabel}
         </button>
       </form>
       <div className="list">
@@ -702,8 +1378,10 @@ function VerificationDocumentsPanel({
               <div>
                 <strong>{document.originalName}</strong>
                 <span>
-                  {documentLabels[document.category] ?? document.category} -{" "}
-                  {formatFileSize(document.sizeBytes)}
+                  {panelDocumentLabels[document.category] ??
+                    documentLabels[document.category] ??
+                    document.category}{" "}
+                  - {formatFileSize(document.sizeBytes)}
                 </span>
               </div>
               <div className="row-actions">
@@ -732,12 +1410,46 @@ function VerificationDocumentsPanel({
   );
 }
 
+type DocumentOption = {
+  value: string;
+  label: string;
+};
+
+const companyDocumentOptions: DocumentOption[] = [
+  { value: "document", label: "Contrato social ou documento cadastral" },
+  { value: "cnpj", label: "Cartão CNPJ" },
+  { value: "address", label: "Comprovante de endereço da empresa" },
+  { value: "portfolio", label: "Portfólio ou imagem institucional" },
+];
+
+const freelancerDocumentOptions: DocumentOption[] = [
+  { value: "document", label: "Documento cadastral" },
+  { value: "identity", label: "Identidade" },
+  { value: "address", label: "Comprovante de endereço" },
+  { value: "portfolio", label: "Portfólio ou imagem" },
+];
+
 const documentLabels: Record<string, string> = {
   document: "Documento cadastral",
+  cnpj: "Cartão CNPJ",
   identity: "Identidade",
   address: "Comprovante de endereço",
   portfolio: "Portfólio ou imagem",
 };
+
+const gatewayStatusLabels: Record<string, string> = {
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  PENDING: "Pendente",
+  REJECTED: "Rejeitado",
+  SUSPENDED: "Suspenso",
+  VERIFIED: "Aprovado",
+};
+
+const AVATAR_CANVAS_SIZE = 512;
+const AVATAR_PREVIEW_SIZE = 192;
+const AVATAR_MAX_OFFSET = 256;
+const AVATAR_PREVIEW_SCALE = AVATAR_PREVIEW_SIZE / AVATAR_CANVAS_SIZE;
 
 function formatFileSize(sizeBytes: number) {
   if (sizeBytes < 1024 * 1024) {
@@ -745,6 +1457,10 @@ function formatFileSize(sizeBytes: number) {
   }
 
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatGatewayStatus(status?: string) {
+  return status ? gatewayStatusLabels[status] ?? status : "Pendente";
 }
 
 function readFileAsDataUrl(file: File) {
@@ -794,6 +1510,25 @@ function setFieldValue(name: string, value: string) {
   }
 }
 
+function clampAvatarOffset(value: number) {
+  return Math.max(-AVATAR_MAX_OFFSET, Math.min(AVATAR_MAX_OFFSET, value));
+}
+
+function getAvatarRenderedSize(
+  imageWidth: number,
+  imageHeight: number,
+  zoom: number,
+  targetSize: number,
+) {
+  const scale =
+    Math.max(targetSize / imageWidth, targetSize / imageHeight) * zoom;
+
+  return {
+    width: imageWidth * scale,
+    height: imageHeight * scale,
+  };
+}
+
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -810,7 +1545,7 @@ async function createAdjustedAvatar(
   offsetY: number,
 ) {
   const image = await loadImage(src);
-  const size = 512;
+  const size = AVATAR_CANVAS_SIZE;
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 

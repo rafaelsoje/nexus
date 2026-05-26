@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
-  Settings,
   ShieldCheck,
   ShieldAlert,
   Star,
@@ -18,8 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type React from "react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -34,8 +32,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AccountMenu } from "../../components/dashboard-shell";
-import { EmptyState, Field, StatusMessage } from "../../components/ui";
+import {
+  AccountMenu,
+  formatUserRole,
+  NotificationsButton,
+} from "../../components/dashboard-shell";
+import { EmptyState, StatusMessage } from "../../components/ui";
 import {
   apiRequest,
   clearSession,
@@ -94,7 +96,20 @@ type Payment = {
   grossAmountCents: number;
   freelancerAmountCents: number;
   platformFeeCents: number;
-  contract?: Contract;
+  event?: EventItem;
+  company?: { companyName: string };
+  splits?: Array<{
+    id: string;
+    freelancerNetAmountCents: number;
+    releaseStatus: string;
+    freelancer?: Freelancer;
+    contract?: Contract;
+  }>;
+};
+type NotificationItem = {
+  id: string;
+  type: string;
+  readAt?: string | null;
 };
 type WalletData = {
   balanceCents: number;
@@ -145,6 +160,35 @@ type AdminData = {
 type ReportSummary = {
   scope: UserRole;
   totals: Record<string, number>;
+  financialSummary?: {
+    gmvCents: number;
+    walletPaidCents: number;
+    gatewayPaidCents: number;
+    companyFeeCents: number;
+    freelancerFeeCents: number;
+    platformFeeCents: number;
+    gatewayFeeCents: number;
+    splitGrossCents: number;
+    freelancerNetCents: number;
+    walletBalanceCents: number;
+    payoutAmountCents: number;
+    chargebackAmountCents: number;
+    chargebacks: number;
+    refundedGrossCents: number;
+    refunds: number;
+    splitStatus: Array<{
+      status: string;
+      count: number;
+      grossAmountCents: number;
+      freelancerNetAmountCents: number;
+      platformFeeAmountCents: number;
+    }>;
+    payoutStatus: Array<{
+      status: string;
+      count: number;
+      amountCents: number;
+    }>;
+  };
   contractStatus: Array<{ status: string; count: number }>;
   eventStatus: Array<{ status: string; count: number }>;
   paymentStatus: Array<{ status: string; count: number }>;
@@ -158,10 +202,56 @@ type ReportSummary = {
   }>;
 };
 
+const eventStatusLabels: Record<string, string> = {
+  CANCELLED: "Cancelado",
+  CONFIRMED: "Confirmado",
+  DRAFT: "Rascunho",
+  FINISHED: "Finalizado",
+  IN_PROGRESS: "Em andamento",
+  INVITING: "Convidando",
+  OPEN: "Aberto",
+};
+
+const contractStatusLabels: Record<string, string> = {
+  CANCELLED: "Cancelado",
+  COMPLETED: "Concluído",
+  CONFIRMED: "Confirmado",
+  DISPUTED: "Em contestação",
+  NO_SHOW: "Ausência",
+  PAID: "Pago",
+  PENDING_PAYMENT: "Aguardando pagamento",
+};
+
+const invitationStatusLabels: Record<string, string> = {
+  ACCEPTED: "Aceito",
+  CANCELLED: "Cancelado",
+  DECLINED: "Recusado",
+  EXPIRED: "Expirado",
+  PENDING: "Pendente",
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  AUTHORIZED: "Autorizado",
+  CHARGEBACK: "Contestação bancária",
+  FAILED: "Falhou",
+  PAID: "Pago",
+  PENDING: "Pendente",
+  REFUNDED: "Estornado",
+  RELEASED: "Liberado",
+};
+
+const transactionTypeLabels: Record<string, string> = {
+  CREDIT: "Crédito",
+  DEBIT: "Débito",
+  FEE: "Taxa",
+  PAYOUT: "Repasse",
+  REFUND: "Estorno",
+};
+
 const dashboardNavItems = [
   {
     href: "/dashboard",
-    label: "Dashboard",
+    label: "Início",
     icon: LayoutDashboard,
     roles: ["ADMIN", "COMPANY", "FREELANCER"],
   },
@@ -175,12 +265,6 @@ const dashboardNavItems = [
     href: "/dashboard/agenda",
     label: "Agenda",
     icon: CalendarDays,
-    roles: ["FREELANCER"],
-  },
-  {
-    href: "/dashboard/especialidades",
-    label: "Especialidades",
-    icon: Star,
     roles: ["FREELANCER"],
   },
   {
@@ -200,6 +284,12 @@ const dashboardNavItems = [
     label: "Profissionais",
     icon: UsersRound,
     roles: ["ADMIN", "COMPANY"],
+  },
+  {
+    href: "/dashboard/favoritos",
+    label: "Favoritos",
+    icon: Star,
+    roles: ["COMPANY"],
   },
   {
     href: "/dashboard/convites",
@@ -237,12 +327,6 @@ const dashboardNavItems = [
     icon: ShieldCheck,
     roles: ["ADMIN"],
   },
-  {
-    href: "/dashboard/perfil",
-    label: "Perfil",
-    icon: Settings,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
 ] satisfies Array<{
   href: string;
   label: string;
@@ -267,9 +351,8 @@ export default function DashboardPage() {
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(
     null,
   );
-  const [selectedEventId, setSelectedEventId] = useState("");
+  const [importantNotifications, setImportantNotifications] = useState(0);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
   const role = session?.user.role;
@@ -291,6 +374,57 @@ export default function DashboardPage() {
     }
 
     void loadDashboard(session.user.role);
+    // Dashboard refresh is keyed by the active session; loadDashboard itself is reused by manual refresh handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      setImportantNotifications(0);
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function loadImportantNotifications() {
+      try {
+        const notifications = await apiRequest<NotificationItem[]>(
+          "/api/notifications",
+        );
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setImportantNotifications(
+          notifications.filter(
+            (item) => !item.readAt && item.type !== "CHAT_MESSAGE_RECEIVED",
+          ).length,
+        );
+      } catch {
+        if (isCurrent) {
+          setImportantNotifications(0);
+        }
+      }
+    }
+
+    void loadImportantNotifications();
+    const interval = window.setInterval(loadImportantNotifications, 60000);
+    window.addEventListener(
+      "nexus:notifications-updated",
+      loadImportantNotifications,
+    );
+    window.addEventListener("focus", loadImportantNotifications);
+
+    return () => {
+      isCurrent = false;
+      window.clearInterval(interval);
+      window.removeEventListener(
+        "nexus:notifications-updated",
+        loadImportantNotifications,
+      );
+      window.removeEventListener("focus", loadImportantNotifications);
+    };
   }, [session]);
 
   useEffect(() => {
@@ -311,6 +445,8 @@ export default function DashboardPage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
+    // Dashboard refresh listeners should only be rebound when the active session changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   async function loadDashboard(currentRole = role) {
@@ -412,190 +548,6 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  async function handleCreateEvent(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest("/api/events", {
-        method: "POST",
-        body: JSON.stringify({
-          name: String(form.get("name")),
-          startsAt: String(form.get("startsAt")),
-          endsAt: String(form.get("endsAt")),
-          location: String(form.get("location")),
-          city: String(form.get("city")),
-          state: String(form.get("state")),
-          eventType: String(form.get("eventType")),
-          requirements: [
-            {
-              skillId: String(form.get("skillId")),
-              quantity: Number(form.get("quantity")),
-              dailyRateCents: Number(form.get("dailyRate")) * 100,
-            },
-          ],
-        }),
-      });
-      formElement.reset();
-      setSuccess("Evento criado.");
-      await loadDashboard("COMPANY");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erro ao criar evento.",
-      );
-    }
-  }
-
-  async function handleSearchFreelancers(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const eventId = String(form.get("eventId") ?? "");
-    setError("");
-    setSelectedEventId(eventId);
-
-    try {
-      const data = await apiRequest<Freelancer[]>(
-        `/api/events/available-freelancers?startsAt=${encodeURIComponent(
-          String(form.get("startsAt")),
-        )}&endsAt=${encodeURIComponent(String(form.get("endsAt")))}&skillId=${encodeURIComponent(
-          String(form.get("skillId")),
-        )}`,
-      );
-      setFreelancers(data);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao buscar freelancers.",
-      );
-    }
-  }
-
-  async function inviteFreelancer(freelancerId: string) {
-    const eventId = selectedEventId || events[0]?.id;
-
-    if (!eventId) {
-      setError("Crie um evento antes de enviar convites.");
-      return;
-    }
-
-    try {
-      await apiRequest("/api/invitations", {
-        method: "POST",
-        body: JSON.stringify({
-          eventId,
-          freelancerId,
-          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-          message: "Convite enviado pela plataforma nexus.",
-        }),
-      });
-      setSuccess("Convite enviado.");
-      await loadDashboard("COMPANY");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erro ao enviar convite.",
-      );
-    }
-  }
-
-  async function respondInvitation(
-    invitationId: string,
-    action: "accept" | "decline",
-  ) {
-    try {
-      await apiRequest(`/api/invitations/${invitationId}/${action}`, {
-        method: "POST",
-      });
-      setSuccess(action === "accept" ? "Convite aceito." : "Convite recusado.");
-      await loadDashboard("FREELANCER");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erro ao responder convite.",
-      );
-    }
-  }
-
-  async function payContract(contractId: string) {
-    try {
-      await apiRequest(`/api/payments/contracts/${contractId}/pay`, {
-        method: "POST",
-      });
-      setSuccess("Pagamento simulado realizado.");
-      await loadDashboard("COMPANY");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erro ao pagar contrato.",
-      );
-    }
-  }
-
-  async function handleCreateAvailability(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest("/api/availability", {
-        method: "POST",
-        body: JSON.stringify({
-          startsAt: String(form.get("startsAt")),
-          endsAt: String(form.get("endsAt")),
-          reason: String(form.get("reason") || "Indisponível"),
-        }),
-      });
-      formElement.reset();
-      setSuccess("Indisponibilidade adicionada.");
-      await loadDashboard("FREELANCER");
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao adicionar indisponibilidade.",
-      );
-    }
-  }
-
-  async function removeAvailability(availabilityId: string) {
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest(`/api/availability/${availabilityId}`, {
-        method: "DELETE",
-      });
-      setSuccess("Indisponibilidade removida.");
-      await loadDashboard("FREELANCER");
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao remover indisponibilidade.",
-      );
-    }
-  }
-
-  async function releasePayment(paymentId: string) {
-    setError("");
-    setSuccess("");
-
-    try {
-      await apiRequest(`/api/payments/${paymentId}/release`, {
-        method: "POST",
-      });
-      setSuccess("Pagamento liberado para o freelancer.");
-      await loadDashboard("ADMIN");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erro ao liberar pagamento.",
-      );
-    }
-  }
-
   const metrics = useMemo(() => {
     if (role === "ADMIN") {
       return [
@@ -619,7 +571,20 @@ export default function DashboardPage() {
       ["Eventos", events.length],
       ["Profissionais", freelancers.length],
       ["Convites", invitations.length],
+      ["Contratos", contracts.length],
       ["Pagamentos", payments.length],
+      [
+        "Volume pago",
+        formatCurrency(reportSummary?.totals.grossAmountCents ?? 0),
+      ],
+      [
+        "Taxa plataforma",
+        formatCurrency(reportSummary?.totals.platformFeeCents ?? 0),
+      ],
+      [
+        "Repasse freelancers",
+        formatCurrency(reportSummary?.totals.freelancerAmountCents ?? 0),
+      ],
     ];
   }, [
     adminData,
@@ -628,6 +593,7 @@ export default function DashboardPage() {
     freelancers.length,
     invitations.length,
     payments.length,
+    reportSummary,
     role,
     skills.length,
     wallet,
@@ -671,24 +637,23 @@ export default function DashboardPage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{session.user.role}</p>
+            <p className="eyebrow">{formatUserRole(session.user.role)}</p>
             <h1>Olá, {session.user.name}</h1>
           </div>
           <div className="topbar-actions">
+            <NotificationsButton count={importantNotifications} />
             <AccountMenu
               account={{
                 imageUrl: freelancerProfile?.avatarUrl,
                 name: freelancerProfile?.displayName ?? session.user.name,
               }}
               onLogout={logout}
+              role={session.user.role}
             />
           </div>
         </header>
 
         {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
-        {success ? (
-          <StatusMessage type="success">{success}</StatusMessage>
-        ) : null}
 
         <section className="metrics">
           {metrics.map(([label, value]) => (
@@ -707,12 +672,6 @@ export default function DashboardPage() {
             freelancers={freelancers}
             invitations={invitations}
             reportSummary={reportSummary}
-            selectedEventId={selectedEventId}
-            skills={skills}
-            onCreateEvent={handleCreateEvent}
-            onInvite={inviteFreelancer}
-            onPay={payContract}
-            onSearch={handleSearchFreelancers}
           />
         ) : null}
         {!loading && role === "FREELANCER" ? (
@@ -722,16 +681,12 @@ export default function DashboardPage() {
             freelancerProfile={freelancerProfile}
             invitations={invitations}
             reportSummary={reportSummary}
-            onCreateAvailability={handleCreateAvailability}
-            onRemoveAvailability={removeAvailability}
             wallet={wallet}
-            onRespond={respondInvitation}
           />
         ) : null}
         {!loading && role === "ADMIN" && adminData ? (
           <AdminDashboard
             data={adminData}
-            onReleasePayment={releasePayment}
             reportSummary={reportSummary}
           />
         ) : null}
@@ -746,153 +701,16 @@ function CompanyDashboard({
   freelancers,
   invitations,
   reportSummary,
-  selectedEventId,
-  skills,
-  onCreateEvent,
-  onInvite,
-  onPay,
-  onSearch,
 }: Readonly<{
   contracts: Contract[];
   events: EventItem[];
   freelancers: Freelancer[];
   invitations: Invitation[];
   reportSummary: ReportSummary | null;
-  selectedEventId: string;
-  skills: Skill[];
-  onCreateEvent: (event: FormEvent<HTMLFormElement>) => void;
-  onInvite: (freelancerId: string) => void;
-  onPay: (contractId: string) => void;
-  onSearch: (event: FormEvent<HTMLFormElement>) => void;
 }>) {
   return (
     <section className="dashboard-grid">
-      <article className="panel">
-        <div className="panel-header">
-          <h2>Criar evento</h2>
-          <CalendarDays size={18} />
-        </div>
-        <form className="form compact" onSubmit={onCreateEvent}>
-          <Field label="Nome">
-            <input name="name" required />
-          </Field>
-          <div className="form-grid">
-            <Field label="Início">
-              <input name="startsAt" type="datetime-local" required />
-            </Field>
-            <Field label="Fim">
-              <input name="endsAt" type="datetime-local" required />
-            </Field>
-          </div>
-          <Field label="Local">
-            <input name="location" required />
-          </Field>
-          <div className="form-grid">
-            <Field label="Cidade">
-              <input name="city" />
-            </Field>
-            <Field label="UF">
-              <input name="state" maxLength={2} />
-            </Field>
-          </div>
-          <div className="form-grid">
-            <Field label="Especialidade">
-              <select name="skillId" required>
-                {skills.map((skill) => (
-                  <option key={skill.id} value={skill.id}>
-                    {skill.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Qtd.">
-              <input
-                name="quantity"
-                type="number"
-                defaultValue={1}
-                min={1}
-                required
-              />
-            </Field>
-          </div>
-          <Field label="Diária">
-            <input
-              name="dailyRate"
-              type="number"
-              min={0}
-              defaultValue={300}
-              required
-            />
-          </Field>
-          <input name="eventType" type="hidden" value="Evento" />
-          <button className="primary-button full" type="submit">
-            Criar evento
-          </button>
-        </form>
-      </article>
-
-      <article className="panel">
-        <div className="panel-header">
-          <h2>Buscar freelancers</h2>
-          <UsersRound size={18} />
-        </div>
-        <form className="form compact" onSubmit={onSearch}>
-          <Field label="Evento para convite">
-            <select name="eventId" defaultValue={selectedEventId} required>
-              <option value="" disabled>
-                Selecione um evento
-              </option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="form-grid">
-            <Field label="Início">
-              <input name="startsAt" type="datetime-local" required />
-            </Field>
-            <Field label="Fim">
-              <input name="endsAt" type="datetime-local" required />
-            </Field>
-          </div>
-          <Field label="Especialidade">
-            <select name="skillId" required>
-              {skills.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <button className="secondary-button full" type="submit">
-            Buscar disponíveis
-          </button>
-        </form>
-        <div className="list">
-          {freelancers.map((freelancer) => (
-            <div className="list-row" key={freelancer.id}>
-              <div>
-                <strong>{freelancer.displayName ?? "Profissional"}</strong>
-                <span>
-                  {freelancer.city ?? "Cidade não informada"}{" "}
-                  {freelancer.isAvailable === false
-                    ? `- ${freelancer.blockingReason}`
-                    : ""}
-                </span>
-              </div>
-              <button
-                className="icon-action"
-                disabled={freelancer.isAvailable === false}
-                onClick={() => onInvite(freelancer.id)}
-              >
-                {freelancer.isAvailable === false ? "Indisponível" : "Convidar"}
-              </button>
-            </div>
-          ))}
-        </div>
-      </article>
+      <ReportPanel reportSummary={reportSummary} />
 
       <ListPanel icon={<BadgeCheck size={18} />} title="Meus eventos">
         {events.map((event) => (
@@ -901,7 +719,7 @@ function CompanyDashboard({
               <strong>{event.name}</strong>
               <span>{new Date(event.startsAt).toLocaleString("pt-BR")}</span>
             </div>
-            <small>{event.status}</small>
+            <small>{formatEventStatus(event.status)}</small>
           </div>
         ))}
       </ListPanel>
@@ -912,17 +730,10 @@ function CompanyDashboard({
             <div>
               <strong>{contract.event?.name ?? "Contrato"}</strong>
               <span>
-                {formatCurrency(contract.amountCents)} - {contract.status}
+                {formatCurrency(contract.amountCents)} -{" "}
+                {formatContractStatus(contract.status)}
               </span>
             </div>
-            {contract.status === "PENDING_PAYMENT" ? (
-              <button
-                className="icon-action"
-                onClick={() => onPay(contract.id)}
-              >
-                Pagar
-              </button>
-            ) : null}
           </div>
         ))}
       </ListPanel>
@@ -935,14 +746,29 @@ function CompanyDashboard({
                 {invitation.freelancer?.displayName ?? "Freelancer"}
               </strong>
               <span>
-                {invitation.event?.name ?? "Evento"} - {invitation.status}
+                {invitation.event?.name ?? "Evento"} -{" "}
+                {formatInvitationStatus(invitation.status)}
               </span>
             </div>
           </div>
         ))}
       </ListPanel>
 
-      <ReportPanel reportSummary={reportSummary} />
+      <ListPanel icon={<UsersRound size={18} />} title="Profissionais recentes">
+        {freelancers.slice(0, 5).map((freelancer) => (
+          <div className="list-row" key={freelancer.id}>
+            <div>
+              <strong>{freelancer.displayName ?? "Profissional"}</strong>
+              <span>
+                {freelancer.city ?? "Cidade não informada"}
+                {freelancer.dailyRateCents
+                  ? ` - ${formatCurrency(freelancer.dailyRateCents)}`
+                  : ""}
+              </span>
+            </div>
+          </div>
+        ))}
+      </ListPanel>
     </section>
   );
 }
@@ -954,9 +780,6 @@ function FreelancerDashboard({
   invitations,
   reportSummary,
   wallet,
-  onCreateAvailability,
-  onRemoveAvailability,
-  onRespond,
 }: Readonly<{
   availability: AvailabilityItem[];
   contracts: Contract[];
@@ -964,12 +787,11 @@ function FreelancerDashboard({
   invitations: Invitation[];
   reportSummary: ReportSummary | null;
   wallet: WalletData | null;
-  onCreateAvailability: (event: FormEvent<HTMLFormElement>) => void;
-  onRemoveAvailability: (availabilityId: string) => void;
-  onRespond: (invitationId: string, action: "accept" | "decline") => void;
 }>) {
   return (
     <section className="dashboard-grid">
+      <ReportPanel reportSummary={reportSummary} />
+
       <article className="panel">
         <div className="panel-header">
           <h2>Especialidades e diárias</h2>
@@ -1000,47 +822,19 @@ function FreelancerDashboard({
         </Link>
       </article>
 
-      <article className="panel">
-        <div className="panel-header">
-          <h2>Indisponibilidade</h2>
-          <CalendarDays size={18} />
-        </div>
-        <form className="form compact" onSubmit={onCreateAvailability}>
-          <div className="form-grid">
-            <Field label="Início">
-              <input name="startsAt" type="datetime-local" required />
-            </Field>
-            <Field label="Fim">
-              <input name="endsAt" type="datetime-local" required />
-            </Field>
-          </div>
-          <Field label="Motivo">
-            <input name="reason" placeholder="Outro evento, viagem..." />
-          </Field>
-          <button className="secondary-button full" type="submit">
-            Bloquear agenda
-          </button>
-        </form>
-        <div className="list">
-          {availability.map((item) => (
-            <div className="list-row" key={item.id}>
-              <div>
-                <strong>{item.reason ?? "Indisponível"}</strong>
-                <span>
-                  {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
-                  {new Date(item.endsAt).toLocaleString("pt-BR")}
-                </span>
-              </div>
-              <button
-                className="icon-action ghost"
-                onClick={() => onRemoveAvailability(item.id)}
-              >
-                Remover
-              </button>
+      <ListPanel icon={<CalendarDays size={18} />} title="Agenda bloqueada">
+        {availability.map((item) => (
+          <div className="list-row" key={item.id}>
+            <div>
+              <strong>{item.reason ?? "Indisponível"}</strong>
+              <span>
+                {new Date(item.startsAt).toLocaleString("pt-BR")} -{" "}
+                {new Date(item.endsAt).toLocaleString("pt-BR")}
+              </span>
             </div>
-          ))}
-        </div>
-      </article>
+          </div>
+        ))}
+      </ListPanel>
 
       <ListPanel icon={<Bell size={18} />} title="Convites recebidos">
         {invitations.map((invitation) => (
@@ -1049,25 +843,9 @@ function FreelancerDashboard({
               <strong>{invitation.event?.name ?? "Evento"}</strong>
               <span>
                 {invitation.company?.companyName ?? "Empresa"} -{" "}
-                {invitation.status}
+                {formatInvitationStatus(invitation.status)}
               </span>
             </div>
-            {invitation.status === "PENDING" ? (
-              <div className="row-actions">
-                <button
-                  className="icon-action"
-                  onClick={() => onRespond(invitation.id, "accept")}
-                >
-                  Aceitar
-                </button>
-                <button
-                  className="icon-action ghost"
-                  onClick={() => onRespond(invitation.id, "decline")}
-                >
-                  Recusar
-                </button>
-              </div>
-            ) : null}
           </div>
         ))}
       </ListPanel>
@@ -1078,7 +856,8 @@ function FreelancerDashboard({
             <div>
               <strong>{contract.event?.name ?? "Evento"}</strong>
               <span>
-                {formatCurrency(contract.amountCents)} - {contract.status}
+                {formatCurrency(contract.amountCents)} -{" "}
+                {formatContractStatus(contract.status)}
               </span>
             </div>
           </div>
@@ -1092,30 +871,28 @@ function FreelancerDashboard({
         {wallet?.transactions?.map((transaction) => (
           <div className="list-row" key={transaction.id}>
             <div>
-              <strong>{transaction.type}</strong>
+              <strong>{formatTransactionType(transaction.type)}</strong>
               <span>{transaction.description ?? "Transação"}</span>
             </div>
             <small>{formatCurrency(transaction.amountCents)}</small>
           </div>
         ))}
       </ListPanel>
-
-      <ReportPanel reportSummary={reportSummary} />
     </section>
   );
 }
 
 function AdminDashboard({
   data,
-  onReleasePayment,
   reportSummary,
 }: Readonly<{
   data: AdminData;
-  onReleasePayment: (paymentId: string) => void;
   reportSummary: ReportSummary | null;
 }>) {
   return (
     <section className="dashboard-grid">
+      <ReportPanel reportSummary={reportSummary} />
+
       <AdminPanel
         icon={<UsersRound size={18} />}
         title="Usuários"
@@ -1150,23 +927,16 @@ function AdminDashboard({
         {data.payments.map((payment) => (
           <div className="list-row" key={payment.id}>
             <div>
-              <strong>{payment.contract?.event?.name ?? "Pagamento"}</strong>
+              <strong>{payment.event?.name ?? "Pagamento"}</strong>
               <span>
-                {formatCurrency(payment.grossAmountCents)} - {payment.status}
+                {formatCurrency(payment.grossAmountCents)} -{" "}
+                {formatPaymentStatus(payment.status)}
               </span>
+              <span>{payment.splits?.length ?? 0} profissional(is)</span>
             </div>
-            {payment.status === "PAID" ? (
-              <button
-                className="icon-action"
-                onClick={() => onReleasePayment(payment.id)}
-              >
-                Liberar
-              </button>
-            ) : null}
           </div>
         ))}
       </ListPanel>
-      <ReportPanel reportSummary={reportSummary} />
     </section>
   );
 }
@@ -1175,70 +945,66 @@ function ReportPanel({
   reportSummary,
 }: Readonly<{ reportSummary: ReportSummary | null }>) {
   const totals = reportSummary?.totals ?? {};
+  const financial = reportSummary?.financialSummary;
   const financialEntries = [
     {
       key: "freelancerAmountCents",
       label: "Repasse",
-      value: totals.freelancerAmountCents ?? 0,
+      value: financial?.freelancerNetCents ?? totals.freelancerAmountCents ?? 0,
     },
     {
       key: "platformFeeCents",
       label: "Taxa",
-      value: totals.platformFeeCents ?? 0,
+      value: financial?.platformFeeCents ?? totals.platformFeeCents ?? 0,
     },
   ];
   const financialTotal = financialEntries.reduce(
     (sum, entry) => sum + entry.value,
     0,
   );
-  const paidVolume = totals.grossAmountCents ?? 0;
+  const paidVolume = financial?.gmvCents ?? totals.grossAmountCents ?? 0;
   const financialTrend = reportSummary?.paymentTrend ?? [];
-  const moneyKeys = new Set([
-    "grossAmountCents",
-    "freelancerAmountCents",
-    "platformFeeCents",
-    "balanceCents",
-  ]);
-  const labels: Record<string, string> = {
-    users: "Usuários",
-    companies: "Empresas",
-    freelancers: "Freelancers",
-    events: "Eventos",
-    contracts: "Contratos",
-    payments: "Pagamentos",
-    grossAmountCents: "Volume pago",
-    freelancerAmountCents: "Repasse",
-    platformFeeCents: "Taxa plataforma",
-    balanceCents: "Saldo",
-  };
   const statusLabels: Record<string, string> = {
     CANCELLED: "Cancelado",
     COMPLETED: "Concluído",
     CONFIRMED: "Confirmado",
     DRAFT: "Rascunho",
-    NO_SHOW: "No-show",
+    NO_SHOW: "Ausência",
     PAID: "Pago",
     PENDING: "Pendente",
     PENDING_PAYMENT: "Aguardando pagamento",
     PUBLISHED: "Publicado",
-    RELEASED_TO_FREELANCER: "Repassado",
+    REFUNDED: "Estornado",
+    RELEASED: "Repassado",
+    WAITING_PAYMENT: "Aguardando pagamento",
+    WAITING_RELEASE: "Aguardando liberação",
+    BLOCKED: "Bloqueado",
+    CHARGEBACK: "Chargeback",
+    FAILED: "Falhou",
+    RESERVED: "Reservado",
+    SCHEDULED: "Agendado",
+    PROCESSING: "Processando",
   };
+  const financialTiles = financial
+    ? [
+        { label: "GMV", value: financial.gmvCents },
+        { label: "Carteira", value: financial.walletPaidCents },
+        { label: "Gateway", value: financial.gatewayPaidCents },
+        { label: "Taxa NEXO", value: financial.platformFeeCents },
+        { label: "Repasse liquido", value: financial.freelancerNetCents },
+        { label: "Payouts", value: financial.payoutAmountCents },
+        { label: "Bloqueado", value: sumSplitStatus(financial, "BLOCKED") },
+        { label: "Estornado", value: financial.refundedGrossCents },
+        { label: "Chargeback", value: financial.chargebackAmountCents },
+        { label: "Saldo carteiras", value: financial.walletBalanceCents },
+      ]
+    : [];
 
   return (
     <article className="panel report-panel">
       <div className="panel-header">
         <h2>Relatórios</h2>
         <BriefcaseBusiness size={18} />
-      </div>
-      <div className="report-grid">
-        {Object.entries(totals).map(([key, value]) => (
-          <div className="report-tile" key={key}>
-            <span>{labels[key] ?? key}</span>
-            <strong>
-              {moneyKeys.has(key) ? formatCurrency(value) : value}
-            </strong>
-          </div>
-        ))}
       </div>
 
       <div className="report-charts">
@@ -1252,14 +1018,40 @@ function ReportPanel({
           labels={statusLabels}
           title="Pagamentos por status"
         />
-        {reportSummary?.eventStatus.length ? (
-          <BarStatusChart
-            items={reportSummary.eventStatus}
-            labels={statusLabels}
-            title="Eventos por status"
-          />
-        ) : null}
+        <BarStatusChart
+          items={reportSummary?.eventStatus ?? []}
+          labels={statusLabels}
+          title="Eventos por status"
+        />
       </div>
+
+      {financial ? (
+        <>
+          <div className="report-grid financial-report-grid">
+            {financialTiles.map((item) => (
+              <div className="report-tile" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{formatCurrency(item.value)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="status-strip">
+            {financial.splitStatus.map((item) => (
+              <span key={item.status}>
+                Split {statusLabels[item.status] ?? item.status}: {item.count} -{" "}
+                {formatCurrency(item.freelancerNetAmountCents)}
+              </span>
+            ))}
+            {financial.payoutStatus.map((item) => (
+              <span key={item.status}>
+                Payout {statusLabels[item.status] ?? item.status}: {item.count} -{" "}
+                {formatCurrency(item.amountCents)}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {financialTotal > 0 ? (
         <div className="financial-chart">
@@ -1320,6 +1112,15 @@ function ReportPanel({
       ) : null}
     </article>
   );
+}
+
+function sumSplitStatus(
+  financial: NonNullable<ReportSummary["financialSummary"]>,
+  status: string,
+) {
+  return financial.splitStatus
+    .filter((item) => item.status === status)
+    .reduce((total, item) => total + item.freelancerNetAmountCents, 0);
 }
 
 function DonutStatusChart({
@@ -1471,6 +1272,26 @@ function buildStatusChartData(
     name: labels[item.status] ?? item.status,
     value: item.count,
   }));
+}
+
+function formatEventStatus(status: string) {
+  return eventStatusLabels[status] ?? status;
+}
+
+function formatContractStatus(status: string) {
+  return contractStatusLabels[status] ?? status;
+}
+
+function formatInvitationStatus(status: string) {
+  return invitationStatusLabels[status] ?? status;
+}
+
+function formatPaymentStatus(status: string) {
+  return paymentStatusLabels[status] ?? status;
+}
+
+function formatTransactionType(type: string) {
+  return transactionTypeLabels[type] ?? type;
 }
 
 function AdminPanel({

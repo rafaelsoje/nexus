@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Settings, Star } from "lucide-react";
 import {
   DashboardShell,
@@ -19,15 +19,7 @@ export default function SpecialtiesPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadSpecialties();
-  }, [session]);
-
-  async function loadSpecialties() {
+  const loadSpecialties = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -52,7 +44,15 @@ export default function SpecialtiesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadSpecialties();
+  }, [loadSpecialties, session]);
 
   async function handleSaveResume(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

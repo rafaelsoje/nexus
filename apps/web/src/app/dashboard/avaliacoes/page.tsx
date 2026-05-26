@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BriefcaseBusiness, Star } from "lucide-react";
 import {
   DashboardShell,
@@ -13,6 +13,11 @@ import { apiRequest } from "../../../lib/api";
 import type { Contract, Review } from "../../../lib/dashboard-types";
 
 const reviewableStatuses = new Set(["PAID", "COMPLETED"]);
+
+const contractStatusLabels: Record<string, string> = {
+  COMPLETED: "Concluído",
+  PAID: "Pago",
+};
 
 export default function ReviewsPage() {
   const session = useRequiredSession();
@@ -28,15 +33,7 @@ export default function ReviewsPage() {
     [contracts],
   );
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadReviews();
-  }, [session]);
-
-  async function loadReviews() {
+  const loadReviews = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -62,7 +59,15 @@ export default function ReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadReviews();
+  }, [loadReviews, session]);
 
   async function handleCreateReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -143,7 +148,8 @@ export default function ReviewsPage() {
                   </option>
                   {reviewableContracts.map((contract) => (
                     <option key={contract.id} value={contract.id}>
-                      {contract.event?.name ?? "Contrato"} - {contract.status}
+                      {contract.event?.name ?? "Contrato"} -{" "}
+                      {contractStatusLabels[contract.status] ?? contract.status}
                     </option>
                   ))}
                 </select>

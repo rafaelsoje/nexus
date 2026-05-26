@@ -1,0 +1,4 @@
+ALTER TABLE "AuditLog"
+ADD COLUMN "role" TEXT,
+ADD COLUMN "ip" TEXT,
+ADD COLUMN "userAgent" TEXT;

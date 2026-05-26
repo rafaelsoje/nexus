@@ -161,7 +161,27 @@ export class EventsService {
     });
   }
 
-  async searchAvailableFreelancers(query: SearchAvailableFreelancersDto) {
+  async delete(userId: string, eventId: string) {
+    await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
+    const event = await this.findMine(userId, eventId);
+
+    if (event.contracts.length > 0) {
+      throw new BadRequestException("Event has contracts");
+    }
+
+    await this.prisma.event.delete({ where: { id: event.id } });
+
+    return { ok: true };
+  }
+
+  async searchAvailableFreelancers(
+    userId: string,
+    query: SearchAvailableFreelancersDto,
+  ) {
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyReadRoles,
+    );
     this.assertValidRange(query.startsAt, query.endsAt);
     const startsAt = new Date(query.startsAt);
     const endsAt = new Date(query.endsAt);
@@ -226,9 +246,19 @@ export class EventsService {
       },
     });
 
+    const favoriteRows = await this.prisma.companyFavoriteFreelancer.findMany({
+      where: {
+        companyId: company.id,
+        freelancerId: { in: freelancers.map((freelancer) => freelancer.id) },
+      },
+      select: { freelancerId: true },
+    });
+    const favoriteIds = new Set(favoriteRows.map((item) => item.freelancerId));
+
     return freelancers
       .map((freelancer) => ({
         ...freelancer,
+        isFavorite: favoriteIds.has(freelancer.id),
         isAvailable:
           freelancer.availability.length === 0 &&
           freelancer.contracts.length === 0,
@@ -238,7 +268,9 @@ export class EventsService {
             : freelancer.availability[0]?.reason,
       }))
       .sort(
-        (left, right) => Number(right.isAvailable) - Number(left.isAvailable),
+        (left, right) =>
+          Number(right.isFavorite) - Number(left.isFavorite) ||
+          Number(right.isAvailable) - Number(left.isAvailable),
       );
   }
 

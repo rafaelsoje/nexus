@@ -8,6 +8,9 @@ export class CreateInvitationDto {
   @IsString()
   freelancerId: string;
 
+  @IsString()
+  eventRequirementId: string;
+
   @IsDateString()
   expiresAt: string;
 

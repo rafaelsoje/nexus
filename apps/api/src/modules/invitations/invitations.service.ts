@@ -73,7 +73,11 @@ export class InvitationsService {
       );
     }
 
-    this.assertFreelancerMatchesRequirements(freelancer, event.requirements);
+    const eventRequirement = this.resolveInvitationRequirement(
+      freelancer,
+      event.requirements,
+      dto.eventRequirementId,
+    );
 
     const conflict = await this.contractsService.hasScheduleConflict(
       freelancer.id,
@@ -103,6 +107,7 @@ export class InvitationsService {
       where: {
         eventId: event.id,
         freelancerId: freelancer.id,
+        eventRequirementId: eventRequirement.id,
         status: {
           in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED],
         },
@@ -118,19 +123,21 @@ export class InvitationsService {
     return this.prisma.$transaction(async (tx) => {
       const proposedAmountCents =
         dto.proposedAmountCents ??
-        event.requirements[0]?.dailyRateCents ??
+        eventRequirement.dailyRateCents ??
         freelancer.dailyRateCents;
       const invitation = await tx.invitation.create({
         data: {
           eventId: event.id,
           companyId: company.id,
           freelancerId: freelancer.id,
+          eventRequirementId: eventRequirement.id,
           expiresAt: new Date(dto.expiresAt),
           message: dto.message,
           proposedAmountCents,
         },
         include: {
-          event: true,
+          event: { include: { requirements: { include: { skill: true } } } },
+          eventRequirement: { include: { skill: true } },
           freelancer: { select: publicFreelancerSelect },
         },
       });
@@ -167,6 +174,7 @@ export class InvitationsService {
         const invitation = await this.create(userId, {
           eventId: dto.eventId,
           freelancerId,
+          eventRequirementId: dto.eventRequirementId,
           expiresAt: dto.expiresAt,
           message: dto.message,
           proposedAmountCents: dto.proposedAmountCents,
@@ -203,7 +211,8 @@ export class InvitationsService {
       where: { companyId: company.id },
       orderBy: { createdAt: "desc" },
       include: {
-        event: true,
+        event: { include: { requirements: { include: { skill: true } } } },
+        eventRequirement: { include: { skill: true } },
         freelancer: { select: publicFreelancerSelect },
       },
     });
@@ -216,6 +225,7 @@ export class InvitationsService {
       orderBy: { createdAt: "desc" },
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
+        eventRequirement: { include: { skill: true } },
         company: {
           select: publicCompanySelect,
         },
@@ -276,7 +286,7 @@ export class InvitationsService {
       invitation.agreedAmountCents ??
       invitation.counterAmountCents ??
       invitation.proposedAmountCents ??
-      invitation.event.requirements[0]?.dailyRateCents ??
+      invitation.eventRequirement?.dailyRateCents ??
       freelancer.dailyRateCents ??
       0;
 
@@ -387,9 +397,10 @@ export class InvitationsService {
           : {
               counterAmountCents: dto.amountCents,
               agreedAmountCents: null,
-            },
+        },
         include: {
-          event: true,
+          event: { include: { requirements: { include: { skill: true } } } },
+          eventRequirement: { include: { skill: true } },
           company: {
             select: {
               id: true,
@@ -479,7 +490,8 @@ export class InvitationsService {
         where: { id: invitation.id },
         data: { agreedAmountCents: amountCents },
         include: {
-          event: true,
+          event: { include: { requirements: { include: { skill: true } } } },
+          eventRequirement: { include: { skill: true } },
           company: {
             select: {
               id: true,
@@ -552,6 +564,7 @@ export class InvitationsService {
       include: {
         company: true,
         event: { include: { requirements: true } },
+        eventRequirement: true,
       },
     });
 
@@ -587,6 +600,7 @@ export class InvitationsService {
         company: true,
         freelancer: true,
         event: true,
+        eventRequirement: { include: { skill: true } },
       },
     });
 
@@ -700,22 +714,34 @@ export class InvitationsService {
     }
   }
 
-  private assertFreelancerMatchesRequirements(
+  private resolveInvitationRequirement(
     freelancer: { skills: Array<{ skillId: string }> },
-    requirements: Array<{ skillId: string }>,
+    requirements: Array<{
+      id: string;
+      skillId: string;
+      dailyRateCents: number | null;
+    }>,
+    eventRequirementId: string,
   ) {
+    const selectedRequirement = requirements.find(
+      (item) => item.id === eventRequirementId,
+    );
+
+    if (!selectedRequirement) {
+      throw new BadRequestException("Invitation requirement is required");
+    }
+
     const freelancerSkillIds = new Set(
       freelancer.skills.map((item) => item.skillId),
     );
-    const matchesRequirement =
-      requirements.length === 0 ||
-      requirements.some((item) => freelancerSkillIds.has(item.skillId));
 
-    if (!matchesRequirement) {
+    if (!freelancerSkillIds.has(selectedRequirement.skillId)) {
       throw new BadRequestException(
         "Freelancer does not match event requirements",
       );
     }
+
+    return selectedRequirement;
   }
 
   private async assertEventHasOpenSpot(

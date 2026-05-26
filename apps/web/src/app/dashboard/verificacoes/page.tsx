@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, FileText, UserCheck } from "lucide-react";
 import {
   DashboardShell,
@@ -42,15 +42,7 @@ export default function VerificationsPage() {
     [freelancers],
   );
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadVerifications();
-  }, [session]);
-
-  async function loadVerifications() {
+  const loadVerifications = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -75,7 +67,15 @@ export default function VerificationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadVerifications();
+  }, [loadVerifications, session]);
 
   async function updateCompanyStatus(
     companyId: string,

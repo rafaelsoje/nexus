@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   ChevronDown,
+  ClipboardList,
   MessageCircle,
   CreditCard,
   LayoutDashboard,
@@ -34,6 +35,12 @@ type AccountSummary = {
   imageUrl?: string;
 };
 
+type NotificationSummary = {
+  id: string;
+  type: string;
+  readAt?: string | null;
+};
+
 type NavItem = {
   href: string;
   label: string;
@@ -42,11 +49,17 @@ type NavItem = {
 };
 
 const allRoles: UserRole[] = ["ADMIN", "COMPANY", "FREELANCER"];
+const nonImportantNotificationTypes = new Set(["CHAT_MESSAGE_RECEIVED"]);
+const roleLabels: Record<UserRole, string> = {
+  ADMIN: "Administrador",
+  COMPANY: "Empresa",
+  FREELANCER: "Freelancer",
+};
 
 const navItems: NavItem[] = [
   {
     href: "/dashboard",
-    label: "Dashboard",
+    label: "Início",
     icon: LayoutDashboard,
     roles: allRoles,
   },
@@ -60,12 +73,6 @@ const navItems: NavItem[] = [
     href: "/dashboard/agenda",
     label: "Agenda",
     icon: CalendarDays,
-    roles: ["FREELANCER"],
-  },
-  {
-    href: "/dashboard/especialidades",
-    label: "Especialidades",
-    icon: Star,
     roles: ["FREELANCER"],
   },
   {
@@ -87,9 +94,9 @@ const navItems: NavItem[] = [
     roles: ["ADMIN", "COMPANY"],
   },
   {
-    href: "/dashboard/equipe",
-    label: "Equipe",
-    icon: UserCog,
+    href: "/dashboard/favoritos",
+    label: "Favoritos",
+    icon: Star,
     roles: ["COMPANY"],
   },
   {
@@ -129,16 +136,16 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
+    href: "/dashboard/auditoria",
+    label: "Auditoria",
+    icon: ClipboardList,
+    roles: ["ADMIN"],
+  },
+  {
     href: "/dashboard/usuarios",
     label: "Usuários",
     icon: UserCog,
     roles: ["ADMIN"],
-  },
-  {
-    href: "/dashboard/perfil",
-    label: "Perfil",
-    icon: Settings,
-    roles: allRoles,
   },
 ];
 
@@ -179,9 +186,22 @@ export function DashboardShell({
   const [accountSummary, setAccountSummary] = useState<AccountSummary | null>(
     null,
   );
+  const [importantNotifications, setImportantNotifications] = useState(0);
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
 
   useEffect(() => {
-    setSession(getSession());
+    function syncSession() {
+      setSession(getSession());
+    }
+
+    syncSession();
+    window.addEventListener("focus", syncSession);
+    window.addEventListener("storage", syncSession);
+
+    return () => {
+      window.removeEventListener("focus", syncSession);
+      window.removeEventListener("storage", syncSession);
+    };
   }, [pathname]);
 
   useEffect(() => {
@@ -243,6 +263,71 @@ export function DashboardShell({
     return () => {
       isCurrent = false;
     };
+  }, [session, pathname, profileRefreshKey]);
+
+  useEffect(() => {
+    function refreshAccountSummary() {
+      setProfileRefreshKey((current) => current + 1);
+    }
+
+    window.addEventListener("nexus:profile-updated", refreshAccountSummary);
+
+    return () => {
+      window.removeEventListener(
+        "nexus:profile-updated",
+        refreshAccountSummary,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setImportantNotifications(0);
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function loadImportantNotifications() {
+      try {
+        const notifications = await apiRequest<NotificationSummary[]>(
+          "/api/notifications",
+        );
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setImportantNotifications(
+          notifications.filter(
+            (item) =>
+              !item.readAt && !nonImportantNotificationTypes.has(item.type),
+          ).length,
+        );
+      } catch {
+        if (isCurrent) {
+          setImportantNotifications(0);
+        }
+      }
+    }
+
+    void loadImportantNotifications();
+    const interval = window.setInterval(loadImportantNotifications, 60000);
+    window.addEventListener(
+      "nexus:notifications-updated",
+      loadImportantNotifications,
+    );
+    window.addEventListener("focus", loadImportantNotifications);
+
+    return () => {
+      isCurrent = false;
+      window.clearInterval(interval);
+      window.removeEventListener(
+        "nexus:notifications-updated",
+        loadImportantNotifications,
+      );
+      window.removeEventListener("focus", loadImportantNotifications);
+    };
   }, [session, pathname]);
 
   const visibleNavItems = session
@@ -290,15 +375,19 @@ export function DashboardShell({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{eyebrow}</p>
+            <p className="eyebrow">{formatUserRole(eyebrow)}</p>
             <h1>{title}</h1>
           </div>
           <div className="topbar-actions">
             {action}
             {session ? (
+              <NotificationsButton count={importantNotifications} />
+            ) : null}
+            {session ? (
               <AccountMenu
                 account={accountSummary ?? { name: session.user.name }}
                 onLogout={logout}
+                role={session.user.role}
               />
             ) : null}
           </div>
@@ -309,12 +398,35 @@ export function DashboardShell({
   );
 }
 
+export function formatUserRole(value: string) {
+  return roleLabels[value as UserRole] ?? value;
+}
+
+export function NotificationsButton({ count }: Readonly<{ count: number }>) {
+  return (
+    <Link
+      aria-label={
+        count
+          ? `${count} notificação importante não lida`
+          : "Notificações importantes"
+      }
+      className="notification-button"
+      href="/dashboard/notificacoes"
+    >
+      <Bell size={18} />
+      {count ? <span>{count > 99 ? "99+" : count}</span> : null}
+    </Link>
+  );
+}
+
 export function AccountMenu({
   account,
   onLogout,
+  role,
 }: Readonly<{
   account: AccountSummary;
   onLogout: () => void;
+  role: UserRole;
 }>) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -342,8 +454,36 @@ export function AccountMenu({
           <ThemeToggle />
           <Link href="/dashboard/perfil" onClick={() => setIsOpen(false)}>
             <Settings size={16} />
-            Perfil e dados
+            {role === "COMPANY"
+              ? "Perfil da empresa"
+              : role === "FREELANCER"
+                ? "Meu perfil"
+                : "Perfil e dados"}
           </Link>
+          {role === "FREELANCER" ? (
+            <Link
+              href="/dashboard/especialidades"
+              onClick={() => setIsOpen(false)}
+            >
+              <ClipboardList size={16} />
+              Currículo profissional
+            </Link>
+          ) : null}
+          {role === "COMPANY" ? (
+            <Link href="/dashboard/equipe" onClick={() => setIsOpen(false)}>
+              <UserCog size={16} />
+              Equipe
+            </Link>
+          ) : null}
+          {role === "ADMIN" ? (
+            <Link
+              href="/dashboard/administradores"
+              onClick={() => setIsOpen(false)}
+            >
+              <UserCog size={16} />
+              Administradores
+            </Link>
+          ) : null}
           <Link
             href="/dashboard/notificacoes"
             onClick={() => setIsOpen(false)}

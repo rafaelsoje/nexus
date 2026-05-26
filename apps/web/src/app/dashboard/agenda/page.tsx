@@ -36,10 +36,9 @@ const statusLabels: Record<string, string> = {
   CONFIRMED: "Confirmado",
   COMPLETED: "Concluído",
   CANCELLED: "Cancelado",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Ausência",
   PENDING: "Pendente",
   RELEASED: "Liberado",
-  RELEASED_TO_FREELANCER: "Liberado",
   DISPUTED: "Contestado",
 };
 
@@ -412,16 +411,20 @@ export default function AgendaPage() {
                           <strong>{contract.event?.name ?? "Evento"}</strong>
                           <span>{formatDateTime(contract.startsAt)}</span>
                           <small>
-                            {contract.payment?.status
-                              ? (statusLabels[contract.payment.status] ??
-                                contract.payment.status)
+                            {firstPaymentSplit(contract)?.payment?.status
+                              ? (statusLabels[
+                                  firstPaymentSplit(contract)?.payment
+                                    ?.status ?? ""
+                                ] ??
+                                firstPaymentSplit(contract)?.payment?.status)
                               : (statusLabels[contract.status] ??
                                 contract.status)}
                           </small>
                         </div>
                         <small>
                           {formatCurrency(
-                            contract.payment?.freelancerAmountCents ??
+                            firstPaymentSplit(contract)
+                              ?.freelancerNetAmountCents ??
                               contract.amountCents,
                           )}
                         </small>
@@ -551,15 +554,18 @@ function ContractDetails({ contract }: Readonly<{ contract: Contract }>) {
       <DetailItem
         label="Pagamento"
         value={
-          contract.payment?.status
-            ? (statusLabels[contract.payment.status] ?? contract.payment.status)
+          firstPaymentSplit(contract)?.payment?.status
+            ? (statusLabels[
+                firstPaymentSplit(contract)?.payment?.status ?? ""
+              ] ?? firstPaymentSplit(contract)?.payment?.status)
             : "Ainda não informado"
         }
       />
       <DetailItem
         label="Recebimento"
         value={formatCurrency(
-          contract.payment?.freelancerAmountCents ?? contract.amountCents,
+          firstPaymentSplit(contract)?.freelancerNetAmountCents ??
+            contract.amountCents,
         )}
       />
     </div>
@@ -601,6 +607,10 @@ function formatPlace(contract: Contract) {
   }
 
   return city ?? state ?? "Não informado";
+}
+
+function firstPaymentSplit(contract: Contract) {
+  return contract.paymentSplits?.[0] ?? null;
 }
 
 function formatDateTime(date: string) {

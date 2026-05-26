@@ -2,7 +2,7 @@
 
 import { CalendarDays, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -39,6 +39,8 @@ export default function EventsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
+  const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState("");
 
   const adminMetrics = useMemo(
     () => ({
@@ -53,21 +55,7 @@ export default function EventsPage() {
     [events],
   );
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    if (session.user.role === "FREELANCER") {
-      router.replace("/dashboard/agenda");
-      setLoading(false);
-      return;
-    }
-
-    void loadEvents();
-  }, [router, session]);
-
-  async function loadEvents() {
+  const loadEvents = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -89,7 +77,21 @@ export default function EventsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    if (session.user.role === "FREELANCER") {
+      router.replace("/dashboard/agenda");
+      setLoading(false);
+      return;
+    }
+
+    void loadEvents();
+  }, [loadEvents, router, session]);
 
   async function handleSubmitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,6 +207,34 @@ export default function EventsPage() {
       setError(
         caught instanceof Error ? caught.message : "Erro ao duplicar evento.",
       );
+    }
+  }
+
+  async function handleDeleteEvent() {
+    if (!eventToDelete) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setDeletingEventId(eventToDelete.id);
+
+    try {
+      await apiRequest(`/api/events/${eventToDelete.id}`, {
+        method: "DELETE",
+      });
+      if (editingEvent?.id === eventToDelete.id) {
+        resetEventForm();
+      }
+      setSuccess("Evento excluído.");
+      setEventToDelete(null);
+      await loadEvents();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao excluir evento.",
+      );
+    } finally {
+      setDeletingEventId("");
     }
   }
 
@@ -411,7 +441,7 @@ export default function EventsPage() {
 
         <ListPanel icon={<CalendarDays size={18} />} title="Eventos">
           {events.map((item) => (
-            <div className="list-row" key={item.id}>
+            <div className="list-row event-list-row" key={item.id}>
               <div>
                 <strong>{item.name}</strong>
                 <span>
@@ -425,10 +455,18 @@ export default function EventsPage() {
                     {item.contracts?.length ?? 0} contrato(s)
                   </span>
                 ) : null}
-                <span>{formatRequirements(item)}</span>
+                <div className="event-requirements-list">
+                  {formatRequirements(item).map((requirement, index) => (
+                    <span key={`${item.id}-requirement-${index}`}>
+                      {requirement}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="row-actions">
-                <small>{item.status}</small>
+                <small className="status-pill">
+                  {formatEventStatus(item.status)}
+                </small>
                 {session.user.role === "COMPANY" ? (
                   <>
                     <button
@@ -447,6 +485,14 @@ export default function EventsPage() {
                       <Copy size={14} />
                       Duplicar
                     </button>
+                    <button
+                      className="icon-action ghost danger-action"
+                      onClick={() => setEventToDelete(item)}
+                      type="button"
+                    >
+                      <Trash2 size={14} />
+                      Excluir
+                    </button>
                   </>
                 ) : null}
               </div>
@@ -454,13 +500,82 @@ export default function EventsPage() {
           ))}
         </ListPanel>
       </section>
+      {eventToDelete ? (
+        <div
+          className="agenda-modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setEventToDelete(null)}
+        >
+          <section
+            aria-labelledby="delete-event-title"
+            aria-modal="true"
+            className="agenda-modal confirmation-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="agenda-modal-header">
+              <div>
+                <span>Excluir evento</span>
+                <h2 id="delete-event-title">Confirmar exclusão</h2>
+              </div>
+              <button
+                aria-label="Fechar"
+                className="agenda-modal-close"
+                onClick={() => setEventToDelete(null)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <p className="modal-copy">
+              Tem certeza que deseja excluir o evento{" "}
+              <strong>{eventToDelete.name}</strong>? Esta ação não pode ser
+              desfeita.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setEventToDelete(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="primary-button danger-button"
+                disabled={deletingEventId === eventToDelete.id}
+                onClick={handleDeleteEvent}
+                type="button"
+              >
+                <Trash2 size={16} />
+                {deletingEventId === eventToDelete.id
+                  ? "Excluindo..."
+                  : "Excluir evento"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }
 
+function formatEventStatus(status: string) {
+  const labels: Record<string, string> = {
+    CANCELLED: "Cancelado",
+    CONFIRMED: "Confirmado",
+    DRAFT: "Rascunho",
+    FINISHED: "Finalizado",
+    IN_PROGRESS: "Em andamento",
+    INVITING: "Enviando convites",
+    OPEN: "Aberto",
+  };
+
+  return labels[status] ?? status;
+}
+
 function formatRequirements(item: EventItem) {
   if (!item.requirements?.length) {
-    return "Nenhum requisito informado";
+    return ["Nenhum requisito informado"];
   }
 
   return item.requirements
@@ -471,8 +586,7 @@ function formatRequirements(item: EventItem) {
         : "";
 
       return `${skill}: ${requirement.quantity} vaga(s)${rate}`;
-    })
-    .join(" | ");
+    });
 }
 
 function toDateTimeLocal(value?: string) {

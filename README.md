@@ -39,18 +39,26 @@ Já implementado:
 - Convites individuais ou em lote entre empresa e freelancers.
 - Contratos originados a partir de convites aceitos.
 - Ciclo de contrato com pagamento, conclusão, no-show e cancelamento.
-- Pagamento simulado, split da plataforma e carteira do freelancer.
+- Página pública de termos, LGPD e cookies, com aceite obrigatório no cadastro.
+- Rodapé público com links institucionais, sociais e app.
+- Pagamento marketplace simulado por evento, com múltiplos contratos em um pagamento e split individual por profissional.
 - Carteira da empresa com carga de saldo simulada e uso automático no pagamento com complemento via gateway.
-- Gateway de pagamento abstraído com provider simulado configurável.
+- Checkout simulado para aprovação, falha e cancelamento de pagamento via webhook.
+- Gateway de pagamento abstraído com provider simulado configurável, recebedores, webhooks e idempotência local.
+- Conta gateway/KYC simulada para freelancer em módulo dedicado, com dados de recebimento privados e mascarados.
+- Payout/saque simulado solicitado pelo freelancer e processado pelo admin.
 - Regra inicial pós-evento com prazo de 1 dia útil para no-show e processamento admin de repasses vencidos.
 - Avaliações pós-contrato com atualização automática da média de reputação.
 - Central de notificações com avisos automáticos para convites, pagamentos, avaliações e contestações.
-- Abertura e resolução administrativa de contestações.
+- Abertura de contestações com bloqueio financeiro do split.
+- Resolução financeira admin de contestações com desbloqueio, liberação de repasse ou estorno para empresa.
 - Verificação administrativa de empresas e profissionais.
 - Upload local autenticado de documentos e imagens para verificação cadastral.
 - Perfil privado do freelancer com nome completo, CPF, documento, endereço completo com busca por CEP e upload/ajuste de avatar.
 - Exibição de avatar do freelancer nas telas de análise de profissionais.
-- Relatórios operacionais por perfil com KPIs, gráficos de status e série temporal financeira real.
+- Relatórios operacionais por perfil com KPIs, gráficos de status, série temporal e resumo financeiro de GMV, taxas, splits, payouts, estornos e chargebacks.
+- Tela admin de detalhe do pagamento com splits, webhooks, auditoria e ações financeiras.
+- Tela admin de auditoria geral com filtros por ação, entidade, usuário e período.
 - Base inicial de testes automatizados para regras de contrato, pagamento e avaliação.
 - Testes e2e de fluxos principais com Playwright.
 - Healthcheck público da API em `/api/health`.
@@ -68,7 +76,6 @@ Próximas entregas orientadas pelo novo documento:
 - Provider real de e-mail para recuperação de senha e notificações.
 - Notificações em tempo real, e-mail ou WhatsApp.
 - Storage externo para documentos/imagens, como S3 ou R2, com retenção e auditoria.
-- Auditoria real de ações administrativas e financeiras.
 - Deploy, monitoramento e política completa de produção.
 - PWA/mobile responsivo avançado.
 
@@ -113,6 +120,7 @@ cp .env.example .env
 Variáveis principais:
 
 ```env
+SEED_DEMO_PASSWORD="change-me-demo-password"
 DATABASE_URL="postgresql://nexus:nexus@localhost:5432/nexus?schema=public"
 REDIS_URL="redis://localhost:6379"
 JWT_ACCESS_SECRET="change-me-access"
@@ -120,6 +128,10 @@ JWT_REFRESH_SECRET="change-me-refresh"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 NEXT_PUBLIC_API_URL="http://localhost:3001"
+NEXT_PUBLIC_APP_NAME="NEXO"
+WEB_ORIGINS="http://localhost:3000"
+RATE_LIMIT_WINDOW_MS="60000"
+RATE_LIMIT_MAX_REQUESTS="1000"
 PAYMENT_GATEWAY_PROVIDER="simulated"
 PAYMENT_GATEWAY_TRANSACTION_PREFIX="sim"
 PAYMENT_GATEWAY_PLATFORM_RECIPIENT_ID="platform"
@@ -145,11 +157,118 @@ O fluxo de pagamento já passa por uma camada genérica de gateway. Em ambiente 
 PAYMENT_GATEWAY_PROVIDER="simulated"
 ```
 
-Quando a administração de pagamentos estiver definida, o próximo ajuste fica concentrado no módulo de pagamentos: adicionar o provider real, mapear `gatewayTransactionId`, recebedores do split e eventos de confirmação/estorno do gateway.
+O modelo atual segue a ideia de marketplace split:
+
+- A empresa paga por evento.
+- Um pagamento pode agrupar vários contratos do mesmo evento.
+- Cada contrato gera um `PaymentSplit` individual para o freelancer.
+- A plataforma registra taxa da empresa, eventual taxa do freelancer, taxa estimada do gateway e valor líquido do freelancer.
+- O saldo da carteira da empresa é usado primeiro.
+- Se faltar saldo, o gateway simulado cria um checkout em `/checkout/simulado/:gatewayPaymentId`.
+- O webhook simulado confirma, falha, cancela, estorna ou marca chargeback.
+- A liberação de repasse acontece por split, manualmente pelo admin ou por automação pós-evento.
+- O freelancer recebe o repasse na carteira e pode solicitar saque.
+- O admin processa payout simulado.
 
 A regra financeira registra, em cada pagamento, o valor cobrado da empresa, taxa da empresa, taxa do freelancer, taxa estimada do gateway, receita da plataforma, valor líquido do freelancer, uso de carteira e complemento via gateway. A taxa de conveniência cobrada da empresa é configurada por `PLATFORM_COMPANY_FEE_BASIS_POINTS`, em basis points. O padrão `800` representa 8%. Também existem `PLATFORM_FREELANCER_FEE_BASIS_POINTS`, `PLATFORM_FIXED_CONTRACT_FEE_CENTS`, `PAYMENT_GATEWAY_FEE_BASIS_POINTS` e `PAYMENT_GATEWAY_FIXED_FEE_CENTS`.
 
 A automação pós-evento roda em intervalo configurável por `POST_EVENT_AUTOMATION_INTERVAL_MS`. Ela avisa a empresa após o fim do evento para avaliar ou marcar no-show dentro de 1 dia útil e, se o prazo expirar sem contestação aberta, libera automaticamente o repasse para a carteira do freelancer com auditoria.
+
+### Como Testar Pagamento Simulado
+
+1. Entre como admin e verifique uma empresa e um freelancer em `/dashboard/verificacoes`.
+2. Entre como freelancer e abra `/dashboard/perfil`.
+3. No perfil do freelancer, informe CPF/endereço e clique em `Atualizar recebedor` para criar a conta gateway simulada pelo backend.
+4. Entre como empresa.
+5. Carregue saldo em `/dashboard/pagamentos`, se quiser testar pagamento com carteira.
+6. Crie ou use um evento com contratos pendentes.
+7. Em `/dashboard/pagamentos`, clique em `Pagar evento`.
+8. Se houver complemento gateway, abra o link `Checkout`.
+9. No checkout simulado, clique em `Aprovar`, `Falhar` ou `Cancelar`.
+10. Volte ao dashboard admin em `/dashboard/pagamentos`.
+11. Abra `Detalhes` do pagamento para ver splits, webhooks e auditoria.
+12. Depois do evento, marque contrato como concluído ou processe vencidos como admin.
+13. Libere split individual ou todos os elegíveis.
+14. Entre como freelancer e solicite saque na carteira.
+15. Entre como admin e marque o payout como pago ou falho.
+
+### Webhooks Simulados
+
+O endpoint público de desenvolvimento para webhooks simulados é:
+
+```txt
+POST /api/payment-webhooks/simulated
+```
+
+A rota genérica compatível com o desenho marketplace também está disponível:
+
+```txt
+POST /api/webhooks/payments/:gateway
+```
+
+Payloads úteis:
+
+```json
+{
+  "event": "PAYMENT_APPROVED",
+  "status": "PAID",
+  "transactionId": "sim_marketplace_...",
+  "gatewayEventId": "sim_marketplace_..._PAID"
+}
+```
+
+```json
+{
+  "event": "PAYMENT_REFUNDED",
+  "status": "REFUNDED",
+  "transactionId": "sim_marketplace_...",
+  "gatewayEventId": "sim_marketplace_..._REFUNDED"
+}
+```
+
+```json
+{
+  "event": "PAYMENT_CHARGEBACK",
+  "status": "CHARGEBACK",
+  "transactionId": "sim_marketplace_...",
+  "gatewayEventId": "sim_marketplace_..._CHARGEBACK"
+}
+```
+
+O admin também pode reprocessar webhooks pela tela de detalhe do pagamento ou pela lista de webhooks:
+
+```txt
+POST /api/admin/payment-webhooks/:id/reprocess
+```
+
+### Contas Gateway de Recebimento
+
+O cadastro de recebedor do freelancer passa pelo backend. O frontend nunca chama Asaas/Pagar.me diretamente.
+
+Endpoints principais:
+
+```txt
+POST /api/gateway-accounts/freelancer/me
+GET /api/gateway-accounts/freelancer/me
+GET /api/admin/gateway-accounts
+GET /api/admin/gateway-accounts/:id
+POST /api/admin/gateway-accounts/:id/recheck
+```
+
+Em desenvolvimento, `PAYMENT_GATEWAY_PROVIDER="simulated"` cria `sim_recipient_*` e `sim_wallet_*`, marcando a conta como `ACTIVE` e KYC `APPROVED`. Antes de pagar um evento com split, todos os freelancers precisam ter `GatewayAccount` ativa; caso contrário, a API bloqueia o pagamento com erro claro.
+
+### Contestações e Chargeback
+
+- A abertura de contestação coloca o contrato em `DISPUTED` e bloqueia splits que aguardavam liberação.
+- Chargeback simulado coloca o pagamento em `CHARGEBACK`, bloqueia splits não liberados e move contratos para disputa.
+- Na tela `/dashboard/disputas`, o admin pode aplicar uma decisão financeira:
+  - `Desbloquear`: rejeita a disputa e devolve o split para aguardando liberação.
+  - `Liberar repasse`: rejeita a disputa, desbloqueia e tenta liberar o split.
+  - `Estornar empresa`: resolve a disputa e estorna splits pendentes para a carteira da empresa.
+
+### Auditoria Financeira
+
+As ações sensíveis geram `AuditLog`, incluindo criação de pagamento, processamento/reprocessamento de webhook, liberação de split, estorno, payout, bloqueio por disputa/no-show e resolução financeira de disputa. O admin consulta os logs em `/dashboard/auditoria`.
 
 O armazenamento de documentos passa por provider configurável. Em desenvolvimento use `DOCUMENT_STORAGE_PROVIDER="local"`. Para produção real, o próximo passo é implementar o provider `s3` ou `r2` usando as variáveis de bucket, endpoint, região e credenciais.
 
@@ -212,16 +331,17 @@ Itens pendentes sem considerar credenciais reais de gateway:
 
 - Implementar provider real de storage `s3` ou `r2` para documentos, fotos e logos.
 - Implementar provider real de e-mail para recuperação de senha e notificações.
-- Criar endpoint de webhooks de pagamento com validação de assinatura, idempotência e atualização de status.
-- Implementar payout/saque real para freelancer, incluindo falhas, status e comprovantes.
-- Ampliar auditoria para todas as ações sensíveis administrativas, financeiras e cadastrais.
+- Conectar provider real de pagamento com criação de cliente, recebedor, split, checkout/cobrança e payout.
+- Validar assinatura real de webhooks do gateway.
+- Mapear idempotência conforme provedor real.
+- Implementar KYC real do recebedor.
+- Implementar comprovantes reais de pagamento, estorno e payout.
+- Separar permissões admin por papel operacional, como financeiro, suporte, verificação e owner.
 - Configurar backup automático do PostgreSQL e testar restore.
 - Definir política de retenção de documentos e dados.
 - Adicionar logs estruturados, monitoramento e alertas.
-- Adicionar rate limiting na API.
-- Fechar CORS e domínios por ambiente final.
 - Criar CI/CD de deploy quando sair do deploy manual.
-- Ampliar testes e2e para isolamento, no-show automático, carteira com complemento, split, perfis público/privado e permissões admin.
+- Ampliar testes e2e conforme novas integrações reais forem conectadas.
 
 ## Comandos Úteis
 
@@ -260,29 +380,29 @@ O comando `pnpm ci:check` roda Prisma generate, typecheck da API, typecheck da W
 
 Após rodar `pnpm prisma:seed`, use:
 
-Essas credenciais são apenas para desenvolvimento/demonstração. Não rode o seed nem mantenha essas senhas em produção real.
+Essas contas são apenas para desenvolvimento/demonstração. A senha é definida por `SEED_DEMO_PASSWORD` no `.env`; se a variável não existir, o seed usa o padrão local de desenvolvimento. Não rode o seed demo nem mantenha senhas demo em produção real.
 
-- Admin: `admin@nexo.local` / `Nexo@12345`
-- Empresa: `empresa@nexo.local` / `Nexo@12345`
-- Freelancer: `freelancer@nexo.local` / `Nexo@12345`
+- Admin: `admin@nexo.local`
+- Empresa: `empresa@nexo.local`
+- Freelancer: `freelancer@nexo.local`
 
 Contas extras de empresas:
 
-- `aurora@nexo.local` / `Nexo@12345`
-- `litoral@nexo.local` / `Nexo@12345`
-- `sertao@nexo.local` / `Nexo@12345`
+- `aurora@nexo.local`
+- `litoral@nexo.local`
+- `sertao@nexo.local`
 
 Contas extras de freelancers:
 
-- `audio@nexo.local` / `Nexo@12345`
-- `luz@nexo.local` / `Nexo@12345`
-- `foto@nexo.local` / `Nexo@12345`
-- `dj@nexo.local` / `Nexo@12345`
-- `recepcao@nexo.local` / `Nexo@12345`
-- `seguranca@nexo.local` / `Nexo@12345`
-- `bar@nexo.local` / `Nexo@12345`
-- `streaming@nexo.local` / `Nexo@12345`
-- `montagem@nexo.local` / `Nexo@12345`
+- `audio@nexo.local`
+- `luz@nexo.local`
+- `foto@nexo.local`
+- `dj@nexo.local`
+- `recepcao@nexo.local`
+- `seguranca@nexo.local`
+- `bar@nexo.local`
+- `streaming@nexo.local`
+- `montagem@nexo.local`
 
 O seed cria uma base de testes com 4 empresas, 10 freelancers, 19 eventos, múltiplas oportunidades abertas de várias empresas, múltiplas especialidades, convites pendentes/aceitos/recusados, candidaturas, chats com mensagens, contratos em diferentes status, pagamentos simulados, carteira com saldo/repasse/saque, avaliações, notificações, disponibilidade bloqueada e contestação em análise. As contas principais `empresa@nexo.local` e `freelancer@nexo.local` concentram mais dados para testar o fluxo completo sem preparar cenário manual.
 
@@ -295,10 +415,12 @@ Site público:
 - `/`: apresentação da NEXO.
 - `/empresas`: página para empresas contratantes.
 - `/freelancers`: página para profissionais.
+- `/termos`: termos de uso, política de LGPD, privacidade e cookies.
 - `/login`: entrada de usuários.
 - `/recuperar-senha`: solicitação de token e redefinição de senha.
 - `/cadastro/empresa`: cadastro de empresa.
 - `/cadastro/freelancer`: cadastro de profissional.
+- `/checkout/simulado/:gatewayPaymentId`: checkout local para disparar webhook simulado.
 
 Dashboard:
 
@@ -311,12 +433,14 @@ Dashboard:
 - `/dashboard/especialidades`: currículo, especialidades, níveis, habilidades e diárias do freelancer.
 - `/dashboard/convites`: convites enviados e recebidos.
 - `/dashboard/notificacoes`: central de notificações.
-- `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse e carteira.
+- `/dashboard/pagamentos`: contratos, pagamentos simulados, métricas admin, liberação de repasse, webhooks, payouts e carteira.
+- `/dashboard/pagamentos/:id`: detalhe admin do pagamento, splits, webhooks, auditoria e ações financeiras.
 - `/dashboard/avaliacoes`: avaliações pós-contrato e histórico de reputação.
-- `/dashboard/disputas`: abertura, histórico, filtros e resolução admin de contestações.
+- `/dashboard/disputas`: abertura, histórico, filtros e resolução admin financeira de contestações.
 - `/dashboard/verificacoes`: aprovação admin de empresas e profissionais.
+- `/dashboard/auditoria`: auditoria admin por ação, entidade, usuário e período.
 - `/dashboard/usuarios`: listagem admin com filtros e ativação/desativação de acessos.
-- `/dashboard/perfil`: dados de perfil, especialidades e disponibilidade.
+- `/dashboard/perfil`: dados de perfil, documentos, avatar/logo e recebedor gateway simulado do freelancer.
 
 ## Fluxos Principais
 
@@ -330,9 +454,10 @@ Fluxo empresa:
 6. Negocia oferta/contraproposta quando necessário.
 7. Aprova uma candidatura ou convite aceito para gerar contrato.
 8. Acompanha contrato.
-9. Simula pagamento.
+9. Paga o evento com carteira e, se necessário, complemento via checkout simulado.
 10. Conclui, cancela ou marca no-show.
-11. Avalia o profissional após contrato concluído ou pago.
+11. Abre contestação quando houver problema.
+12. Avalia o profissional após contrato concluído ou pago.
 
 Evolução prevista do fluxo empresa:
 
@@ -341,7 +466,7 @@ Evolução prevista do fluxo empresa:
 - Carregar carteira da empresa ou complementar saldo no pagamento.
 - Usar cartão/boleto/Pix quando gateway real for conectado.
 - Receber alerta pós-evento para avaliar e marcar no-show dentro do prazo operacional.
-- Visualizar comprovantes, custos por evento e relatórios financeiros mais completos.
+- Visualizar comprovantes reais quando gateway real for conectado.
 
 Fluxo freelancer:
 
@@ -353,14 +478,17 @@ Fluxo freelancer:
 6. Aceita, recusa ou faz contraproposta de valor.
 7. Acompanha contratos e carteira.
 8. Acompanha agenda em calendário visual.
-9. Conclui ou cancela contratos elegíveis.
-10. Avalia a empresa após contrato concluído ou pago.
+9. Atualiza recebedor financeiro simulado quando o perfil estiver verificado.
+10. Conclui ou cancela contratos elegíveis.
+11. Recebe repasse na carteira.
+12. Solicita saque.
+13. Avalia a empresa após contrato concluído ou pago.
 
 Evolução prevista do fluxo freelancer:
 
 - Negociar valor em chat interno quando a empresa permitir.
-- Informar dados bancários completos ligados ao provedor de pagamento.
-- Acompanhar ganhos, recebimentos pendentes, repasses e comprovantes.
+- Informar dados bancários completos ligados ao provedor real de pagamento.
+- Acompanhar comprovantes reais de payout.
 
 Fluxo admin:
 
@@ -368,8 +496,12 @@ Fluxo admin:
 2. Verifica empresas e profissionais.
 3. Ativa ou desativa usuários.
 4. Visualiza pagamentos.
-5. Libera repasses simulados.
-6. Analisa e resolve contestações.
+5. Abre detalhe de pagamento com splits, webhooks e auditoria.
+6. Reprocessa webhooks simulados quando necessário.
+7. Libera repasses simulados.
+8. Processa payouts simulados.
+9. Analisa e resolve contestações com decisão financeira.
+10. Consulta auditoria geral.
 
 ## API
 
@@ -389,14 +521,14 @@ Módulos principais:
 - `contracts`: contratos por perfil.
 - `calendar`: experiência web inicial entregue com contratos, disponibilidade e carteira; módulo dedicado previsto para evolução.
 - `chat`: conversas internas vinculadas a convites, candidaturas e contratos.
-- `payments`: pagamento simulado, split e liberação.
-- `wallet`: carteira e transações.
+- `payments`: pagamento marketplace simulado por evento, checkout, splits, webhooks, estorno, chargeback e liberação.
+- `payment-webhooks`: endpoints públicos de desenvolvimento para checkout/webhook simulado.
+- `wallet`: carteira, transações e solicitação de payout.
 - `reviews`: avaliações e cálculo de reputação.
 - `notifications`: notificações e leitura.
 - `disputes`: abertura e acompanhamento técnico de contestações.
-- `admin`: listagens operacionais, verificações e contestações.
-- `audit`: previsto para trilha de auditoria real.
-- `reports`: resumo operacional por perfil.
+- `admin`: listagens operacionais, verificações, contestações, payouts, reprocessamento de webhooks e auditoria.
+- `reports`: resumo operacional e financeiro por perfil.
 
 ## Modelo de Dados
 

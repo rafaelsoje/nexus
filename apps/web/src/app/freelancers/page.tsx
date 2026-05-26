@@ -8,7 +8,9 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
+import { SiteFooter } from "../../components/site-footer";
 import { SiteHeader } from "../../components/site-header";
+import { appName } from "../../lib/app-config";
 
 const benefits = [
   {
@@ -51,7 +53,7 @@ export default function FreelancersPage() {
           <p className="eyebrow">Para profissionais de eventos</p>
           <h1>Mais oportunidades com agenda, reputação e pagamento claros.</h1>
           <p className="hero-text">
-            A NEXO ajuda freelancers a serem encontrados por empresas, receberem
+            A {appName} ajuda freelancers a serem encontrados por empresas, receberem
             convites estruturados e acompanharem trabalhos e pagamentos em um
             único lugar.
           </p>
@@ -67,7 +69,7 @@ export default function FreelancersPage() {
         </div>
         <div className="audience-panel">
           <div className="panel-header">
-            <h2>Seu perfil NEXO</h2>
+            <h2>Seu perfil {appName}</h2>
             <ShieldCheck size={18} />
           </div>
           <ol className="site-checklist">
@@ -131,6 +133,7 @@ export default function FreelancersPage() {
           Começar como freelancer
         </Link>
       </section>
+      <SiteFooter />
     </main>
   );
 }

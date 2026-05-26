@@ -1,7 +1,15 @@
 "use client";
 
 import { MessageCircle, Send } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  FormEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -12,20 +20,21 @@ import { apiRequest } from "../../../lib/api";
 import type { ChatThread } from "../../../lib/dashboard-types";
 
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<EmptyState>Carregando conversas...</EmptyState>}>
+      <ChatPageContent />
+    </Suspense>
+  );
+}
+
+function ChatPageContent() {
   const session = useRequiredSession();
+  const searchParams = useSearchParams();
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadThreads();
-  }, [session]);
 
   const selectedThread = useMemo(
     () =>
@@ -33,7 +42,26 @@ export default function ChatPage() {
     [selectedThreadId, threads],
   );
 
-  async function loadThreads() {
+  useEffect(() => {
+    const applicationId = searchParams.get("applicationId");
+    const invitationId = searchParams.get("invitationId");
+
+    if (!threads.length || (!applicationId && !invitationId)) {
+      return;
+    }
+
+    const targetThread = threads.find(
+      (thread) =>
+        thread.application?.id === applicationId ||
+        thread.invitation?.id === invitationId,
+    );
+
+    if (targetThread) {
+      setSelectedThreadId(targetThread.id);
+    }
+  }, [searchParams, threads]);
+
+  const loadThreads = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -51,7 +79,15 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadThreads();
+  }, [loadThreads, session]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

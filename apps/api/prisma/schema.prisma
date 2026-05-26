@@ -21,6 +21,15 @@ enum CompanyMemberRole {
   VIEWER
 }
 
+enum AdminAccessLevel {
+  OWNER
+  MANAGER
+  FINANCE
+  SUPPORT
+  VERIFICATION
+  READONLY
+}
+
 enum CompanyInvitationStatus {
   PENDING
   ACCEPTED
@@ -71,12 +80,59 @@ enum ContractStatus {
 
 enum PaymentStatus {
   PENDING
+  WAITING_PAYMENT
   AUTHORIZED
   PAID
   FAILED
+  CANCELLED
   REFUNDED
   CHARGEBACK
-  RELEASED_TO_FREELANCER
+  DISPUTED
+  RELEASED
+}
+
+enum PaymentSplitStatus {
+  PENDING
+  RESERVED
+  WAITING_RELEASE
+  RELEASED
+  PAID
+  FAILED
+  BLOCKED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  SCHEDULED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum GatewayProvider {
+  SIMULATED
+  ASAAS
+  PAGARME
+  IUGU
+}
+
+enum GatewayAccountStatus {
+  PENDING
+  UNDER_REVIEW
+  ACTIVE
+  REJECTED
+  BLOCKED
+  ERROR
+}
+
+enum GatewayKycStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRED_MORE_INFO
 }
 
 enum TransactionType {
@@ -95,55 +151,81 @@ enum DisputeStatus {
 }
 
 model User {
-  id                    String                 @id @default(cuid())
+  id                    String                      @id @default(cuid())
   name                  String
-  email                 String                 @unique
+  email                 String                      @unique
   passwordHash          String
   role                  UserRole
   phone                 String?
   refreshTokenHash      String?
   resetTokenHash        String?
   resetTokenExpiresAt   DateTime?
-  isActive              Boolean                @default(true)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  isActive              Boolean                     @default(true)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
   companyProfile        CompanyProfile?
   companyMemberships    CompanyMember[]
-  companyInvitations    CompanyInvitation[]    @relation("CompanyInvitationInviter")
+  companyInvitations    CompanyInvitation[]         @relation("CompanyInvitationInviter")
+  adminProfile          AdminProfile?
+  createdAdminProfiles  AdminProfile[]              @relation("AdminProfileCreator")
+  companyFavorites      CompanyFavoriteFreelancer[]
   freelancerProfile     FreelancerProfile?
+  gatewayAccounts       GatewayAccount[]
   verificationDocuments VerificationDocument[]
   notifications         Notification[]
   chatMessages          ChatMessage[]
   auditLogs             AuditLog[]
 }
 
+model AdminProfile {
+  id          String           @id @default(cuid())
+  userId      String           @unique
+  accessLevel AdminAccessLevel @default(READONLY)
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdBy   User?            @relation("AdminProfileCreator", fields: [createdById], references: [id])
+
+  @@index([accessLevel])
+  @@index([createdById])
+}
+
 model CompanyProfile {
-  id                    String                 @id @default(cuid())
-  userId                String                 @unique
-  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String                      @id @default(cuid())
+  userId                String                      @unique
+  user                  User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName           String
   document              String?
   responsibleName       String
   phone                 String?
   email                 String
   logoUrl               String?
+  postalCode            String?
+  addressStreet         String?
+  addressNumber         String?
+  addressComplement     String?
+  neighborhood          String?
   city                  String?
   state                 String?
-  verificationStatus    VerificationStatus     @default(PENDING)
-  ratingAverage         Decimal                @default(0) @db.Decimal(3, 2)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  verificationStatus    VerificationStatus          @default(PENDING)
+  ratingAverage         Decimal                     @default(0) @db.Decimal(3, 2)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
   events                Event[]
   invitations           Invitation[]
   applications          Application[]
   contracts             Contract[]
   chatThreads           ChatThread[]
   wallet                Wallet?
+  payments              Payment[]
+  gatewayAccounts       GatewayAccount[]
   members               CompanyMember[]
   teamInvitations       CompanyInvitation[]
+  favoriteFreelancers   CompanyFavoriteFreelancer[]
   verificationDocuments VerificationDocument[]
-  reviewsGiven          Review[]               @relation("CompanyReviewsGiven")
-  reviewsReceived       Review[]               @relation("CompanyReviewsReceived")
+  reviewsGiven          Review[]                    @relation("CompanyReviewsGiven")
+  reviewsReceived       Review[]                    @relation("CompanyReviewsReceived")
 }
 
 model CompanyMember {
@@ -182,9 +264,9 @@ model CompanyInvitation {
 }
 
 model FreelancerProfile {
-  id                    String                 @id @default(cuid())
-  userId                String                 @unique
-  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String                      @id @default(cuid())
+  userId                String                      @unique
+  user                  User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName              String?
   cpf                   String?
   identityDocument      String?
@@ -207,20 +289,40 @@ model FreelancerProfile {
   portfolioUrl          String?
   travelAvailability    String?
   bankData              Json?
-  verificationStatus    VerificationStatus     @default(PENDING)
-  ratingAverage         Decimal                @default(0) @db.Decimal(3, 2)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  verificationStatus    VerificationStatus          @default(PENDING)
+  ratingAverage         Decimal                     @default(0) @db.Decimal(3, 2)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
   skills                FreelancerSkill[]
   invitations           Invitation[]
   applications          Application[]
   contracts             Contract[]
+  paymentSplits         PaymentSplit[]
+  payouts               Payout[]
   chatThreads           ChatThread[]
   availability          Availability[]
   wallet                Wallet?
+  gatewayAccounts       GatewayAccount[]
+  favoriteCompanies     CompanyFavoriteFreelancer[]
   verificationDocuments VerificationDocument[]
-  reviewsGiven          Review[]               @relation("FreelancerReviewsGiven")
-  reviewsReceived       Review[]               @relation("FreelancerReviewsReceived")
+  reviewsGiven          Review[]                    @relation("FreelancerReviewsGiven")
+  reviewsReceived       Review[]                    @relation("FreelancerReviewsReceived")
+}
+
+model CompanyFavoriteFreelancer {
+  id           String            @id @default(cuid())
+  companyId    String
+  freelancerId String
+  createdById  String
+  createdAt    DateTime          @default(now())
+  company      CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, freelancerId])
+  @@index([companyId])
+  @@index([freelancerId])
+  @@index([createdById])
 }
 
 model VerificationDocument {
@@ -291,17 +393,20 @@ model Event {
   invitations          Invitation[]
   applications         Application[]
   contracts            Contract[]
+  payments             Payment[]
   chatThreads          ChatThread[]
 }
 
 model EventRequirement {
-  id             String @id @default(cuid())
+  id             String        @id @default(cuid())
   eventId        String
   skillId        String
-  quantity       Int    @default(1)
+  quantity       Int           @default(1)
   dailyRateCents Int?
-  event          Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  skill          Skill  @relation(fields: [skillId], references: [id])
+  event          Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  skill          Skill         @relation(fields: [skillId], references: [id])
+  invitations    Invitation[]
+  applications   Application[]
 }
 
 model Invitation {
@@ -309,6 +414,7 @@ model Invitation {
   eventId             String
   companyId           String
   freelancerId        String
+  eventRequirementId  String?
   status              InvitationStatus  @default(PENDING)
   message             String?
   proposedAmountCents Int?
@@ -318,10 +424,13 @@ model Invitation {
   respondedAt         DateTime?
   createdAt           DateTime          @default(now())
   event               Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventRequirement    EventRequirement? @relation(fields: [eventRequirementId], references: [id], onDelete: SetNull)
   company             CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   freelancer          FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   contract            Contract?
   chatThread          ChatThread?
+
+  @@index([eventRequirementId])
 }
 
 model Application {
@@ -329,6 +438,7 @@ model Application {
   eventId             String
   companyId           String
   freelancerId        String
+  eventRequirementId  String?
   status              ApplicationStatus @default(PENDING)
   message             String?
   proposedAmountCents Int?
@@ -336,6 +446,7 @@ model Application {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   event               Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventRequirement    EventRequirement? @relation(fields: [eventRequirementId], references: [id], onDelete: SetNull)
   company             CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   freelancer          FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
   contract            Contract?
@@ -343,6 +454,7 @@ model Application {
 
   @@unique([eventId, freelancerId])
   @@index([companyId])
+  @@index([eventRequirementId])
   @@index([freelancerId])
 }
 
@@ -366,7 +478,7 @@ model Contract {
   invitation       Invitation?       @relation(fields: [invitationId], references: [id])
   application      Application?      @relation(fields: [applicationId], references: [id])
   chatThread       ChatThread?
-  payment          Payment?
+  paymentSplits    PaymentSplit[]
   reviews          Review[]
   disputes         Dispute[]
 }
@@ -419,36 +531,65 @@ model Availability {
 }
 
 model Payment {
-  id                             String         @id @default(cuid())
-  contractId                     String         @unique
-  status                         PaymentStatus  @default(PENDING)
-  grossAmountCents               Int
-  freelancerAmountCents          Int
-  platformFeeCents               Int
-  companyFeeAmountCents          Int            @default(0)
-  freelancerFeeAmountCents       Int            @default(0)
-  gatewayFeeAmountCents          Int            @default(0)
-  platformAmountCents            Int            @default(0)
-  freelancerNetAmountCents       Int            @default(0)
-  amountToChargeCompanyCents     Int            @default(0)
-  amountToReleaseFreelancerCents Int            @default(0)
-  walletAmountCents              Int            @default(0)
-  gatewayAmountCents             Int            @default(0)
-  gatewayTransactionId           String?
-  paidAt                         DateTime?
-  createdAt                      DateTime       @default(now())
-  updatedAt                      DateTime       @updatedAt
-  contract                       Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  splits                         PaymentSplit[]
+  id                         String         @id @default(cuid())
+  companyId                  String
+  eventId                    String
+  gateway                    String         @default("simulated")
+  gatewayPaymentId           String?
+  checkoutUrl                String?
+  status                     PaymentStatus  @default(PENDING)
+  paymentMethod              String?
+  grossAmountCents           Int
+  freelancerAmountCents      Int            @default(0)
+  platformFeeCents           Int            @default(0)
+  companyFeeAmountCents      Int            @default(0)
+  freelancerFeeAmountCents   Int            @default(0)
+  gatewayFeeAmountCents      Int            @default(0)
+  platformAmountCents        Int            @default(0)
+  totalFreelancerAmountCents Int            @default(0)
+  freelancerNetAmountCents   Int            @default(0)
+  amountToChargeCompanyCents Int            @default(0)
+  walletAmountCents          Int            @default(0)
+  gatewayAmountCents         Int            @default(0)
+  gatewayTransactionId       String?
+  paidAt                     DateTime?
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+  company                    CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  event                      Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  splits                     PaymentSplit[]
+
+  @@index([companyId])
+  @@index([eventId])
 }
 
 model PaymentSplit {
-  id                 String  @id @default(cuid())
-  paymentId          String
-  recipientType      String
-  amountCents        Int
-  gatewayRecipientId String?
-  payment            Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id                       String             @id @default(cuid())
+  paymentId                String
+  contractId               String
+  freelancerId             String
+  recipientType            String             @default("FREELANCER")
+  gatewayRecipientId       String?
+  gatewayWalletId          String?
+  amountCents              Int                @default(0)
+  grossAmountCents         Int
+  freelancerFeeAmountCents Int                @default(0)
+  platformFeeAmountCents   Int                @default(0)
+  gatewayFeeAmountCents    Int                @default(0)
+  freelancerNetAmountCents Int
+  splitStatus              PaymentSplitStatus @default(RESERVED)
+  releaseStatus            PaymentSplitStatus @default(WAITING_RELEASE)
+  releasedAt               DateTime?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  payment                  Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  contract                 Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  freelancer               FreelancerProfile  @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  payout                   Payout?
+
+  @@unique([paymentId, contractId])
+  @@index([contractId])
+  @@index([freelancerId])
 }
 
 model Wallet {
@@ -475,13 +616,67 @@ model Transaction {
 }
 
 model Payout {
-  id                   String        @id @default(cuid())
-  walletId             String
-  amountCents          Int
-  status               PaymentStatus @default(PENDING)
-  gatewayTransactionId String?
-  createdAt            DateTime      @default(now())
-  wallet               Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id              String             @id @default(cuid())
+  paymentSplitId  String?            @unique
+  freelancerId    String?
+  walletId        String?
+  gatewayPayoutId String?
+  amountCents     Int
+  status          PayoutStatus       @default(PENDING)
+  scheduledFor    DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime           @default(now())
+  paymentSplit    PaymentSplit?      @relation(fields: [paymentSplitId], references: [id], onDelete: Cascade)
+  freelancer      FreelancerProfile? @relation(fields: [freelancerId], references: [id], onDelete: SetNull)
+  wallet          Wallet?            @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model GatewayAccount {
+  id                 String               @id @default(cuid())
+  userId             String
+  freelancerId       String?
+  companyId          String?
+  gateway            GatewayProvider      @default(SIMULATED)
+  gatewayCustomerId  String?
+  gatewayRecipientId String?
+  gatewayWalletId    String?
+  documentType       String?
+  documentNumber     String?
+  bankCode           String?
+  agency             String?
+  account            String?
+  accountDigit       String?
+  accountType        String?
+  pixKey             String?
+  pixKeyType         String?
+  rawGatewayResponse Json?
+  errorMessage       String?
+  status             GatewayAccountStatus @default(PENDING)
+  kycStatus          GatewayKycStatus     @default(PENDING)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  freelancer         FreelancerProfile?   @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  company            CompanyProfile?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([gateway, freelancerId])
+  @@unique([gateway, companyId])
+  @@index([userId])
+  @@index([freelancerId])
+  @@index([companyId])
+}
+
+model PaymentWebhookEvent {
+  id             String   @id @default(cuid())
+  gateway        String
+  eventType      String
+  gatewayEventId String   @unique
+  payload        Json
+  processed      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([gateway])
+  @@index([processed])
 }
 
 model Review {
@@ -534,9 +729,12 @@ model Notification {
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String?
+  role      String?
   action    String
   entity    String
   entityId  String?
+  ip        String?
+  userAgent String?
   metadata  Json?
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])

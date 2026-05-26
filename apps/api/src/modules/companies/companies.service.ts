@@ -21,6 +21,7 @@ import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { InviteCompanyMemberDto } from "./dto/invite-company-member.dto";
 import { AcceptCompanyInvitationDto } from "./dto/accept-company-invitation.dto";
+import { UpdateCompanyLogoDto } from "./dto/update-company-logo.dto";
 
 @Injectable()
 export class CompaniesService {
@@ -97,6 +98,20 @@ export class CompaniesService {
     }
 
     return profile;
+  }
+
+  async updateMyLogo(userId: string, dto: UpdateCompanyLogoDto) {
+    const membership = await this.companyAccess.findMembership(
+      userId,
+      companyManageRoles,
+    );
+
+    await this.prisma.companyProfile.update({
+      where: { id: membership.companyId },
+      data: { logoUrl: dto.logoUrl },
+    });
+
+    return this.findMyPrivateProfile(userId);
   }
 
   async listTeam(userId: string) {

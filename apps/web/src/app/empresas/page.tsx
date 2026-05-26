@@ -7,7 +7,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
+import { SiteFooter } from "../../components/site-footer";
 import { SiteHeader } from "../../components/site-header";
+import { appName } from "../../lib/app-config";
 
 const gains = [
   {
@@ -50,7 +52,7 @@ export default function CompaniesPage() {
           <p className="eyebrow">Para empresas de eventos</p>
           <h1>Menos ligações, mais controle sobre cada escala.</h1>
           <p className="hero-text">
-            A NEXO organiza a contratação de freelancers em eventos com busca,
+            A {appName} organiza a contratação de freelancers em eventos com busca,
             convite, confirmação, pagamento e relatório em uma jornada só.
           </p>
           <div className="button-row">
@@ -103,6 +105,7 @@ export default function CompaniesPage() {
           Começar como empresa
         </Link>
       </section>
+      <SiteFooter />
     </main>
   );
 }

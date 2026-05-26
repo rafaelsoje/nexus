@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ContractStatus, PaymentStatus, UserRole } from "@prisma/client";
+import {
+  ContractStatus,
+  DisputeStatus,
+  PaymentSplitStatus,
+  PaymentStatus,
+  UserRole,
+} from "@prisma/client";
 import {
   publicCompanySelect,
   publicFreelancerSelect,
@@ -36,7 +42,7 @@ export class ContractsService {
         include: {
           event: true,
           freelancer: { select: publicFreelancerSelect },
-          payment: true,
+          paymentSplits: { include: { payment: true } },
         },
       });
     }
@@ -48,7 +54,7 @@ export class ContractsService {
       include: {
         event: true,
         company: { select: publicCompanySelect },
-        payment: true,
+        paymentSplits: { include: { payment: true } },
       },
     });
   }
@@ -60,14 +66,18 @@ export class ContractsService {
     );
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, companyId: company.id },
-      include: { payment: true },
+      include: { paymentSplits: { include: { payment: true } } },
     });
 
     if (!contract) {
       throw new NotFoundException("Contract not found");
     }
 
-    if (contract.payment?.status !== PaymentStatus.PAID) {
+    if (
+      !contract.paymentSplits.some(
+        (split) => split.payment.status === PaymentStatus.PAID,
+      )
+    ) {
       throw new BadRequestException("Payment must be paid before confirmation");
     }
 
@@ -103,8 +113,61 @@ export class ContractsService {
           event: true,
           company: { select: publicCompanySelect },
           freelancer: { select: publicFreelancerSelect },
+          paymentSplits: true,
         },
       });
+
+      if (
+        status === ContractStatus.NO_SHOW ||
+        status === ContractStatus.CANCELLED
+      ) {
+        const blockedSplits = await tx.paymentSplit.updateMany({
+          where: {
+            contractId: contract.id,
+            releaseStatus: PaymentSplitStatus.WAITING_RELEASE,
+          },
+          data: {
+            splitStatus: PaymentSplitStatus.BLOCKED,
+            releaseStatus: PaymentSplitStatus.BLOCKED,
+          },
+        });
+
+        if (status === ContractStatus.NO_SHOW) {
+          const openDispute = contract.disputes.find(
+            (dispute) =>
+              dispute.status === DisputeStatus.OPEN ||
+              dispute.status === DisputeStatus.UNDER_REVIEW,
+          );
+
+          if (!openDispute) {
+            await tx.dispute.create({
+              data: {
+                contractId: contract.id,
+                reason: "NO_SHOW_REPORTED",
+                details:
+                  "Disputa aberta automaticamente após a empresa marcar no-show.",
+              },
+            });
+          }
+        }
+
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: "PAYMENT_SPLIT_BLOCKED_BY_CONTRACT_STATUS",
+            entity: "Contract",
+            entityId: contract.id,
+            metadata: {
+              status,
+              reason:
+                status === ContractStatus.NO_SHOW
+                  ? "NO_SHOW_REPORTED"
+                  : "CONTRACT_CANCELLED",
+              blockedSplits: blockedSplits.count,
+            },
+          },
+        });
+      }
 
       if (role === UserRole.COMPANY) {
         await tx.notification.create({
@@ -157,7 +220,7 @@ export class ContractsService {
         : { freelancer: { userId } };
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, ...participantWhere },
-      include: { event: true, company: true, freelancer: true },
+      include: { event: true, company: true, freelancer: true, disputes: true },
     });
 
     if (!contract) {

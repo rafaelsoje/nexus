@@ -2,6 +2,14 @@ import type { UserRole } from "./api";
 
 export type Skill = { id: string; name: string; slug: string };
 
+export type EventRequirement = {
+  id?: string;
+  skillId: string;
+  quantity: number;
+  dailyRateCents?: number;
+  skill?: Skill;
+};
+
 export type EventItem = {
   id: string;
   name: string;
@@ -18,13 +26,7 @@ export type EventItem = {
   company?: { companyName: string; city?: string; state?: string };
   invitations?: Array<{ id: string; status: string }>;
   contracts?: Array<{ id: string; status: string }>;
-  requirements?: Array<{
-    id?: string;
-    skillId: string;
-    quantity: number;
-    dailyRateCents?: number;
-    skill?: Skill;
-  }>;
+  requirements?: EventRequirement[];
 };
 
 export type Freelancer = {
@@ -44,6 +46,7 @@ export type Freelancer = {
   portfolioUrl?: string;
   travelAvailability?: string;
   ratingAverage?: string;
+  isFavorite?: boolean;
   isAvailable?: boolean;
   blockingReason?: string;
   skills?: FreelancerSkillDetail[];
@@ -80,6 +83,7 @@ export type Invitation = {
   proposedAmountCents?: number;
   counterAmountCents?: number;
   agreedAmountCents?: number;
+  eventRequirement?: EventRequirement;
   event?: EventItem;
   company?: { companyName: string };
   freelancer?: Freelancer;
@@ -92,6 +96,7 @@ export type Application = {
   proposedAmountCents?: number;
   createdAt: string;
   event?: EventItem;
+  eventRequirement?: EventRequirement;
   company?: { companyName: string; city?: string; state?: string };
   freelancer?: Freelancer;
   contract?: Contract;
@@ -124,6 +129,29 @@ export type Contract = {
   event?: EventItem;
   company?: { companyName: string };
   freelancer?: Freelancer;
+  paymentSplits?: Array<{
+    id: string;
+    grossAmountCents?: number;
+    platformFeeAmountCents?: number;
+    freelancerNetAmountCents: number;
+    releaseStatus: string;
+    splitStatus: string;
+    freelancer?: Freelancer;
+    payout?: Payout;
+    payment?: {
+      id: string;
+      status: string;
+      grossAmountCents: number;
+      freelancerAmountCents: number;
+      totalFreelancerAmountCents?: number;
+      companyFeeAmountCents?: number;
+      freelancerFeeAmountCents?: number;
+      gatewayFeeAmountCents?: number;
+      platformAmountCents?: number;
+      freelancerNetAmountCents?: number;
+      amountToChargeCompanyCents?: number;
+    };
+  }>;
   payment?: {
     id: string;
     status: string;
@@ -142,9 +170,11 @@ export type Contract = {
 export type Payment = {
   id: string;
   status: string;
+  gateway?: string;
   grossAmountCents: number;
   freelancerAmountCents: number;
   platformFeeCents: number;
+  totalFreelancerAmountCents?: number;
   companyFeeAmountCents?: number;
   freelancerFeeAmountCents?: number;
   gatewayFeeAmountCents?: number;
@@ -154,7 +184,53 @@ export type Payment = {
   amountToReleaseFreelancerCents?: number;
   walletAmountCents?: number;
   gatewayAmountCents?: number;
-  contract?: Contract;
+  gatewayTransactionId?: string;
+  gatewayPaymentId?: string;
+  checkoutUrl?: string;
+  event?: EventItem;
+  company?: { companyName: string };
+  splits?: Array<{
+    id: string;
+    contractId: string;
+    freelancerId: string;
+    grossAmountCents: number;
+    freelancerNetAmountCents: number;
+    platformFeeAmountCents: number;
+    releaseStatus: string;
+    splitStatus: string;
+    contract?: Contract;
+    freelancer?: Freelancer;
+  }>;
+};
+
+export type PaymentWebhookLog = {
+  id: string;
+  gateway: string;
+  eventType: string;
+  gatewayEventId: string;
+  processed: boolean;
+  payload?: unknown;
+  createdAt: string;
+};
+
+export type AuditLog = {
+  id: string;
+  action: string;
+  entity: string;
+  entityId?: string;
+  metadata?: unknown;
+  createdAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+};
+
+export type PaymentDetail = Payment & {
+  webhooks?: PaymentWebhookLog[];
+  auditLogs?: AuditLog[];
 };
 
 export type Review = {
@@ -191,6 +267,17 @@ export type WalletData = {
     amountCents: number;
     description?: string;
   }>;
+  payouts?: Payout[];
+};
+
+export type Payout = {
+  id: string;
+  amountCents: number;
+  status: string;
+  scheduledFor?: string;
+  paidAt?: string;
+  createdAt: string;
+  freelancer?: Freelancer;
 };
 
 export type AvailabilityItem = {
@@ -209,6 +296,18 @@ export type VerificationDocument = {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+};
+
+export type GatewayAccount = {
+  id: string;
+  gateway: string;
+  gatewayCustomerId?: string;
+  gatewayRecipientId?: string;
+  gatewayWalletId?: string;
+  status: string;
+  kycStatus: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type FreelancerProfile = {
@@ -234,7 +333,9 @@ export type FreelancerProfile = {
   certifications?: string;
   portfolioUrl?: string;
   travelAvailability?: string;
+  verificationStatus?: VerificationStatus;
   skills: FreelancerSkillDetail[];
+  gatewayAccounts?: GatewayAccount[];
   verificationDocuments?: VerificationDocument[];
 };
 
@@ -246,6 +347,11 @@ export type CompanyProfile = {
   phone?: string;
   email: string;
   logoUrl?: string;
+  postalCode?: string;
+  addressStreet?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  neighborhood?: string;
   city?: string;
   state?: string;
   verificationDocuments?: VerificationDocument[];
@@ -331,11 +437,24 @@ export type AdminUser = {
   role: UserRole;
   isActive: boolean;
   createdAt: string;
+  adminProfile?: {
+    accessLevel: AdminAccessLevel;
+  } | null;
+  temporaryPassword?: string;
 };
+
+export type AdminAccessLevel =
+  | "OWNER"
+  | "MANAGER"
+  | "FINANCE"
+  | "SUPPORT"
+  | "VERIFICATION"
+  | "READONLY";
 
 export type ReportSummary = {
   scope: UserRole;
   totals: Record<string, number>;
+  financialSummary?: FinancialSummary;
   contractStatus: Array<{ status: string; count: number }>;
   eventStatus: Array<{ status: string; count: number }>;
   paymentStatus: Array<{ status: string; count: number }>;
@@ -346,5 +465,37 @@ export type ReportSummary = {
     freelancerAmountCents: number;
     platformFeeCents: number;
     payments: number;
+  }>;
+};
+
+export type FinancialSummary = {
+  gmvCents: number;
+  walletPaidCents: number;
+  gatewayPaidCents: number;
+  companyFeeCents: number;
+  freelancerFeeCents: number;
+  platformFeeCents: number;
+  gatewayFeeCents: number;
+  splitGrossCents: number;
+  freelancerNetCents: number;
+  splitPlatformFeeCents: number;
+  walletBalanceCents: number;
+  payoutAmountCents: number;
+  chargebackAmountCents: number;
+  chargebacks: number;
+  refundedGrossCents: number;
+  refundedFreelancerNetCents: number;
+  refunds: number;
+  splitStatus: Array<{
+    status: string;
+    count: number;
+    grossAmountCents: number;
+    freelancerNetAmountCents: number;
+    platformFeeAmountCents: number;
+  }>;
+  payoutStatus: Array<{
+    status: string;
+    count: number;
+    amountCents: number;
   }>;
 };

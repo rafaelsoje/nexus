@@ -74,6 +74,9 @@ export class ApplicationsService {
     return events
       .map((event) => ({
         ...event,
+        requirements: event.requirements.filter((item) =>
+          skillIds.includes(item.skillId),
+        ),
         openSpots: Math.max(
           event.desiredProfessionals - event.contracts.length,
           0,
@@ -90,6 +93,7 @@ export class ApplicationsService {
       orderBy: { createdAt: "desc" },
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
+        eventRequirement: { include: { skill: true } },
         company: {
           select: publicCompanySelect,
         },
@@ -109,6 +113,7 @@ export class ApplicationsService {
       orderBy: { createdAt: "desc" },
       include: {
         event: { include: { requirements: { include: { skill: true } } } },
+        eventRequirement: { include: { skill: true } },
         freelancer: {
           select: publicFreelancerSelect,
         },
@@ -155,6 +160,11 @@ export class ApplicationsService {
     }
 
     await this.assertFreelancerCanApply(freelancer.id, event);
+    const eventRequirement = this.resolveApplicationRequirement(
+      freelancer,
+      event,
+      dto.eventRequirementId,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const application = await tx.application.create({
@@ -162,6 +172,7 @@ export class ApplicationsService {
           eventId: event.id,
           companyId: event.companyId,
           freelancerId: freelancer.id,
+          eventRequirementId: eventRequirement?.id,
           message: dto.message,
           proposedAmountCents: dto.proposedAmountCents,
         },
@@ -201,7 +212,10 @@ export class ApplicationsService {
       company.id,
     );
 
-    if (application.status !== ApplicationStatus.PENDING) {
+    if (
+      application.status !== ApplicationStatus.PENDING &&
+      application.status !== ApplicationStatus.DECLINED
+    ) {
       throw new BadRequestException("Application is not pending");
     }
 
@@ -216,6 +230,7 @@ export class ApplicationsService {
 
     const amountCents =
       application.proposedAmountCents ??
+      application.eventRequirement?.dailyRateCents ??
       application.event.requirements[0]?.dailyRateCents ??
       application.freelancer.dailyRateCents ??
       0;
@@ -283,6 +298,10 @@ export class ApplicationsService {
       applicationId,
       company.id,
     );
+
+    if (application.status === ApplicationStatus.DECLINED) {
+      return application;
+    }
 
     if (application.status !== ApplicationStatus.PENDING) {
       throw new BadRequestException("Application is not pending");
@@ -472,6 +491,7 @@ export class ApplicationsService {
       where: { id: applicationId, companyId },
       include: {
         event: { include: { requirements: true } },
+        eventRequirement: true,
         freelancer: true,
       },
     });
@@ -481,6 +501,45 @@ export class ApplicationsService {
     }
 
     return application;
+  }
+
+  private resolveApplicationRequirement(
+    freelancer: {
+      skills: Array<{ skillId: string }>;
+    },
+    event: {
+      requirements: Array<{ id: string; skillId: string }>;
+    },
+    eventRequirementId?: string,
+  ) {
+    const freelancerSkillIds = new Set(
+      freelancer.skills.map((item) => item.skillId),
+    );
+    const matchingRequirements = event.requirements.filter((item) =>
+      freelancerSkillIds.has(item.skillId),
+    );
+
+    if (!matchingRequirements.length) {
+      throw new BadRequestException(
+        "Freelancer does not match event requirements",
+      );
+    }
+
+    if (!eventRequirementId) {
+      return matchingRequirements[0];
+    }
+
+    const selectedRequirement = matchingRequirements.find(
+      (item) => item.id === eventRequirementId,
+    );
+
+    if (!selectedRequirement) {
+      throw new BadRequestException(
+        "Freelancer does not match event requirements",
+      );
+    }
+
+    return selectedRequirement;
   }
 
   private async findFreelancerByUserId(userId: string) {

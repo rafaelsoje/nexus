@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
+import { CookieConsent } from "../components/cookie-consent";
+import { appName } from "../lib/app-config";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -9,7 +11,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "NEXO | Marketplace e fintech para eventos",
+  title: `${appName} | Marketplace e fintech para eventos`,
   description:
     "Contrate freelancers de eventos, organize agendas, formalize pagamentos e acompanhe relatórios em uma única plataforma.",
 };
@@ -34,6 +36,7 @@ export default function RootLayout({
       <body className={poppins.variable}>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         {children}
+        <CookieConsent />
       </body>
     </html>
   );

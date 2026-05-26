@@ -30,6 +30,13 @@ const roleLabels: Record<CompanyMemberRole, string> = {
   VIEWER: "Leitura",
 };
 
+const invitationStatusLabels: Record<CompanyTeamInvitation["status"], string> = {
+  ACCEPTED: "Aceito",
+  CANCELLED: "Cancelado",
+  EXPIRED: "Expirado",
+  PENDING: "Pendente",
+};
+
 export default function CompanyTeamPage() {
   const session = useRequiredSession();
   const [team, setTeam] = useState<CompanyTeam | null>(null);
@@ -201,7 +208,7 @@ export default function CompanyTeamPage() {
                   {new Date(invitation.expiresAt).toLocaleDateString("pt-BR")}
                 </span>
               </div>
-              <small>{invitation.status}</small>
+              <small>{invitationStatusLabels[invitation.status]}</small>
             </article>
           ))}
           {team && !team.invitations.length ? (

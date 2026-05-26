@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, CheckCircle2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -24,15 +24,7 @@ export default function NotificationsPage() {
     [notifications],
   );
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadNotifications();
-  }, [session]);
-
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -49,7 +41,15 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadNotifications();
+  }, [loadNotifications, session]);
 
   async function markAsRead(notificationId: string) {
     setError("");
@@ -61,6 +61,7 @@ export default function NotificationsPage() {
       });
       setSuccess("Notificação marcada como lida.");
       await loadNotifications();
+      window.dispatchEvent(new Event("nexus:notifications-updated"));
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -85,6 +86,7 @@ export default function NotificationsPage() {
       );
       setSuccess("Notificações marcadas como lidas.");
       await loadNotifications();
+      window.dispatchEvent(new Event("nexus:notifications-updated"));
     } catch (caught) {
       setError(
         caught instanceof Error

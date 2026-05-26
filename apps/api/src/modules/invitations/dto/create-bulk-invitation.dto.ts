@@ -18,6 +18,9 @@ export class CreateBulkInvitationDto {
   @IsString({ each: true })
   freelancerIds: string[];
 
+  @IsString()
+  eventRequirementId: string;
+
   @IsDateString()
   expiresAt: string;
 

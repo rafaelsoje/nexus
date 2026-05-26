@@ -19,6 +19,7 @@ import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
 import { CompaniesService } from "./companies.service";
 import { InviteCompanyMemberDto } from "./dto/invite-company-member.dto";
 import { AcceptCompanyInvitationDto } from "./dto/accept-company-invitation.dto";
+import { UpdateCompanyLogoDto } from "./dto/update-company-logo.dto";
 
 @Controller("companies")
 export class CompaniesController {
@@ -49,6 +50,16 @@ export class CompaniesController {
   @Get("profile")
   myProfile(@CurrentUser() user: CurrentUserPayload) {
     return this.companiesService.findMyPrivateProfile(user.sub);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Patch("profile/logo")
+  updateLogo(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpdateCompanyLogoDto,
+  ) {
+    return this.companiesService.updateMyLogo(user.sub, dto);
   }
 
   @Roles(UserRole.COMPANY)

@@ -7,7 +7,7 @@
     "dev": "pnpm --parallel --filter @nexus/api --filter @nexus/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "e2e": "playwright test",
+    "e2e": "dotenv -e .env -- playwright test",
     "ci:check": "pnpm prisma:generate && pnpm --filter @nexus/api lint && pnpm --filter @nexus/web exec tsc --noEmit && pnpm --filter @nexus/api test && pnpm build && pnpm e2e",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\" && pnpm --filter @nexus/api exec prisma format",

@@ -12,6 +12,7 @@ import { DisputesModule } from "./modules/disputes/disputes.module";
 import { DocumentsModule } from "./modules/documents/documents.module";
 import { EventsModule } from "./modules/events/events.module";
 import { FreelancersModule } from "./modules/freelancers/freelancers.module";
+import { GatewayAccountsModule } from "./modules/gateway-accounts/gateway-accounts.module";
 import { HealthModule } from "./modules/health/health.module";
 import { InvitationsModule } from "./modules/invitations/invitations.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
@@ -32,6 +33,7 @@ import { WalletModule } from "./modules/wallet/wallet.module";
     UsersModule,
     CompaniesModule,
     FreelancersModule,
+    GatewayAccountsModule,
     SkillsModule,
     EventsModule,
     AvailabilityModule,

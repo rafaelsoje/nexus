@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { TransactionType, UserRole } from "@prisma/client";
+import { PayoutStatus, TransactionType, UserRole } from "@prisma/client";
 import {
   CompanyAccessService,
   companyFinanceRoles,
@@ -12,6 +12,7 @@ import {
 } from "../company-access/company-access.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TopUpWalletDto } from "./dto/top-up-wallet.dto";
+import { RequestPayoutDto } from "./dto/request-payout.dto";
 
 @Injectable()
 export class WalletService {
@@ -78,6 +79,64 @@ export class WalletService {
         include: {
           transactions: { orderBy: { createdAt: "desc" } },
           payouts: { orderBy: { createdAt: "desc" } },
+        },
+      });
+    });
+  }
+
+  async requestFreelancerPayout(userId: string, dto: RequestPayoutDto) {
+    if (dto.amountCents <= 0) {
+      throw new BadRequestException("Amount must be positive");
+    }
+
+    const freelancer = await this.prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: { wallet: true },
+    });
+
+    if (!freelancer?.wallet) {
+      throw new ForbiddenException("Freelancer profile is required");
+    }
+
+    if (freelancer.wallet.balanceCents < dto.amountCents) {
+      throw new BadRequestException("Insufficient wallet balance");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.wallet.update({
+        where: { id: freelancer.wallet!.id },
+        data: { balanceCents: { decrement: dto.amountCents } },
+      });
+
+      await tx.transaction.create({
+        data: {
+          walletId: freelancer.wallet!.id,
+          type: TransactionType.PAYOUT,
+          amountCents: dto.amountCents,
+          description: dto.description?.trim() || "Solicitação de saque",
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: "PAYOUT_REQUESTED",
+          entity: "Wallet",
+          entityId: freelancer.wallet!.id,
+          metadata: {
+            freelancerId: freelancer.id,
+            amountCents: dto.amountCents,
+          },
+        },
+      });
+
+      return tx.payout.create({
+        data: {
+          freelancerId: freelancer.id,
+          walletId: freelancer.wallet!.id,
+          amountCents: dto.amountCents,
+          status: PayoutStatus.SCHEDULED,
+          scheduledFor: new Date(),
         },
       });
     });

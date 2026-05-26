@@ -1,7 +1,7 @@
 "use client";
 
-import { Bell } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Bell, Send } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -19,15 +19,7 @@ export default function InvitationsPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadInvitations();
-  }, [session]);
-
-  async function loadInvitations() {
+  const loadInvitations = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -48,7 +40,15 @@ export default function InvitationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadInvitations();
+  }, [loadInvitations, session]);
 
   async function respondInvitation(
     invitationId: string,
@@ -135,7 +135,7 @@ export default function InvitationsPage() {
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
       {loading ? <EmptyState>Carregando convites...</EmptyState> : null}
 
-      <section className="dashboard-grid">
+      <section className="dashboard-grid invitations-grid">
         <ListPanel
           icon={<Bell size={18} />}
           title={
@@ -145,22 +145,94 @@ export default function InvitationsPage() {
           }
         >
           {invitations.map((invitation) => (
-            <div className="list-row" key={invitation.id}>
-              <div>
+            <div className="list-row invitation-card" key={invitation.id}>
+              <div className="invitation-summary">
                 <strong>
                   {invitation.event?.name ??
                     invitation.freelancer?.displayName ??
                     "Convite"}
                 </strong>
                 <span>
-                  {invitation.company?.companyName ??
-                    invitation.freelancer?.displayName ??
-                    "Participante"}{" "}
-                  - {invitation.status}
+                  <strong className="participant-highlight">
+                    {invitation.company?.companyName ??
+                      invitation.freelancer?.displayName ??
+                      "Participante"}
+                  </strong>{" "}
+                  - {formatInvitationStatus(invitation.status)}
                 </span>
+                <small>
+                  Qualificação desejada:{" "}
+                  {formatInvitationDesiredRole(invitation)}
+                </small>
                 <small>{formatNegotiation(invitation)}</small>
               </div>
-              {invitation.status === "PENDING" ? (
+              {session.user.role === "FREELANCER" &&
+              invitation.status === "PENDING" ? (
+                <>
+                  <div className="invitation-quick-accept">
+                    <div>
+                      <span>Valor da empresa</span>
+                      <strong>{formatInvitationBaseAmount(invitation)}</strong>
+                    </div>
+                    <button
+                      className="primary-button"
+                      onClick={() => respondInvitation(invitation.id, "accept")}
+                      type="button"
+                    >
+                      <Send size={18} />
+                      Aceitar convite
+                    </button>
+                    <button
+                      className="secondary-button"
+                      onClick={() => respondInvitation(invitation.id, "decline")}
+                      type="button"
+                    >
+                      Recusar
+                    </button>
+                  </div>
+
+                  <div className="opportunity-separator">
+                    <span>ou enviar contraproposta</span>
+                  </div>
+
+                  <form
+                    className="inline-negotiation invitation-counter-offer"
+                    onSubmit={proposeAmount}
+                  >
+                    <input
+                      name="invitationId"
+                      type="hidden"
+                      value={invitation.id}
+                    />
+                    <label className="field">
+                      <span>Novo valor</span>
+                      <input
+                        defaultValue={formatAmountInput(
+                          invitation.counterAmountCents ??
+                            invitation.proposedAmountCents,
+                        )}
+                        min={0}
+                        name="amount"
+                        placeholder="Valor"
+                        step="0.01"
+                        type="number"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Mensagem</span>
+                      <input
+                        name="message"
+                        placeholder="Explique sua contraproposta"
+                      />
+                    </label>
+                    <button className="secondary-button" type="submit">
+                      Enviar contraproposta
+                    </button>
+                  </form>
+                </>
+              ) : null}
+              {session.user.role === "COMPANY" &&
+              invitation.status === "PENDING" ? (
                 <form className="inline-negotiation" onSubmit={proposeAmount}>
                   <input
                     name="invitationId"
@@ -168,46 +240,21 @@ export default function InvitationsPage() {
                     value={invitation.id}
                   />
                   <input
+                    defaultValue={formatAmountInput(
+                      invitation.counterAmountCents ??
+                        invitation.proposedAmountCents,
+                    )}
                     min={0}
                     name="amount"
                     placeholder="Valor"
                     step="0.01"
                     type="number"
                   />
-                  <input
-                    name="message"
-                    placeholder="Mensagem da proposta"
-                  />
+                  <input name="message" placeholder="Mensagem da proposta" />
                   <button className="icon-action" type="submit">
                     Propor
                   </button>
                 </form>
-              ) : null}
-              {session.user.role === "FREELANCER" &&
-              invitation.status === "PENDING" ? (
-                <div className="row-actions">
-                  {invitation.proposedAmountCents ? (
-                    <button
-                      className="icon-action"
-                      onClick={() => acceptAmount(invitation.id)}
-                      type="button"
-                    >
-                      Aceitar valor
-                    </button>
-                  ) : null}
-                  <button
-                    className="icon-action"
-                    onClick={() => respondInvitation(invitation.id, "accept")}
-                  >
-                    Aceitar
-                  </button>
-                  <button
-                    className="icon-action ghost"
-                    onClick={() => respondInvitation(invitation.id, "decline")}
-                  >
-                    Recusar
-                  </button>
-                </div>
               ) : null}
               {session.user.role === "COMPANY" &&
               invitation.status === "PENDING" &&
@@ -228,6 +275,61 @@ export default function InvitationsPage() {
   );
 }
 
+function formatInvitationStatus(status: string) {
+  const labels: Record<string, string> = {
+    ACCEPTED: "Aceito",
+    CANCELLED: "Cancelado",
+    DECLINED: "Recusado",
+    EXPIRED: "Expirado",
+    PENDING: "Pendente",
+  };
+
+  return labels[status] ?? status;
+}
+
+function formatInvitationBaseAmount(invitation: Invitation) {
+  return invitation.proposedAmountCents
+    ? formatCurrency(invitation.proposedAmountCents)
+    : "valor não informado";
+}
+
+function formatInvitationDesiredRole(invitation: Invitation) {
+  if (invitation.eventRequirement) {
+    const skillName = invitation.eventRequirement.skill?.name ?? "Função";
+    const amount = invitation.eventRequirement.dailyRateCents
+      ? ` - ${formatCurrency(invitation.eventRequirement.dailyRateCents)}`
+      : "";
+
+    return `${skillName}${amount}`;
+  }
+
+  const requirements = invitation.event?.requirements ?? [];
+
+  if (!requirements.length) {
+    return "não informada";
+  }
+
+  const offeredAmount = invitation.proposedAmountCents;
+  const amountMatches = offeredAmount
+    ? requirements.filter((item) => item.dailyRateCents === offeredAmount)
+    : [];
+  const relevantRequirements = amountMatches.length
+    ? amountMatches
+    : requirements;
+  const labels = relevantRequirements
+    .map((item) => {
+      const skillName = item.skill?.name ?? "Vaga";
+      const amount = item.dailyRateCents
+        ? ` - ${formatCurrency(item.dailyRateCents)}`
+        : "";
+
+      return `${skillName}${amount}`;
+    })
+    .filter(Boolean);
+
+  return labels.join(", ");
+}
+
 function formatNegotiation(invitation: Invitation) {
   const items = [
     invitation.proposedAmountCents
@@ -242,4 +344,12 @@ function formatNegotiation(invitation: Invitation) {
   ].filter(Boolean);
 
   return items.length ? items.join(" - ") : "Sem valor negociado.";
+}
+
+function formatAmountInput(amountCents?: number) {
+  if (!amountCents) {
+    return "";
+  }
+
+  return String(amountCents / 100);
 }

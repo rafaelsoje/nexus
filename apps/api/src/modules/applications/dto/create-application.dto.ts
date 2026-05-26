@@ -7,6 +7,10 @@ export class CreateApplicationDto {
 
   @IsOptional()
   @IsString()
+  eventRequirementId?: string;
+
+  @IsOptional()
+  @IsString()
   message?: string;
 
   @IsOptional()

@@ -1,7 +1,8 @@
 "use client";
 
-import { BriefcaseBusiness, Send, UsersRound } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { BriefcaseBusiness, MessageCircle, Send, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -9,13 +10,24 @@ import {
 } from "../../../components/dashboard-shell";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
-import type { Application, EventItem } from "../../../lib/dashboard-types";
+import type {
+  Application,
+  EventItem,
+  EventRequirement,
+} from "../../../lib/dashboard-types";
 
 const statusLabels: Record<string, string> = {
   PENDING: "Pendente",
   ACCEPTED: "Aprovada",
   DECLINED: "Recusada",
   CANCELLED: "Cancelada",
+};
+
+type FreelancerProfileForOpportunities = {
+  skills?: Array<{
+    skillId?: string;
+    skill?: { id: string };
+  }>;
 };
 
 export default function OpportunitiesPage() {
@@ -26,25 +38,23 @@ export default function OpportunitiesPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadOpportunities();
-  }, [session]);
-
-  async function loadOpportunities() {
+  const loadOpportunities = useCallback(async () => {
     setError("");
     setLoading(true);
 
     try {
       if (session?.user.role === "FREELANCER") {
-        const [loadedOpportunities, loadedApplications] = await Promise.all([
-          apiRequest<EventItem[]>("/api/applications/opportunities"),
-          apiRequest<Application[]>("/api/applications/mine"),
-        ]);
-        setOpportunities(loadedOpportunities);
+        const [loadedOpportunities, loadedApplications, profile] =
+          await Promise.all([
+            apiRequest<EventItem[]>("/api/applications/opportunities"),
+            apiRequest<Application[]>("/api/applications/mine"),
+            apiRequest<FreelancerProfileForOpportunities>(
+              "/api/freelancers/profile",
+            ),
+          ]);
+        setOpportunities(
+          filterOpportunitiesByFreelancerSkills(loadedOpportunities, profile),
+        );
         setApplications(loadedApplications);
         return;
       }
@@ -68,13 +78,26 @@ export default function OpportunitiesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadOpportunities();
+  }, [loadOpportunities, session]);
 
   async function applyToEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const proposedAmount = Number(form.get("proposedAmount") || 0);
+    const submitter = (event.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
+    const acceptsCompanyOffer = submitter?.value === "company-offer";
+    const companyAmount = Number(form.get("companyAmount") || 0);
+    const customAmount = Number(form.get("proposedAmount") || 0);
+    const proposedAmount = acceptsCompanyOffer ? companyAmount : customAmount;
     setError("");
     setSuccess("");
 
@@ -83,7 +106,11 @@ export default function OpportunitiesPage() {
         method: "POST",
         body: JSON.stringify({
           eventId: String(form.get("eventId")),
-          message: String(form.get("message") || ""),
+          eventRequirementId:
+            String(form.get("eventRequirementId") || "") || undefined,
+          message: acceptsCompanyOffer
+            ? "Aceito o valor indicado pela empresa."
+            : String(form.get("message") || ""),
           proposedAmountCents: proposedAmount
             ? Math.round(proposedAmount * 100)
             : undefined,
@@ -157,51 +184,11 @@ export default function OpportunitiesPage() {
             {opportunities.length ? (
               <div className="list">
                 {opportunities.map((event) => (
-                  <form
-                    className="list-row feature-row"
+                  <OpportunityApplicationForm
+                    event={event}
                     key={event.id}
                     onSubmit={applyToEvent}
-                  >
-                    <input name="eventId" type="hidden" value={event.id} />
-                    <div>
-                      <strong>{event.company?.companyName ?? "Empresa"}</strong>
-                      <span>
-                        {event.name} - {formatDateTime(event.startsAt)} -{" "}
-                        {event.city ?? "Cidade não informada"}
-                      </span>
-                      <small>
-                        {event.openSpots ?? event.desiredProfessionals ?? 1}{" "}
-                        vaga(s) - {formatRequirements(event)}
-                      </small>
-                      <small>
-                        Cachê indicado pela empresa: {formatEventBudget(event)}
-                      </small>
-                    </div>
-                    <div className="form-grid">
-                      <Field label="Sua proposta de diária">
-                        <input
-                          defaultValue={formatAmountInput(
-                            getLowestRequirementAmount(event),
-                          )}
-                          min={0}
-                          name="proposedAmount"
-                          placeholder="Ex.: 350"
-                          step="0.01"
-                          type="number"
-                        />
-                      </Field>
-                      <Field label="Mensagem">
-                        <input
-                          name="message"
-                          placeholder="Conte por que você é uma boa escolha"
-                        />
-                      </Field>
-                    </div>
-                    <button className="primary-button" type="submit">
-                      <Send size={18} />
-                      Candidatar
-                    </button>
-                  </form>
+                  />
                 ))}
               </div>
             ) : (
@@ -234,19 +221,30 @@ export default function OpportunitiesPage() {
                         {application.freelancer?.displayName ??
                           application.freelancer?.user?.name ??
                           "Profissional"}
+                        {application.eventRequirement?.skill?.name
+                          ? ` - ${application.eventRequirement.skill.name}`
+                          : ""}
                       </strong>
                       <span>
                         {application.event?.name ?? "Evento"} -{" "}
                         {statusLabels[application.status] ?? application.status}
                       </span>
                       <small>
+                        Proposta do freelancer:{" "}
                         {application.proposedAmountCents
                           ? formatCurrency(application.proposedAmountCents)
-                          : "Sem proposta de valor"}{" "}
-                        - {application.message || "Sem mensagem"}
+                          : "sem proposta de valor"}
+                      </small>
+                      <small>
+                        Valor indicado pela empresa:{" "}
+                        {formatApplicationCompanyBudget(application)}
+                      </small>
+                      <small>
+                        Mensagem do freelancer:{" "}
+                        {application.message || "sem mensagem"}
                       </small>
                     </div>
-                    {application.status === "PENDING" ? (
+                    {canCompanyActOnApplication(application) ? (
                       <div className="row-actions">
                         <button
                           className="icon-action"
@@ -255,7 +253,9 @@ export default function OpportunitiesPage() {
                           }
                           type="button"
                         >
-                          Aprovar
+                          {application.status === "DECLINED"
+                            ? "Aceitar nova proposta"
+                            : "Aprovar"}
                         </button>
                         <button
                           className="icon-action ghost"
@@ -264,8 +264,17 @@ export default function OpportunitiesPage() {
                           }
                           type="button"
                         >
-                          Recusar
+                          {application.status === "DECLINED"
+                            ? "Manter recusa"
+                            : "Recusar"}
                         </button>
+                        <Link
+                          className="icon-action ghost"
+                          href={`/dashboard/chat?applicationId=${application.id}`}
+                        >
+                          <MessageCircle size={14} />
+                          Negociar
+                        </Link>
                       </div>
                     ) : null}
                   </div>
@@ -278,6 +287,152 @@ export default function OpportunitiesPage() {
         </section>
       ) : null}
     </DashboardShell>
+  );
+}
+
+function canCompanyActOnApplication(application: Application) {
+  if (application.status === "PENDING") {
+    return true;
+  }
+
+  return (
+    application.status === "DECLINED" &&
+    Boolean(application.proposedAmountCents) &&
+    !application.contract
+  );
+}
+
+function filterOpportunitiesByFreelancerSkills(
+  opportunities: EventItem[],
+  profile: FreelancerProfileForOpportunities,
+) {
+  const skillIds = new Set(
+    profile.skills
+      ?.map((item) => item.skillId ?? item.skill?.id)
+      .filter((skillId): skillId is string => Boolean(skillId)) ?? [],
+  );
+
+  if (!skillIds.size) {
+    return [];
+  }
+
+  return opportunities
+    .map((event) => ({
+      ...event,
+      requirements:
+        event.requirements?.filter((item) => skillIds.has(item.skillId)) ?? [],
+    }))
+    .filter((event) => event.requirements.length > 0);
+}
+
+function OpportunityApplicationForm({
+  event,
+  onSubmit,
+}: Readonly<{
+  event: EventItem;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}>) {
+  const requirements = event.requirements ?? [];
+  const [selectedRequirementId, setSelectedRequirementId] = useState(
+    requirements[0]?.id ?? "",
+  );
+  const selectedRequirement =
+    requirements.find((item) => item.id === selectedRequirementId) ??
+    requirements[0];
+
+  return (
+    <form className="list-row feature-row opportunity-card" onSubmit={onSubmit}>
+      <input name="eventId" type="hidden" value={event.id} />
+      <input
+        name="companyAmount"
+        type="hidden"
+        value={formatAmountInput(selectedRequirement?.dailyRateCents)}
+      />
+      <div className="opportunity-summary">
+        <strong>{event.company?.companyName ?? "Empresa"}</strong>
+        <span>
+          {event.name} - {formatDateTime(event.startsAt)} -{" "}
+          {event.city ?? "Cidade não informada"}
+        </span>
+      </div>
+
+      <div className="opportunity-requirements">
+        <span>Vagas</span>
+        {requirements.map((requirement) => (
+          <small key={requirement.id ?? requirement.skillId}>
+            {formatRequirementLine(requirement)}
+          </small>
+        ))}
+      </div>
+
+      <div className="opportunity-quick-apply">
+        <Field label="Vaga">
+          <select
+            name="eventRequirementId"
+            onChange={(event) => setSelectedRequirementId(event.target.value)}
+            required
+            value={selectedRequirement?.id ?? ""}
+          >
+            {requirements.map((requirement) => (
+              <option key={requirement.id} value={requirement.id}>
+                {formatRequirementOption(requirement)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div>
+          <span>Valor da empresa</span>
+          <strong>
+            {selectedRequirement?.dailyRateCents
+              ? formatCurrency(selectedRequirement.dailyRateCents)
+              : "valor não informado"}
+          </strong>
+        </div>
+        <button
+          className="primary-button"
+          name="applicationMode"
+          type="submit"
+          value="company-offer"
+        >
+          <Send size={18} />
+          Aceitar proposta
+        </button>
+      </div>
+
+      <div className="opportunity-separator">
+        <span>ou enviar outro valor</span>
+      </div>
+
+      <div className="form-grid opportunity-counter-offer">
+        <Field label="Sua proposta de diária">
+          <input
+            key={selectedRequirement?.id ?? event.id}
+            defaultValue={formatAmountInput(
+              selectedRequirement?.dailyRateCents,
+            )}
+            min={0}
+            name="proposedAmount"
+            placeholder="Ex.: 350"
+            step="0.01"
+            type="number"
+          />
+        </Field>
+        <Field label="Mensagem">
+          <input
+            name="message"
+            placeholder="Conte por que você é uma boa escolha"
+          />
+        </Field>
+        <button
+          className="secondary-button"
+          name="applicationMode"
+          type="submit"
+          value="custom-offer"
+        >
+          Enviar com meu valor
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -317,52 +472,75 @@ function ApplicationsPanel({
   );
 }
 
-function formatRequirements(event: EventItem) {
-  const names =
-    event.requirements
-      ?.map((item) => {
-        const name = item.skill?.name;
+function formatRequirementOption(requirement: EventRequirement) {
+  const skillName = requirement.skill?.name ?? "Vaga";
+  const amount = requirement.dailyRateCents
+    ? ` - ${formatCurrency(requirement.dailyRateCents)}`
+    : "";
 
-        if (!name) {
-          return null;
-        }
-
-        return item.dailyRateCents
-          ? `${name} (${formatCurrency(item.dailyRateCents)})`
-          : name;
-      })
-      .filter(Boolean) ?? [];
-
-  return names.length ? names.join(", ") : "Sem especialidade definida";
+  return `${skillName}${amount}`;
 }
 
-function formatEventBudget(event: EventItem) {
-  const amounts =
-    event.requirements
-      ?.map((item) => item.dailyRateCents)
-      .filter((amount): amount is number => typeof amount === "number") ?? [];
+function formatRequirementLine(requirement: EventRequirement) {
+  const skillName = requirement.skill?.name ?? "Vaga";
+  const quantity = `${requirement.quantity} vaga(s)`;
+  const amount = requirement.dailyRateCents
+    ? ` - ${formatCurrency(requirement.dailyRateCents)} por diária`
+    : " - valor não informado";
 
-  if (!amounts.length) {
+  return `${skillName}: ${quantity}${amount}`;
+}
+
+function formatApplicationCompanyBudget(application: Application) {
+  if (application.eventRequirement) {
+    const amount = application.eventRequirement.dailyRateCents
+      ? `${formatCurrency(application.eventRequirement.dailyRateCents)} por diária`
+      : "valor não informado";
+    const skillName = application.eventRequirement.skill?.name;
+
+    return skillName ? `${amount} para ${skillName}` : amount;
+  }
+
+  const requirements = application.event?.requirements ?? [];
+  const freelancerSkillIds = new Set(
+    application.freelancer?.skills
+      ?.map((item) => item.skill.id)
+      .filter(Boolean) ?? [],
+  );
+  const matchingRequirements = freelancerSkillIds.size
+    ? requirements.filter((item) => freelancerSkillIds.has(item.skillId))
+    : [];
+  const relevantRequirements = matchingRequirements.length
+    ? matchingRequirements
+    : requirements;
+  const requirementsWithAmount = relevantRequirements.filter(
+    (item) => typeof item.dailyRateCents === "number",
+  );
+
+  if (!requirementsWithAmount.length) {
     return "valor não informado";
   }
 
+  const amounts = requirementsWithAmount.map((item) => item.dailyRateCents ?? 0);
   const lowest = Math.min(...amounts);
   const highest = Math.max(...amounts);
+  const skillNames = requirementsWithAmount
+    .map((item) => item.skill?.name)
+    .filter(Boolean);
+  const amountLabel =
+    lowest === highest
+      ? `${formatCurrency(lowest)} por diária`
+      : `${formatCurrency(lowest)} a ${formatCurrency(highest)} por diária`;
 
-  if (lowest === highest) {
-    return `${formatCurrency(lowest)} por diária`;
+  if (requirementsWithAmount.length === 1 && skillNames[0]) {
+    return `${amountLabel} para ${skillNames[0]}`;
   }
 
-  return `${formatCurrency(lowest)} a ${formatCurrency(highest)} por diária`;
-}
+  if (skillNames.length) {
+    return `${amountLabel} (${skillNames.join(", ")})`;
+  }
 
-function getLowestRequirementAmount(event: EventItem) {
-  const amounts =
-    event.requirements
-      ?.map((item) => item.dailyRateCents)
-      .filter((amount): amount is number => typeof amount === "number") ?? [];
-
-  return amounts.length ? Math.min(...amounts) : undefined;
+  return amountLabel;
 }
 
 function formatAmountInput(amountCents?: number) {

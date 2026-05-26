@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, UserCog, UsersRound } from "lucide-react";
 import {
   DashboardShell,
@@ -13,7 +13,7 @@ import { apiRequest } from "../../../lib/api";
 import type { AdminUser } from "../../../lib/dashboard-types";
 
 const roleLabels: Record<AdminUser["role"], string> = {
-  ADMIN: "Admin",
+  ADMIN: "Administrador",
   COMPANY: "Empresa",
   FREELANCER: "Freelancer",
 };
@@ -28,22 +28,26 @@ export default function UsersPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const activeUsers = useMemo(
-    () => users.filter((user) => user.isActive).length,
+  const platformUsers = useMemo(
+    () => users.filter((user) => user.role !== "ADMIN"),
     [users],
+  );
+  const activeUsers = useMemo(
+    () => platformUsers.filter((user) => user.isActive).length,
+    [platformUsers],
   );
   const companies = useMemo(
-    () => users.filter((user) => user.role === "COMPANY").length,
-    [users],
+    () => platformUsers.filter((user) => user.role === "COMPANY").length,
+    [platformUsers],
   );
   const freelancers = useMemo(
-    () => users.filter((user) => user.role === "FREELANCER").length,
-    [users],
+    () => platformUsers.filter((user) => user.role === "FREELANCER").length,
+    [platformUsers],
   );
   const filteredUsers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return users.filter((user) => {
+    return platformUsers.filter((user) => {
       const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
       const matchesStatus =
         statusFilter === "ALL" ||
@@ -56,17 +60,9 @@ export default function UsersPage() {
 
       return matchesRole && matchesStatus && matchesSearch;
     });
-  }, [roleFilter, searchTerm, statusFilter, users]);
+  }, [platformUsers, roleFilter, searchTerm, statusFilter]);
 
-  useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    void loadUsers();
-  }, [session]);
-
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     setError("");
     setLoading(true);
 
@@ -84,7 +80,15 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [session?.user.role]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void loadUsers();
+  }, [loadUsers, session]);
 
   async function updateUserStatus(userId: string, isActive: boolean) {
     setError("");
@@ -127,7 +131,7 @@ export default function UsersPage() {
           <section className="metrics">
             <article className="metric">
               <span>Total</span>
-              <strong>{users.length}</strong>
+              <strong>{platformUsers.length}</strong>
             </article>
             <article className="metric">
               <span>Ativos</span>
@@ -159,13 +163,12 @@ export default function UsersPage() {
                   />
                 </label>
                 <label className="field">
-                  <span>Papel</span>
+                  <span>Tipo</span>
                   <select
                     onChange={(event) => setRoleFilter(event.target.value)}
                     value={roleFilter}
                   >
                     <option value="ALL">Todos</option>
-                    <option value="ADMIN">Admin</option>
                     <option value="COMPANY">Empresa</option>
                     <option value="FREELANCER">Freelancer</option>
                   </select>
@@ -188,7 +191,7 @@ export default function UsersPage() {
               </div>
             </article>
 
-            <ListPanel icon={<UsersRound size={18} />} title="Acessos">
+            <ListPanel icon={<UsersRound size={18} />} title="Usuários">
               {filteredUsers.map((user) => (
                 <div
                   className={`list-row ${user.isActive ? "" : "inactive-row"}`}
@@ -211,7 +214,6 @@ export default function UsersPage() {
                       className={
                         user.isActive ? "icon-action ghost" : "icon-action"
                       }
-                      disabled={user.id === session.user.id && user.isActive}
                       onClick={() => updateUserStatus(user.id, !user.isActive)}
                       type="button"
                     >
@@ -220,6 +222,9 @@ export default function UsersPage() {
                   </div>
                 </div>
               ))}
+              {!filteredUsers.length && !loading ? (
+                <EmptyState>Nenhum usuário encontrado.</EmptyState>
+              ) : null}
             </ListPanel>
 
             <article className="panel">
@@ -228,8 +233,8 @@ export default function UsersPage() {
                 <UserCog size={18} />
               </div>
               <p>
-                Ao desativar um usuário, o refresh token é invalidado e novos
-                logins passam a ser recusados.
+                Esta tela lista apenas contas de empresas e freelancers. A
+                equipe interna da NEXO fica separada no menu do perfil.
               </p>
             </article>
           </section>

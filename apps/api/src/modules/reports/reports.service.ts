@@ -52,6 +52,7 @@ export class ReportsService {
       eventStatus,
       paymentStatus,
       paymentTrend,
+      financialSummary,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.companyProfile.count(),
@@ -79,6 +80,7 @@ export class ReportsService {
         _count: { status: true },
       }),
       this.paymentTrend(),
+      this.financialSummary(),
     ]);
 
     return {
@@ -98,6 +100,7 @@ export class ReportsService {
       eventStatus: this.mapStatusCounts(eventStatus),
       paymentStatus: this.mapStatusCounts(paymentStatus),
       paymentTrend,
+      financialSummary,
     };
   }
 
@@ -110,14 +113,15 @@ export class ReportsService {
       contractStatus,
       paymentStatus,
       paymentTrend,
+      financialSummary,
     ] = await Promise.all([
       this.prisma.event.count({ where: { companyId } }),
       this.prisma.contract.count({ where: { companyId } }),
       this.prisma.payment.count({
-        where: { contract: { companyId } },
+        where: { companyId },
       }),
       this.prisma.payment.aggregate({
-        where: { contract: { companyId } },
+        where: { companyId },
         _sum: {
           grossAmountCents: true,
           freelancerAmountCents: true,
@@ -131,10 +135,16 @@ export class ReportsService {
       }),
       this.prisma.payment.groupBy({
         by: ["status"],
-        where: { contract: { companyId } },
+        where: { companyId },
         _count: { status: true },
       }),
-      this.paymentTrend({ contract: { companyId } }),
+      this.paymentTrend({ companyId }),
+      this.financialSummary(
+        { companyId },
+        { payment: { companyId } },
+        { paymentSplit: { payment: { companyId } } },
+        { companyId },
+      ),
     ]);
 
     return {
@@ -151,6 +161,7 @@ export class ReportsService {
       eventStatus: [],
       paymentStatus: this.mapStatusCounts(paymentStatus),
       paymentTrend,
+      financialSummary,
     };
   }
 
@@ -163,13 +174,14 @@ export class ReportsService {
       paymentStatus,
       paymentTrend,
       wallet,
+      financialSummary,
     ] = await Promise.all([
       this.prisma.contract.count({ where: { freelancerId } }),
       this.prisma.payment.count({
-        where: { contract: { freelancerId } },
+        where: { splits: { some: { freelancerId } } },
       }),
       this.prisma.payment.aggregate({
-        where: { contract: { freelancerId } },
+        where: { splits: { some: { freelancerId } } },
         _sum: {
           grossAmountCents: true,
           freelancerAmountCents: true,
@@ -183,11 +195,17 @@ export class ReportsService {
       }),
       this.prisma.payment.groupBy({
         by: ["status"],
-        where: { contract: { freelancerId } },
+        where: { splits: { some: { freelancerId } } },
         _count: { status: true },
       }),
-      this.paymentTrend({ contract: { freelancerId } }),
+      this.paymentTrend({ splits: { some: { freelancerId } } }),
       this.prisma.wallet.findUnique({ where: { freelancerId } }),
+      this.financialSummary(
+        { splits: { some: { freelancerId } } },
+        { freelancerId },
+        { freelancerId },
+        { freelancerId },
+      ),
     ]);
 
     return {
@@ -204,6 +222,7 @@ export class ReportsService {
       eventStatus: [],
       paymentStatus: this.mapStatusCounts(paymentStatus),
       paymentTrend,
+      financialSummary,
     };
   }
 
@@ -265,6 +284,121 @@ export class ReportsService {
     }
 
     return Array.from(buckets.values());
+  }
+
+  private async financialSummary(
+    paymentWhere: Prisma.PaymentWhereInput = {},
+    splitWhere: Prisma.PaymentSplitWhereInput = {},
+    payoutWhere: Prisma.PayoutWhereInput = {},
+    walletWhere: Prisma.WalletWhereInput = {},
+  ) {
+    const [
+      payments,
+      splits,
+      splitStatus,
+      payouts,
+      payoutStatus,
+      wallets,
+      chargebacks,
+      refunds,
+    ] = await Promise.all([
+      this.prisma.payment.aggregate({
+        where: paymentWhere,
+        _sum: {
+          amountToChargeCompanyCents: true,
+          grossAmountCents: true,
+          walletAmountCents: true,
+          gatewayAmountCents: true,
+          companyFeeAmountCents: true,
+          freelancerFeeAmountCents: true,
+          platformAmountCents: true,
+          gatewayFeeAmountCents: true,
+        },
+      }),
+      this.prisma.paymentSplit.aggregate({
+        where: splitWhere,
+        _sum: {
+          grossAmountCents: true,
+          freelancerNetAmountCents: true,
+          platformFeeAmountCents: true,
+          gatewayFeeAmountCents: true,
+        },
+      }),
+      this.prisma.paymentSplit.groupBy({
+        by: ["releaseStatus"],
+        where: splitWhere,
+        _count: { releaseStatus: true },
+        _sum: {
+          freelancerNetAmountCents: true,
+          grossAmountCents: true,
+          platformFeeAmountCents: true,
+        },
+      }),
+      this.prisma.payout.aggregate({
+        where: payoutWhere,
+        _sum: { amountCents: true },
+      }),
+      this.prisma.payout.groupBy({
+        by: ["status"],
+        where: payoutWhere,
+        _count: { status: true },
+        _sum: { amountCents: true },
+      }),
+      this.prisma.wallet.aggregate({
+        where: walletWhere,
+        _sum: { balanceCents: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: { ...paymentWhere, status: "CHARGEBACK" },
+        _sum: { amountToChargeCompanyCents: true, grossAmountCents: true },
+        _count: { id: true },
+      }),
+      this.prisma.paymentSplit.aggregate({
+        where: { ...splitWhere, releaseStatus: "REFUNDED" },
+        _sum: { grossAmountCents: true, freelancerNetAmountCents: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    return {
+      gmvCents:
+        payments._sum.amountToChargeCompanyCents ??
+        payments._sum.grossAmountCents ??
+        0,
+      walletPaidCents: payments._sum.walletAmountCents ?? 0,
+      gatewayPaidCents: payments._sum.gatewayAmountCents ?? 0,
+      companyFeeCents: payments._sum.companyFeeAmountCents ?? 0,
+      freelancerFeeCents: payments._sum.freelancerFeeAmountCents ?? 0,
+      platformFeeCents: payments._sum.platformAmountCents ?? 0,
+      gatewayFeeCents:
+        (payments._sum.gatewayFeeAmountCents ?? 0) +
+        (splits._sum.gatewayFeeAmountCents ?? 0),
+      splitGrossCents: splits._sum.grossAmountCents ?? 0,
+      freelancerNetCents: splits._sum.freelancerNetAmountCents ?? 0,
+      splitPlatformFeeCents: splits._sum.platformFeeAmountCents ?? 0,
+      walletBalanceCents: wallets._sum.balanceCents ?? 0,
+      payoutAmountCents: payouts._sum.amountCents ?? 0,
+      chargebackAmountCents:
+        chargebacks._sum.amountToChargeCompanyCents ??
+        chargebacks._sum.grossAmountCents ??
+        0,
+      chargebacks: chargebacks._count.id,
+      refundedGrossCents: refunds._sum.grossAmountCents ?? 0,
+      refundedFreelancerNetCents: refunds._sum.freelancerNetAmountCents ?? 0,
+      refunds: refunds._count.id,
+      splitStatus: splitStatus.map((row) => ({
+        status: row.releaseStatus,
+        count: row._count.releaseStatus,
+        grossAmountCents: row._sum.grossAmountCents ?? 0,
+        freelancerNetAmountCents: row._sum.freelancerNetAmountCents ?? 0,
+        platformFeeAmountCents: row._sum.platformFeeAmountCents ?? 0,
+      })),
+      payoutStatus: payoutStatus.map((row) => ({
+        status: row.status,
+        count: row._count.status,
+        amountCents: row._sum.amountCents ?? 0,
+      })),
+    };
   }
 
   private lastMonths(count: number) {

@@ -2,20 +2,48 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AuthCard } from "../../../components/auth-card";
+import { hasCookieConsent } from "../../../components/cookie-consent";
 import { Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, saveSession, type AuthSession } from "../../../lib/api";
 
 export default function CompanyRegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [cookiesAccepted, setCookiesAccepted] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setCookiesAccepted(hasCookieConsent()),
+      500,
+    );
+    setCookiesAccepted(hasCookieConsent());
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setError("");
+
+    if (form.get("legalAccepted") !== "on") {
+      setTermsAccepted(false);
+      setError("Marque a caixa de aceite dos termos para criar a conta.");
+      return;
+    }
+
+    if (!hasCookieConsent()) {
+      setCookiesAccepted(false);
+      setError(
+        "Aceite os cookies no banner de privacidade antes de criar a conta.",
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -84,10 +112,32 @@ export default function CompanyRegisterPage() {
         <Field label="Senha">
           <input name="password" type="password" minLength={8} required />
         </Field>
+        <label className="terms-checkbox">
+          <input
+            checked={termsAccepted}
+            name="legalAccepted"
+            onChange={(event) => setTermsAccepted(event.target.checked)}
+            required
+            type="checkbox"
+          />
+          <span>
+            Li e aceito os{" "}
+            <Link href="/termos" target="_blank">
+              Termos de Uso, Política LGPD e Cookies
+            </Link>
+            . Também aceito a política de cookies no banner de privacidade.
+          </span>
+        </label>
+        {!cookiesAccepted ? (
+          <small className="form-note">
+            Para liberar o cadastro, aceite os cookies no banner exibido no
+            rodapé da página.
+          </small>
+        ) : null}
         {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
         <button
           className="primary-button full"
-          disabled={loading}
+          disabled={loading || !termsAccepted || !cookiesAccepted}
           type="submit"
         >
           {loading ? "Criando..." : "Criar empresa"}

@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const password = "Nexo@12345";
+const demoPassword = process.env.SEED_DEMO_PASSWORD ?? "Nexo@12345";
 
 const skills = [
   "Técnico de áudio",
@@ -509,19 +509,29 @@ async function createContractOnce(data: {
 
 async function createPaymentOnce(data: {
   contractId: string;
-  status: "PAID" | "RELEASED_TO_FREELANCER";
+  status: "PAID" | "RELEASED";
   freelancerAmountCents: number;
   platformFeeCents: number;
   walletAmountCents?: number;
   gatewayAmountCents?: number;
 }) {
-  const existing = await prisma.payment.findUnique({
-    where: { contractId: data.contractId },
+  const contract = await prisma.contract.findUnique({
+    where: { id: data.contractId },
+    include: { event: true, company: true, freelancer: true },
   });
 
-  if (existing) {
-    await prisma.payment.update({
-      where: { id: existing.id },
+  if (!contract) {
+    throw new Error(`Contract ${data.contractId} not found`);
+  }
+
+  const existingSplit = await prisma.paymentSplit.findFirst({
+    where: { contractId: data.contractId },
+    include: { payment: true },
+  });
+
+  if (existingSplit) {
+    const payment = await prisma.payment.update({
+      where: { id: existingSplit.paymentId },
       data: {
         status: data.status,
         walletAmountCents: data.walletAmountCents ?? 0,
@@ -530,14 +540,73 @@ async function createPaymentOnce(data: {
           data.freelancerAmountCents + data.platformFeeCents,
       },
     });
-    return existing;
+    await prisma.paymentSplit.update({
+      where: { id: existingSplit.id },
+      data: {
+        splitStatus: data.status === "RELEASED" ? "RELEASED" : "RESERVED",
+        releaseStatus: data.status === "RELEASED" ? "PAID" : "WAITING_RELEASE",
+        releasedAt: data.status === "RELEASED" ? new Date() : null,
+      },
+    });
+    return payment;
   }
 
   const grossAmountCents = data.freelancerAmountCents + data.platformFeeCents;
+  const groupedPayment = await prisma.payment.findFirst({
+    where: {
+      companyId: contract.companyId,
+      eventId: contract.eventId,
+      status: data.status,
+    },
+  });
+
+  if (groupedPayment) {
+    return prisma.payment.update({
+      where: { id: groupedPayment.id },
+      data: {
+        freelancerAmountCents: { increment: data.freelancerAmountCents },
+        platformFeeCents: { increment: data.platformFeeCents },
+        grossAmountCents: { increment: grossAmountCents },
+        companyFeeAmountCents: { increment: data.platformFeeCents },
+        platformAmountCents: { increment: data.platformFeeCents },
+        totalFreelancerAmountCents: { increment: data.freelancerAmountCents },
+        freelancerNetAmountCents: { increment: data.freelancerAmountCents },
+        amountToChargeCompanyCents: { increment: grossAmountCents },
+        walletAmountCents: { increment: data.walletAmountCents ?? 0 },
+        gatewayAmountCents: {
+          increment: data.gatewayAmountCents ?? grossAmountCents,
+        },
+        splits: {
+          create: [
+            {
+              contractId: data.contractId,
+              freelancerId: contract.freelancerId,
+              recipientType: "FREELANCER",
+              amountCents: data.freelancerAmountCents,
+              grossAmountCents: data.freelancerAmountCents,
+              freelancerFeeAmountCents: 0,
+              platformFeeAmountCents: data.platformFeeCents,
+              gatewayFeeAmountCents: 0,
+              freelancerNetAmountCents: data.freelancerAmountCents,
+              splitStatus:
+                data.status === "RELEASED" ? "RELEASED" : "RESERVED",
+              releaseStatus:
+                data.status === "RELEASED" ? "PAID" : "WAITING_RELEASE",
+              releasedAt: data.status === "RELEASED" ? new Date() : undefined,
+              gatewayRecipientId: `freelancer_seed_${data.contractId}`,
+            },
+          ],
+        },
+      },
+    });
+  }
 
   return prisma.payment.create({
     data: {
-      contractId: data.contractId,
+      companyId: contract.companyId,
+      eventId: contract.eventId,
+      gateway: "simulated",
+      gatewayPaymentId: `seed_${data.contractId}`,
       status: data.status,
       freelancerAmountCents: data.freelancerAmountCents,
       platformFeeCents: data.platformFeeCents,
@@ -546,9 +615,9 @@ async function createPaymentOnce(data: {
       freelancerFeeAmountCents: 0,
       gatewayFeeAmountCents: 0,
       platformAmountCents: data.platformFeeCents,
+      totalFreelancerAmountCents: data.freelancerAmountCents,
       freelancerNetAmountCents: data.freelancerAmountCents,
       amountToChargeCompanyCents: grossAmountCents,
-      amountToReleaseFreelancerCents: data.freelancerAmountCents,
       walletAmountCents: data.walletAmountCents ?? 0,
       gatewayAmountCents: data.gatewayAmountCents ?? grossAmountCents,
       gatewayTransactionId: `seed_${data.contractId}`,
@@ -556,14 +625,21 @@ async function createPaymentOnce(data: {
       splits: {
         create: [
           {
+            contractId: data.contractId,
+            freelancerId: contract.freelancerId,
             recipientType: "FREELANCER",
             amountCents: data.freelancerAmountCents,
+            grossAmountCents: data.freelancerAmountCents,
+            freelancerFeeAmountCents: 0,
+            platformFeeAmountCents: data.platformFeeCents,
+            gatewayFeeAmountCents: 0,
+            freelancerNetAmountCents: data.freelancerAmountCents,
+            splitStatus:
+              data.status === "RELEASED" ? "RELEASED" : "RESERVED",
+            releaseStatus:
+              data.status === "RELEASED" ? "PAID" : "WAITING_RELEASE",
+            releasedAt: data.status === "RELEASED" ? new Date() : undefined,
             gatewayRecipientId: `freelancer_seed_${data.contractId}`,
-          },
-          {
-            recipientType: "PLATFORM",
-            amountCents: data.platformFeeCents,
-            gatewayRecipientId: "platform",
           },
         ],
       },
@@ -784,7 +860,7 @@ function createAvatarDataUrl(name: string) {
 }
 
 async function main() {
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(demoPassword, 12);
 
   const skillMap = new Map<string, string>();
   for (const name of skills) {
@@ -804,6 +880,14 @@ async function main() {
     passwordHash,
     role: "ADMIN",
     phone: "(79) 99999-0001",
+  });
+  await prisma.adminProfile.upsert({
+    where: { userId: admin.id },
+    update: { accessLevel: "OWNER" },
+    create: {
+      userId: admin.id,
+      accessLevel: "OWNER",
+    },
   });
 
   const companies = new Map<
@@ -1484,7 +1568,7 @@ async function main() {
       invitationStatus: "ACCEPTED",
       contractStatus: "PAID",
       amountCents: 70000,
-      paymentStatus: "RELEASED_TO_FREELANCER",
+      paymentStatus: "RELEASED",
       review: true,
     },
     {
@@ -1492,9 +1576,9 @@ async function main() {
       company: "Japiassú Eventos",
       freelancer: "JP Foto",
       invitationStatus: "ACCEPTED",
-      contractStatus: "COMPLETED",
+      contractStatus: "PAID",
       amountCents: 65000,
-      paymentStatus: "PAID",
+      paymentStatus: "RELEASED",
       review: true,
     },
     {
@@ -1525,7 +1609,7 @@ async function main() {
       invitationStatus: "ACCEPTED",
       contractStatus: "PAID",
       amountCents: 46000,
-      paymentStatus: "RELEASED_TO_FREELANCER",
+      paymentStatus: "RELEASED",
       review: true,
       proposedAmountCents: 46000,
       agreedAmountCents: 46000,
@@ -1682,7 +1766,7 @@ async function main() {
             : scenario.amountCents + platformFeeCents,
       });
 
-      if (scenario.paymentStatus === "RELEASED_TO_FREELANCER") {
+      if (scenario.paymentStatus === "RELEASED") {
         const wallet = await ensureFreelancerWallet(freelancer.id);
         if (
           !(await prisma.transaction.findFirst({
@@ -1933,16 +2017,17 @@ async function main() {
   }
 
   console.log("Demo users ready:");
-  console.log(`admin@nexo.local / ${password}`);
-  console.log(`empresa@nexo.local / ${password}`);
-  console.log(`freelancer@nexo.local / ${password}`);
+  console.log("Password: value from SEED_DEMO_PASSWORD or local default.");
+  console.log("admin@nexo.local");
+  console.log("empresa@nexo.local");
+  console.log("freelancer@nexo.local");
   console.log("Extra company users:");
   for (const company of companySeeds.slice(1)) {
-    console.log(`${company.email} / ${password}`);
+    console.log(company.email);
   }
   console.log("Extra freelancer users:");
   for (const freelancer of freelancerSeeds.slice(1)) {
-    console.log(`${freelancer.email} / ${password}`);
+    console.log(freelancer.email);
   }
   console.log(
     `Seed summary: ${companySeeds.length} empresas, ${freelancerSeeds.length} freelancers, ${eventSeeds.length} eventos.`,

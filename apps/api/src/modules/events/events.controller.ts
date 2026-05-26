@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -40,8 +41,11 @@ export class EventsController {
 
   @Roles(UserRole.COMPANY)
   @Get("available-freelancers")
-  searchAvailableFreelancers(@Query() query: SearchAvailableFreelancersDto) {
-    return this.eventsService.searchAvailableFreelancers(query);
+  searchAvailableFreelancers(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: SearchAvailableFreelancersDto,
+  ) {
+    return this.eventsService.searchAvailableFreelancers(user.sub, query);
   }
 
   @Roles(UserRole.COMPANY)
@@ -64,5 +68,11 @@ export class EventsController {
   @Post(":id/duplicate")
   duplicate(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
     return this.eventsService.duplicate(user.sub, id);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @Delete(":id")
+  delete(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.eventsService.delete(user.sub, id);
   }
 }

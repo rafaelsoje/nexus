@@ -8,6 +8,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TopUpWalletDto } from "./dto/top-up-wallet.dto";
+import { RequestPayoutDto } from "./dto/request-payout.dto";
 import { WalletService } from "./wallet.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,5 +29,14 @@ export class WalletController {
     @Body() dto: TopUpWalletDto,
   ) {
     return this.walletService.topUpCompanyWallet(user.sub, dto);
+  }
+
+  @Roles(UserRole.FREELANCER)
+  @Post("payouts")
+  requestPayout(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: RequestPayoutDto,
+  ) {
+    return this.walletService.requestFreelancerPayout(user.sub, dto);
   }
 }

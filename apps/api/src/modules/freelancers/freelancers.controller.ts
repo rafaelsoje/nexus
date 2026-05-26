@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -16,6 +17,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { SetFreelancerSkillsDto } from "./dto/set-freelancer-skills.dto";
+import { UpdateFreelancerAvatarDto } from "./dto/update-freelancer-avatar.dto";
 import { UpsertFreelancerProfileDto } from "./dto/upsert-freelancer-profile.dto";
 import { FreelancersService } from "./freelancers.service";
 
@@ -49,6 +51,15 @@ export class FreelancersController {
   }
 
   @Roles(UserRole.FREELANCER)
+  @Patch("profile/avatar")
+  updateAvatar(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpdateFreelancerAvatarDto,
+  ) {
+    return this.freelancersService.updateMyAvatar(user.sub, dto);
+  }
+
+  @Roles(UserRole.FREELANCER)
   @Post("skills")
   setSkills(
     @CurrentUser() user: CurrentUserPayload,
@@ -59,8 +70,26 @@ export class FreelancersController {
 
   @Roles(UserRole.COMPANY, UserRole.ADMIN)
   @Get()
-  listPublicProfiles() {
-    return this.freelancersService.listPublicProfiles();
+  listPublicProfiles(@CurrentUser() user: CurrentUserPayload) {
+    return this.freelancersService.listPublicProfiles(user.sub, user.role);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @Get("favorites")
+  listFavorites(@CurrentUser() user: CurrentUserPayload) {
+    return this.freelancersService.listFavoriteFreelancers(user.sub);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @Post(":id/favorite")
+  favorite(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.freelancersService.favoriteFreelancer(user.sub, id);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @Delete(":id/favorite")
+  unfavorite(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.freelancersService.unfavoriteFreelancer(user.sub, id);
   }
 
   @Roles(UserRole.COMPANY, UserRole.FREELANCER, UserRole.ADMIN)
