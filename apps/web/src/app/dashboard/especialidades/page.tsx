@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Settings, Star } from "lucide-react";
 import {
   DashboardShell,
@@ -27,10 +27,14 @@ export default function SpecialtiesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const loadSpecialties = useCallback(async () => {
     setError("");
-    setLoading(true);
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    }
 
     try {
       if (session?.user.role === "ADMIN") {
@@ -58,6 +62,8 @@ export default function SpecialtiesPage() {
       );
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
+      setHasLoaded(true);
     }
   }, [session?.user.role]);
 
@@ -264,7 +270,9 @@ export default function SpecialtiesPage() {
     >
       {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
-      {loading ? <EmptyState>Carregando especialidades...</EmptyState> : null}
+      {loading && !hasLoaded ? (
+        <EmptyState>Carregando especialidades...</EmptyState>
+      ) : null}
 
       {session.user.role === "COMPANY" ? (
         <EmptyState>
