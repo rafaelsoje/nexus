@@ -6,11 +6,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CreditCard,
-  LayoutDashboard,
-  LogOut,
-  MessageCircle,
   ShieldCheck,
-  ShieldAlert,
   Star,
   UsersRound,
   Wallet,
@@ -32,15 +28,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  AccountMenu,
-  formatUserRole,
-  NotificationsButton,
-} from "../../components/dashboard-shell";
+import { DashboardShell } from "../../components/dashboard-shell";
 import { EmptyState, StatusMessage } from "../../components/ui";
 import {
   apiRequest,
-  clearSession,
   formatCurrency,
   getSession,
   type AuthSession,
@@ -105,11 +96,6 @@ type Payment = {
     freelancer?: Freelancer;
     contract?: Contract;
   }>;
-};
-type NotificationItem = {
-  id: string;
-  type: string;
-  readAt?: string | null;
 };
 type WalletData = {
   balanceCents: number;
@@ -248,92 +234,6 @@ const transactionTypeLabels: Record<string, string> = {
   REFUND: "Estorno",
 };
 
-const dashboardNavItems = [
-  {
-    href: "/dashboard",
-    label: "Início",
-    icon: LayoutDashboard,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/eventos",
-    label: "Eventos",
-    icon: BriefcaseBusiness,
-    roles: ["ADMIN", "COMPANY"],
-  },
-  {
-    href: "/dashboard/agenda",
-    label: "Agenda",
-    icon: CalendarDays,
-    roles: ["FREELANCER"],
-  },
-  {
-    href: "/dashboard/oportunidades",
-    label: "Oportunidades",
-    icon: UsersRound,
-    roles: ["COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/chat",
-    label: "Chat",
-    icon: MessageCircle,
-    roles: ["COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/profissionais",
-    label: "Profissionais",
-    icon: UsersRound,
-    roles: ["ADMIN", "COMPANY"],
-  },
-  {
-    href: "/dashboard/favoritos",
-    label: "Favoritos",
-    icon: Star,
-    roles: ["COMPANY"],
-  },
-  {
-    href: "/dashboard/convites",
-    label: "Convites",
-    icon: Bell,
-    roles: ["COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/notificacoes",
-    label: "Notificações",
-    icon: Bell,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/pagamentos",
-    label: "Pagamentos",
-    icon: CreditCard,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/avaliacoes",
-    label: "Avaliações",
-    icon: Star,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/disputas",
-    label: "Contestações",
-    icon: ShieldAlert,
-    roles: ["ADMIN", "COMPANY", "FREELANCER"],
-  },
-  {
-    href: "/dashboard/verificacoes",
-    label: "Verificações",
-    icon: ShieldCheck,
-    roles: ["ADMIN"],
-  },
-] satisfies Array<{
-  href: string;
-  label: string;
-  icon: typeof CalendarDays;
-  roles: UserRole[];
-}>;
-
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -351,7 +251,6 @@ export default function DashboardPage() {
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(
     null,
   );
-  const [importantNotifications, setImportantNotifications] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -376,55 +275,6 @@ export default function DashboardPage() {
     void loadDashboard(session.user.role);
     // Dashboard refresh is keyed by the active session; loadDashboard itself is reused by manual refresh handlers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
-
-  useEffect(() => {
-    if (!session) {
-      setImportantNotifications(0);
-      return;
-    }
-
-    let isCurrent = true;
-
-    async function loadImportantNotifications() {
-      try {
-        const notifications = await apiRequest<NotificationItem[]>(
-          "/api/notifications",
-        );
-
-        if (!isCurrent) {
-          return;
-        }
-
-        setImportantNotifications(
-          notifications.filter(
-            (item) => !item.readAt && item.type !== "CHAT_MESSAGE_RECEIVED",
-          ).length,
-        );
-      } catch {
-        if (isCurrent) {
-          setImportantNotifications(0);
-        }
-      }
-    }
-
-    void loadImportantNotifications();
-    const interval = window.setInterval(loadImportantNotifications, 60000);
-    window.addEventListener(
-      "nexus:notifications-updated",
-      loadImportantNotifications,
-    );
-    window.addEventListener("focus", loadImportantNotifications);
-
-    return () => {
-      isCurrent = false;
-      window.clearInterval(interval);
-      window.removeEventListener(
-        "nexus:notifications-updated",
-        loadImportantNotifications,
-      );
-      window.removeEventListener("focus", loadImportantNotifications);
-    };
   }, [session]);
 
   useEffect(() => {
@@ -543,11 +393,6 @@ export default function DashboardPage() {
     }
   }
 
-  function logout() {
-    clearSession();
-    router.push("/login");
-  }
-
   const metrics = useMemo(() => {
     if (role === "ADMIN") {
       return [
@@ -604,94 +449,45 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">N</span>
-          <span>NEXO</span>
-        </div>
-        <nav className="nav">
-          {dashboardNavItems
-            .filter((item) => role && item.roles.includes(role))
-            .map((item) => {
-              const Icon = item.icon;
+    <DashboardShell
+      eyebrow={session.user.role}
+      title={`Olá, ${session.user.name}`}
+    >
+      {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
 
-              return (
-                <Link
-                  className={item.href === "/dashboard" ? "active" : ""}
-                  href={item.href}
-                  key={item.href}
-                >
-                  <Icon size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          <button className="nav-button" onClick={logout}>
-            <LogOut size={18} />
-            Sair
-          </button>
-        </nav>
-      </aside>
-
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">{formatUserRole(session.user.role)}</p>
-            <h1>Olá, {session.user.name}</h1>
-          </div>
-          <div className="topbar-actions">
-            <NotificationsButton count={importantNotifications} />
-            <AccountMenu
-              account={{
-                imageUrl: freelancerProfile?.avatarUrl,
-                name: freelancerProfile?.displayName ?? session.user.name,
-              }}
-              onLogout={logout}
-              role={session.user.role}
-            />
-          </div>
-        </header>
-
-        {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
-
-        <section className="metrics">
-          {metrics.map(([label, value]) => (
-            <article className="metric" key={label}>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </article>
-          ))}
-        </section>
-
-        {loading ? <EmptyState>Carregando operação...</EmptyState> : null}
-        {!loading && role === "COMPANY" ? (
-          <CompanyDashboard
-            contracts={contracts}
-            events={events}
-            freelancers={freelancers}
-            invitations={invitations}
-            reportSummary={reportSummary}
-          />
-        ) : null}
-        {!loading && role === "FREELANCER" ? (
-          <FreelancerDashboard
-            availability={availability}
-            contracts={contracts}
-            freelancerProfile={freelancerProfile}
-            invitations={invitations}
-            reportSummary={reportSummary}
-            wallet={wallet}
-          />
-        ) : null}
-        {!loading && role === "ADMIN" && adminData ? (
-          <AdminDashboard
-            data={adminData}
-            reportSummary={reportSummary}
-          />
-        ) : null}
+      <section className="metrics">
+        {metrics.map(([label, value]) => (
+          <article className="metric" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
       </section>
-    </main>
+
+      {loading ? <EmptyState>Carregando operação...</EmptyState> : null}
+      {!loading && role === "COMPANY" ? (
+        <CompanyDashboard
+          contracts={contracts}
+          events={events}
+          freelancers={freelancers}
+          invitations={invitations}
+          reportSummary={reportSummary}
+        />
+      ) : null}
+      {!loading && role === "FREELANCER" ? (
+        <FreelancerDashboard
+          availability={availability}
+          contracts={contracts}
+          freelancerProfile={freelancerProfile}
+          invitations={invitations}
+          reportSummary={reportSummary}
+          wallet={wallet}
+        />
+      ) : null}
+      {!loading && role === "ADMIN" && adminData ? (
+        <AdminDashboard data={adminData} reportSummary={reportSummary} />
+      ) : null}
+    </DashboardShell>
   );
 }
 
@@ -1045,8 +841,8 @@ function ReportPanel({
             ))}
             {financial.payoutStatus.map((item) => (
               <span key={item.status}>
-                Payout {statusLabels[item.status] ?? item.status}: {item.count} -{" "}
-                {formatCurrency(item.amountCents)}
+                Payout {statusLabels[item.status] ?? item.status}: {item.count}{" "}
+                - {formatCurrency(item.amountCents)}
               </span>
             ))}
           </div>

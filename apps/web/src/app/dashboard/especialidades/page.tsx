@@ -15,6 +15,7 @@ export default function SpecialtiesPage() {
   const session = useRequiredSession();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -89,7 +90,7 @@ export default function SpecialtiesPage() {
     }
   }
 
-  async function handleCreateSkill(event: FormEvent<HTMLFormElement>) {
+  async function handleSavePlatformSkill(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -104,18 +105,59 @@ export default function SpecialtiesPage() {
     }
 
     try {
-      await apiRequest("/api/skills", {
-        method: "POST",
-        body: JSON.stringify({ name, description }),
-      });
+      await apiRequest(
+        editingSkill ? `/api/skills/${editingSkill.id}` : "/api/skills",
+        {
+          method: editingSkill ? "PATCH" : "POST",
+          body: JSON.stringify({ name, description }),
+        },
+      );
       formElement.reset();
-      setSuccess("Especialidade criada.");
+      setEditingSkill(null);
+      setSuccess(
+        editingSkill ? "Especialidade atualizada." : "Especialidade criada.",
+      );
       await loadSpecialties();
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Erro ao criar especialidade.",
+          : "Erro ao salvar especialidade.",
+      );
+    }
+  }
+
+  async function handleDeletePlatformSkill(skill: Skill) {
+    setError("");
+    setSuccess("");
+
+    const confirmed = window.confirm(
+      `Excluir a especialidade "${skill.name}"? Se ela já estiver em uso, será apenas desativada para novos cadastros.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const result = await apiRequest<{
+        deleted?: boolean;
+        deactivated?: boolean;
+      }>(`/api/skills/${skill.id}`, { method: "DELETE" });
+      if (editingSkill?.id === skill.id) {
+        setEditingSkill(null);
+      }
+      setSuccess(
+        result.deactivated
+          ? "Especialidade desativada. Ela não aparecerá mais para novos usos."
+          : "Especialidade excluída.",
+      );
+      await loadSpecialties();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao excluir especialidade.",
       );
     }
   }
@@ -231,7 +273,11 @@ export default function SpecialtiesPage() {
             <div className="panel-header">
               <div>
                 <span className="eyebrow">Base da plataforma</span>
-                <h2>Criar especialidade</h2>
+                <h2>
+                  {editingSkill
+                    ? "Editar especialidade"
+                    : "Criar especialidade"}
+                </h2>
               </div>
               <Settings size={18} />
             </div>
@@ -239,10 +285,15 @@ export default function SpecialtiesPage() {
               Cadastre aqui as funções que empresas poderão solicitar nos
               eventos e freelancers poderão adicionar ao currículo.
             </p>
-            <form className="form compact" onSubmit={handleCreateSkill}>
+            <form
+              className="form compact"
+              key={editingSkill?.id ?? "create-skill"}
+              onSubmit={handleSavePlatformSkill}
+            >
               <Field label="Nome da especialidade">
                 <input
                   name="name"
+                  defaultValue={editingSkill?.name ?? ""}
                   placeholder="Ex.: Áudio, Iluminação, Fotografia"
                   required
                 />
@@ -250,13 +301,23 @@ export default function SpecialtiesPage() {
               <Field label="Descrição">
                 <textarea
                   name="description"
+                  defaultValue={editingSkill?.description ?? ""}
                   placeholder="Explique rapidamente quando essa função deve ser usada."
                   rows={4}
                 />
               </Field>
               <button className="primary-button full" type="submit">
-                Criar especialidade
+                {editingSkill ? "Salvar alterações" : "Criar especialidade"}
               </button>
+              {editingSkill ? (
+                <button
+                  className="secondary-button full"
+                  onClick={() => setEditingSkill(null)}
+                  type="button"
+                >
+                  Cancelar edição
+                </button>
+              ) : null}
             </form>
           </article>
 
@@ -276,7 +337,23 @@ export default function SpecialtiesPage() {
                       <strong>{skill.name}</strong>
                       <span>{skill.description || "Sem descrição."}</span>
                     </div>
-                    <small>{skill.slug}</small>
+                    <div className="row-actions list-row-actions">
+                      <small>{skill.slug}</small>
+                      <button
+                        className="icon-action"
+                        onClick={() => setEditingSkill(skill)}
+                        type="button"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="icon-action danger-action"
+                        onClick={() => handleDeletePlatformSkill(skill)}
+                        type="button"
+                      >
+                        Excluir
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (

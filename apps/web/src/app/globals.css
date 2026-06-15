@@ -297,6 +297,11 @@ h3 {
   flex-wrap: wrap;
 }
 
+.list-row-actions {
+  justify-content: flex-end;
+  min-width: fit-content;
+}
+
 .selectable-row-content {
   display: flex;
   align-items: center;
@@ -747,10 +752,10 @@ input.compact-checkbox {
 
 .site-footer-main {
   display: grid;
-  grid-template-columns: minmax(10rem, 1.1fr) repeat(3, minmax(8rem, 1fr)) minmax(
-      10rem,
-      0.9fr
-    );
+  grid-template-columns: minmax(10rem, 1.1fr) repeat(
+      3,
+      minmax(8rem, 1fr)
+    ) minmax(10rem, 0.9fr);
   gap: clamp(1.25rem, 3vw, 2rem);
   align-items: start;
   padding-top: 2rem;
