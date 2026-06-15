@@ -392,6 +392,19 @@ cd /var/www/nexo
 pnpm deploy:vps
 ```
 
+### Headers e Versões em Produção
+
+O Next está configurado com `poweredByHeader: false`, e a API desativa o header
+`X-Powered-By` do Express. No Nginx, mantenha também:
+
+```nginx
+server_tokens off;
+```
+
+Isso reduz exposição explícita de versões por cabeçalho HTTP. Ferramentas como
+Wappalyzer ainda podem inferir React/Next pelo formato do HTML e pelos assets
+`/_next/static`, mas a aplicação deixa de anunciar a versão por header.
+
 ## Pendências Para Produção
 
 Itens pendentes sem considerar credenciais reais de gateway:

@@ -11,6 +11,7 @@ async function bootstrap() {
   const allowedOrigins = getAllowedOrigins(config);
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  app.getHttpAdapter().getInstance().disable("x-powered-by");
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
