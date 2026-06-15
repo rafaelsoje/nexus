@@ -180,6 +180,8 @@ export async function publicApiRequest<T>(
 const apiMessageTranslations: Record<string, string> = {
   "End must be after start": "A data final precisa ser posterior ao início.",
   "Invalid credentials": "E-mail ou senha inválidos.",
+  "Name is required": "Informe o nome.",
+  "New password must be different": "A nova senha precisa ser diferente da atual.",
   "Invalid access token": "Sua sessão expirou. Entre novamente.",
   "Email already registered": "Este e-mail já está cadastrado.",
   "Admin users cannot self-register":

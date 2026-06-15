@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -13,6 +15,7 @@ import {
   DocumentStorage,
 } from "../documents/storage/document-storage";
 import { PrismaService } from "../prisma/prisma.service";
+import { UpdateMyAccountDto } from "./dto/update-my-account.dto";
 
 @Injectable()
 export class UsersService {
@@ -32,6 +35,7 @@ export class UsersService {
         phone: true,
         role: true,
         isActive: true,
+        adminProfile: { select: { accessLevel: true } },
         companyProfile: true,
         freelancerProfile: {
           include: {
@@ -61,6 +65,108 @@ export class UsersService {
         createdAt: true,
       },
     });
+  }
+
+  async updateMyAccount(userId: string, dto: UpdateMyAccountDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+
+    if (!user?.isActive) {
+      throw new NotFoundException("User not found");
+    }
+
+    const name = dto.name?.trim();
+    const email = dto.email?.trim().toLowerCase();
+    const phone = dto.phone?.trim();
+
+    if (dto.name !== undefined && !name) {
+      throw new BadRequestException("Name is required");
+    }
+
+    if (email && email !== user.email) {
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+
+      if (existing) {
+        throw new ConflictException("Email already registered");
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(dto.phone !== undefined ? { phone: phone || null } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        adminProfile: { select: { accessLevel: true } },
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        role: user.role,
+        action: "USER_SELF_UPDATED",
+        entity: "User",
+        entityId: userId,
+        metadata: {
+          fields: Object.keys(dto),
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  async changeMyPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user?.isActive) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new BadRequestException("New password must be different");
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash: await bcrypt.hash(newPassword, 12),
+          refreshTokenHash: null,
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          userId,
+          role: user.role,
+          action: "USER_PASSWORD_CHANGED",
+          entity: "User",
+          entityId: userId,
+          metadata: {},
+        },
+      }),
+    ]);
+
+    return { ok: true };
   }
 
   async anonymizeMyAccount(userId: string, password: string) {
@@ -108,7 +214,10 @@ export class UsersService {
     });
     const anonymizedEmail = `deleted-${user.id}@nexo.local`;
     const anonymizedName = `Conta excluída ${user.id.slice(-6)}`;
-    const randomPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 12);
+    const randomPasswordHash = await bcrypt.hash(
+      randomBytes(32).toString("hex"),
+      12,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       if (user.companyProfile) {

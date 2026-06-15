@@ -25,12 +25,31 @@ import {
   useRequiredSession,
 } from "../../../components/dashboard-shell";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
-import { apiFileRequest, apiRequest, clearSession } from "../../../lib/api";
+import {
+  apiFileRequest,
+  apiRequest,
+  clearSession,
+  getSession,
+  saveSession,
+} from "../../../lib/api";
+import type { UserRole } from "../../../lib/api";
 import type {
   CompanyProfile,
   FreelancerProfile,
   VerificationDocument,
 } from "../../../lib/dashboard-types";
+
+type PrivateUserProfile = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  role: UserRole;
+  isActive: boolean;
+  adminProfile?: {
+    accessLevel: string;
+  } | null;
+};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -40,6 +59,9 @@ export default function ProfilePage() {
   );
   const [freelancerProfile, setFreelancerProfile] =
     useState<FreelancerProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<PrivateUserProfile | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -59,6 +81,10 @@ export default function ProfilePage() {
         setFreelancerProfile(
           await apiRequest<FreelancerProfile>("/api/freelancers/profile"),
         );
+      }
+
+      if (session?.user.role === "ADMIN") {
+        setUserProfile(await apiRequest<PrivateUserProfile>("/api/users/me"));
       }
     } catch (caught) {
       setError(
@@ -225,6 +251,79 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleSaveMyAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setSuccess("");
+
+    try {
+      const updated = await apiRequest<PrivateUserProfile>("/api/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: String(form.get("name")),
+          email: String(form.get("email")),
+          phone: String(form.get("phone")),
+        }),
+      });
+      setUserProfile(updated);
+
+      const currentSession = getSession();
+      if (currentSession) {
+        saveSession({
+          ...currentSession,
+          user: {
+            ...currentSession.user,
+            name: updated.name,
+            email: updated.email,
+          },
+        });
+        window.dispatchEvent(new Event("nexus:profile-updated"));
+      }
+
+      setSuccess("Dados da conta atualizados.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao salvar dados da conta.",
+      );
+    }
+  }
+
+  async function handleChangeMyPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const newPassword = String(form.get("newPassword"));
+    const confirmPassword = String(form.get("confirmPassword"));
+    setError("");
+    setSuccess("");
+
+    if (newPassword !== confirmPassword) {
+      setError("A confirmação da nova senha não confere.");
+      return;
+    }
+
+    try {
+      await apiRequest("/api/users/me/password", {
+        method: "PATCH",
+        body: JSON.stringify({
+          currentPassword: String(form.get("currentPassword")),
+          newPassword,
+        }),
+      });
+      formElement.reset();
+      clearSession();
+      setSuccess("Senha alterada. Entre novamente para continuar.");
+      window.setTimeout(() => router.push("/login"), 900);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao alterar senha.",
+      );
+    }
+  }
+
   async function handleAnonymizeAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -234,7 +333,7 @@ export default function ProfilePage() {
     setSuccess("");
 
     if (confirmation !== "EXCLUIR") {
-      setError('Digite EXCLUIR para confirmar a solicitação.');
+      setError("Digite EXCLUIR para confirmar a solicitação.");
       return;
     }
 
@@ -310,7 +409,9 @@ export default function ProfilePage() {
 
             try {
               if (!freelancerProfile?.cpf) {
-                throw new Error("Informe o CPF antes de atualizar o recebedor.");
+                throw new Error(
+                  "Informe o CPF antes de atualizar o recebedor.",
+                );
               }
 
               await apiRequest("/api/gateway-accounts/freelancer/me", {
@@ -373,17 +474,118 @@ export default function ProfilePage() {
         />
       ) : null}
 
-      {session.user.role === "ADMIN" ? (
-        <EmptyState>
-          Administradores gerenciam verificações, pagamentos e contestações
-          pelas telas operacionais.
-        </EmptyState>
+      {session.user.role === "ADMIN" && userProfile ? (
+        <AdminAccountSection
+          profile={userProfile}
+          onChangePassword={handleChangeMyPassword}
+          onSaveAccount={handleSaveMyAccount}
+        />
       ) : null}
 
       {session.user.role === "COMPANY" || session.user.role === "FREELANCER" ? (
         <AccountDeletionPanel onSubmit={handleAnonymizeAccount} />
       ) : null}
     </DashboardShell>
+  );
+}
+
+function AdminAccountSection({
+  onChangePassword,
+  onSaveAccount,
+  profile,
+}: Readonly<{
+  onChangePassword: (event: FormEvent<HTMLFormElement>) => void;
+  onSaveAccount: (event: FormEvent<HTMLFormElement>) => void;
+  profile: PrivateUserProfile;
+}>) {
+  return (
+    <section className="dashboard-grid">
+      <article className="panel">
+        <div className="panel-header">
+          <div>
+            <span className="eyebrow">Minha conta</span>
+            <h2>Dados do administrador</h2>
+          </div>
+          <Settings size={18} />
+        </div>
+        <p className="form-note">
+          Atualize os dados usados para identificar sua conta administrativa na
+          plataforma.
+        </p>
+        <form className="form compact" onSubmit={onSaveAccount}>
+          <Field label="Nome">
+            <input name="name" defaultValue={profile.name} required />
+          </Field>
+          <Field label="E-mail">
+            <input
+              name="email"
+              defaultValue={profile.email}
+              required
+              type="email"
+            />
+          </Field>
+          <Field label="Telefone">
+            <input
+              name="phone"
+              defaultValue={profile.phone ?? ""}
+              placeholder="Telefone de contato"
+            />
+          </Field>
+          <div className="detail-row">
+            <span>Nível administrativo</span>
+            <strong>
+              {formatAdminAccessLevel(profile.adminProfile?.accessLevel)}
+            </strong>
+          </div>
+          <button className="primary-button full" type="submit">
+            Salvar dados
+          </button>
+        </form>
+      </article>
+
+      <article className="panel">
+        <div className="panel-header">
+          <div>
+            <span className="eyebrow">Segurança</span>
+            <h2>Alterar senha</h2>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <p className="form-note">
+          Informe a senha atual e escolha uma nova senha com pelo menos 8
+          caracteres. Após a alteração, será necessário entrar novamente.
+        </p>
+        <form className="form compact" onSubmit={onChangePassword}>
+          <Field label="Senha atual">
+            <input
+              autoComplete="current-password"
+              name="currentPassword"
+              required
+              type="password"
+            />
+          </Field>
+          <Field label="Nova senha">
+            <input
+              autoComplete="new-password"
+              name="newPassword"
+              required
+              type="password"
+            />
+          </Field>
+          <Field label="Confirmar nova senha">
+            <input
+              autoComplete="new-password"
+              name="confirmPassword"
+              required
+              type="password"
+            />
+          </Field>
+          <button className="primary-button full" type="submit">
+            Alterar senha
+          </button>
+        </form>
+      </article>
+    </section>
   );
 }
 
@@ -1070,9 +1272,7 @@ function FreelancerProfileSection({
                 name="cpf"
                 inputMode="numeric"
                 maxLength={14}
-                onChange={(event) =>
-                  setCpfValue(formatCpf(event.target.value))
-                }
+                onChange={(event) => setCpfValue(formatCpf(event.target.value))}
                 placeholder="000.000.000-00"
                 value={cpfValue}
               />
@@ -1337,11 +1537,17 @@ function GatewayAccountPanel({
         <CreditCard size={18} />
       </div>
       <div className="gateway-status-card">
-        <div className={canReceive ? "gateway-status-icon active" : "gateway-status-icon"}>
+        <div
+          className={
+            canReceive ? "gateway-status-icon active" : "gateway-status-icon"
+          }
+        >
           <ShieldCheck size={20} />
         </div>
         <div>
-          <strong>{canReceive ? "Apto a receber" : "Recebimento pendente"}</strong>
+          <strong>
+            {canReceive ? "Apto a receber" : "Recebimento pendente"}
+          </strong>
           <span>
             {canReceive
               ? "Conta gateway ativa e KYC aprovado."
@@ -1545,7 +1751,20 @@ function formatFileSize(sizeBytes: number) {
 }
 
 function formatGatewayStatus(status?: string) {
-  return status ? gatewayStatusLabels[status] ?? status : "Pendente";
+  return status ? (gatewayStatusLabels[status] ?? status) : "Pendente";
+}
+
+function formatAdminAccessLevel(accessLevel?: string) {
+  const labels: Record<string, string> = {
+    FINANCE: "Financeiro",
+    MANAGER: "Gerente",
+    OWNER: "Owner",
+    READONLY: "Leitura",
+    SUPPORT: "Suporte",
+    VERIFICATION: "Verificação",
+  };
+
+  return accessLevel ? (labels[accessLevel] ?? accessLevel) : "Não informado";
 }
 
 function readFileAsDataUrl(file: File) {
@@ -1618,7 +1837,9 @@ function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.addEventListener("load", () => resolve(image));
-    image.addEventListener("error", () => reject(new Error("Imagem inválida.")));
+    image.addEventListener("error", () =>
+      reject(new Error("Imagem inválida.")),
+    );
     image.src = src;
   });
 }
