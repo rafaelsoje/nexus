@@ -257,7 +257,8 @@ export function DashboardShell({
           if (isCurrent) {
             setAccountSummary({
               imageUrl: profile.logoUrl,
-              name: profile.companyName ?? currentSession.user.name ?? "Empresa",
+              name:
+                profile.companyName ?? currentSession.user.name ?? "Empresa",
             });
           }
           return;
@@ -303,9 +304,8 @@ export function DashboardShell({
 
     async function loadImportantNotifications() {
       try {
-        const notifications = await apiRequest<NotificationSummary[]>(
-          "/api/notifications",
-        );
+        const notifications =
+          await apiRequest<NotificationSummary[]>("/api/notifications");
 
         if (!isCurrent) {
           return;
@@ -325,7 +325,6 @@ export function DashboardShell({
     }
 
     void loadImportantNotifications();
-    const interval = window.setInterval(loadImportantNotifications, 60000);
     window.addEventListener(
       "nexus:notifications-updated",
       loadImportantNotifications,
@@ -334,7 +333,6 @@ export function DashboardShell({
 
     return () => {
       isCurrent = false;
-      window.clearInterval(interval);
       window.removeEventListener(
         "nexus:notifications-updated",
         loadImportantNotifications,
@@ -450,10 +448,7 @@ export function AccountMenu({
     }
 
     function handlePointerDown(event: PointerEvent) {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
-      ) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     }
@@ -519,10 +514,7 @@ export function AccountMenu({
               Administradores
             </Link>
           ) : null}
-          <Link
-            href="/dashboard/notificacoes"
-            onClick={() => setIsOpen(false)}
-          >
+          <Link href="/dashboard/notificacoes" onClick={() => setIsOpen(false)}>
             <Bell size={16} />
             Notificações
           </Link>

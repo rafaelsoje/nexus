@@ -56,6 +56,7 @@ export function StatusMessage({
 
 export function ConfirmationDialog({
   confirmLabel = "Confirmar",
+  dangerous = false,
   description,
   isOpen,
   onCancel,
@@ -63,21 +64,48 @@ export function ConfirmationDialog({
   title,
 }: Readonly<{
   confirmLabel?: string;
+  dangerous?: boolean;
   description: ReactNode;
   isOpen: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   title: string;
 }>) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onCancel();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onCancel]);
+
   if (!isOpen) {
     return null;
   }
 
   return (
-    <div className="agenda-modal-backdrop" role="presentation">
+    <div
+      className="agenda-modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+      role="presentation"
+    >
       <div
         aria-modal="true"
-        className="agenda-modal confirmation-modal"
+        className={`agenda-modal confirmation-modal${dangerous ? " danger-confirmation" : ""}`}
         role="dialog"
       >
         <div className="agenda-modal-header">
@@ -99,7 +127,11 @@ export function ConfirmationDialog({
           <button className="secondary-button" onClick={onCancel} type="button">
             Cancelar
           </button>
-          <button className="primary-button" onClick={onConfirm} type="button">
+          <button
+            className={`primary-button${dangerous ? " danger-button" : ""}`}
+            onClick={onConfirm}
+            type="button"
+          >
             {confirmLabel}
           </button>
         </div>

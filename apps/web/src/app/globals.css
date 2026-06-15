@@ -276,6 +276,23 @@ h3 {
   color: #ff4d6d;
 }
 
+.edit-action {
+  border-color: rgba(0, 191, 255, 0.38);
+  background: rgba(0, 191, 255, 0.08);
+  color: var(--primary);
+}
+
+.edit-action:hover {
+  background: rgba(0, 191, 255, 0.14);
+  color: var(--primary);
+}
+
+.danger-action {
+  border-color: rgba(255, 77, 109, 0.32);
+  background: rgba(255, 77, 109, 0.08);
+  color: #d90429;
+}
+
 .danger-button {
   background: linear-gradient(135deg, #ff4d6d, #d90429);
 }
@@ -752,10 +769,9 @@ input.compact-checkbox {
 
 .site-footer-main {
   display: grid;
-  grid-template-columns: minmax(10rem, 1.1fr) repeat(
-      3,
-      minmax(8rem, 1fr)
-    ) minmax(10rem, 0.9fr);
+  grid-template-columns:
+    minmax(10rem, 1.1fr) repeat(3, minmax(8rem, 1fr))
+    minmax(10rem, 0.9fr);
   gap: clamp(1.25rem, 3vw, 2rem);
   align-items: start;
   padding-top: 2rem;
@@ -2711,6 +2727,14 @@ input[type="file"]::file-selector-button {
 
 .confirmation-modal {
   max-width: 30rem;
+}
+
+.danger-confirmation {
+  border-color: rgba(255, 77, 109, 0.28);
+}
+
+.danger-confirmation .agenda-modal-header span {
+  color: #d90429;
 }
 
 .agenda-modal-header {

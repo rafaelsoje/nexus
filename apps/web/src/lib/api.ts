@@ -85,12 +85,11 @@ async function retryAfterAccessTokenRefresh(
   options: RequestInit,
   response: Response,
 ) {
-  if (response.status !== 401 || path === "/api/auth/refresh") {
-    return null;
-  }
-
-  const message = await readApiErrorMessage(response);
-  if (message !== "Invalid access token") {
+  if (
+    response.status !== 401 ||
+    path.startsWith("/api/auth/") ||
+    !getSession()?.refreshToken
+  ) {
     return null;
   }
 

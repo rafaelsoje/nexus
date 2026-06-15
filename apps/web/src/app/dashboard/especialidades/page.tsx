@@ -7,7 +7,12 @@ import {
   ModuleHeaderAction,
   useRequiredSession,
 } from "../../../components/dashboard-shell";
-import { EmptyState, Field, StatusMessage } from "../../../components/ui";
+import {
+  ConfirmationDialog,
+  EmptyState,
+  Field,
+  StatusMessage,
+} from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
 import type { FreelancerProfile, Skill } from "../../../lib/dashboard-types";
 
@@ -16,6 +21,9 @@ export default function SpecialtiesPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [skillPendingDelete, setSkillPendingDelete] = useState<Skill | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -127,26 +135,23 @@ export default function SpecialtiesPage() {
     }
   }
 
-  async function handleDeletePlatformSkill(skill: Skill) {
-    setError("");
-    setSuccess("");
-
-    const confirmed = window.confirm(
-      `Excluir a especialidade "${skill.name}"? Se ela já estiver em uso, será apenas desativada para novos cadastros.`,
-    );
-
-    if (!confirmed) {
+  async function confirmDeletePlatformSkill() {
+    if (!skillPendingDelete) {
       return;
     }
+
+    setError("");
+    setSuccess("");
 
     try {
       const result = await apiRequest<{
         deleted?: boolean;
         deactivated?: boolean;
-      }>(`/api/skills/${skill.id}`, { method: "DELETE" });
-      if (editingSkill?.id === skill.id) {
+      }>(`/api/skills/${skillPendingDelete.id}`, { method: "DELETE" });
+      if (editingSkill?.id === skillPendingDelete.id) {
         setEditingSkill(null);
       }
+      setSkillPendingDelete(null);
       setSuccess(
         result.deactivated
           ? "Especialidade desativada. Ela não aparecerá mais para novos usos."
@@ -338,9 +343,8 @@ export default function SpecialtiesPage() {
                       <span>{skill.description || "Sem descrição."}</span>
                     </div>
                     <div className="row-actions list-row-actions">
-                      <small>{skill.slug}</small>
                       <button
-                        className="icon-action"
+                        className="icon-action edit-action"
                         onClick={() => setEditingSkill(skill)}
                         type="button"
                       >
@@ -348,7 +352,7 @@ export default function SpecialtiesPage() {
                       </button>
                       <button
                         className="icon-action danger-action"
-                        onClick={() => handleDeletePlatformSkill(skill)}
+                        onClick={() => setSkillPendingDelete(skill)}
                         type="button"
                       >
                         Excluir
@@ -366,6 +370,24 @@ export default function SpecialtiesPage() {
           </article>
         </section>
       ) : null}
+
+      <ConfirmationDialog
+        confirmLabel="Excluir especialidade"
+        dangerous
+        description={
+          <>
+            Você está prestes a remover{" "}
+            <strong>{skillPendingDelete?.name}</strong> da base de
+            especialidades disponíveis. Se ela já estiver vinculada a eventos ou
+            freelancers, o sistema vai apenas desativar para novos cadastros e
+            manter o histórico preservado.
+          </>
+        }
+        isOpen={Boolean(skillPendingDelete)}
+        onCancel={() => setSkillPendingDelete(null)}
+        onConfirm={confirmDeletePlatformSkill}
+        title="Excluir especialidade?"
+      />
 
       {session.user.role === "FREELANCER" ? (
         <section className="dashboard-grid">
