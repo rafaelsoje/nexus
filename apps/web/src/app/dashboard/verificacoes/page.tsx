@@ -8,7 +8,12 @@ import {
   useRequiredSession,
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
-import { EmptyState, StatusMessage } from "../../../components/ui";
+import {
+  ConfirmationDialog,
+  EmptyState,
+  Field,
+  StatusMessage,
+} from "../../../components/ui";
 import { apiFileRequest, apiRequest, formatCurrency } from "../../../lib/api";
 import type {
   AdminCompany,
@@ -22,6 +27,12 @@ const statusLabels: Record<VerificationStatus, string> = {
   REJECTED: "Reprovado",
 };
 
+type RejectionTarget = {
+  id: string;
+  kind: "company" | "freelancer";
+  name: string;
+};
+
 export default function VerificationsPage() {
   const session = useRequiredSession();
   const [companies, setCompanies] = useState<AdminCompany[]>([]);
@@ -29,9 +40,13 @@ export default function VerificationsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
+  const [rejectionMessage, setRejectionMessage] = useState("");
+  const [rejectionTarget, setRejectionTarget] =
+    useState<RejectionTarget | null>(null);
 
   const pendingCompanies = useMemo(
-    () => companies.filter((company) => company.verificationStatus === "PENDING"),
+    () =>
+      companies.filter((company) => company.verificationStatus === "PENDING"),
     [companies],
   );
   const pendingFreelancers = useMemo(
@@ -80,6 +95,7 @@ export default function VerificationsPage() {
   async function updateCompanyStatus(
     companyId: string,
     status: VerificationStatus,
+    message?: string,
   ) {
     setError("");
     setSuccess("");
@@ -87,15 +103,13 @@ export default function VerificationsPage() {
     try {
       await apiRequest(`/api/admin/companies/${companyId}/verification`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ message, status }),
       });
       setSuccess("Status da empresa atualizado.");
       await loadVerifications();
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "Erro ao atualizar empresa.",
+        caught instanceof Error ? caught.message : "Erro ao atualizar empresa.",
       );
     }
   }
@@ -103,6 +117,7 @@ export default function VerificationsPage() {
   async function updateFreelancerStatus(
     freelancerId: string,
     status: VerificationStatus,
+    message?: string,
   ) {
     setError("");
     setSuccess("");
@@ -110,7 +125,7 @@ export default function VerificationsPage() {
     try {
       await apiRequest(`/api/admin/freelancers/${freelancerId}/verification`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ message, status }),
       });
       setSuccess("Status do profissional atualizado.");
       await loadVerifications();
@@ -136,6 +151,33 @@ export default function VerificationsPage() {
         caught instanceof Error ? caught.message : "Erro ao abrir documento.",
       );
     }
+  }
+
+  function openRejectionDialog(target: RejectionTarget) {
+    setError("");
+    setSuccess("");
+    setRejectionTarget(target);
+    setRejectionMessage(
+      "Não conseguimos validar os documentos enviados. Por favor, envie uma nova versão legível, completa e dentro do prazo de validade.",
+    );
+  }
+
+  async function confirmRejection() {
+    const message = rejectionMessage.trim();
+
+    if (!rejectionTarget || !message) {
+      setError("Informe uma mensagem explicando o que precisa ser corrigido.");
+      return;
+    }
+
+    if (rejectionTarget.kind === "company") {
+      await updateCompanyStatus(rejectionTarget.id, "REJECTED", message);
+    } else {
+      await updateFreelancerStatus(rejectionTarget.id, "REJECTED", message);
+    }
+
+    setRejectionTarget(null);
+    setRejectionMessage("");
   }
 
   if (!session) {
@@ -217,7 +259,13 @@ export default function VerificationsPage() {
                       onApprove={() =>
                         updateCompanyStatus(company.id, "VERIFIED")
                       }
-                      onReject={() => updateCompanyStatus(company.id, "REJECTED")}
+                      onReject={() =>
+                        openRejectionDialog({
+                          id: company.id,
+                          kind: "company",
+                          name: company.companyName,
+                        })
+                      }
                       onReset={() => updateCompanyStatus(company.id, "PENDING")}
                     />
                   </div>
@@ -259,7 +307,14 @@ export default function VerificationsPage() {
                         updateFreelancerStatus(freelancer.id, "VERIFIED")
                       }
                       onReject={() =>
-                        updateFreelancerStatus(freelancer.id, "REJECTED")
+                        openRejectionDialog({
+                          id: freelancer.id,
+                          kind: "freelancer",
+                          name:
+                            freelancer.displayName ??
+                            freelancer.user?.name ??
+                            "Profissional",
+                        })
                       }
                       onReset={() =>
                         updateFreelancerStatus(freelancer.id, "PENDING")
@@ -274,6 +329,34 @@ export default function VerificationsPage() {
           </section>
         </>
       )}
+      <ConfirmationDialog
+        confirmLabel="Reprovar e notificar"
+        dangerous
+        description={
+          <div className="form compact modal-form">
+            <p className="modal-copy">
+              Escreva a orientação que será enviada para{" "}
+              <strong>{rejectionTarget?.name}</strong>. Use a mensagem para
+              pedir um novo envio quando o arquivo estiver ilegível, incompleto
+              ou divergente dos dados cadastrados.
+            </p>
+            <Field label="Mensagem para o usuário">
+              <textarea
+                onChange={(event) => setRejectionMessage(event.target.value)}
+                rows={5}
+                value={rejectionMessage}
+              />
+            </Field>
+          </div>
+        }
+        isOpen={Boolean(rejectionTarget)}
+        onCancel={() => {
+          setRejectionTarget(null);
+          setRejectionMessage("");
+        }}
+        onConfirm={confirmRejection}
+        title="Reprovar verificação?"
+      />
     </DashboardShell>
   );
 }

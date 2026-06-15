@@ -129,7 +129,9 @@ export class AdminService {
       });
 
       if (updated.role !== UserRole.ADMIN) {
-        throw new BadRequestException("Only admin users can receive admin access");
+        throw new BadRequestException(
+          "Only admin users can receive admin access",
+        );
       }
 
       await tx.auditLog.create({
@@ -261,7 +263,9 @@ export class AdminService {
         event: true,
         splits: {
           include: {
-            contract: { include: { event: true, company: true, freelancer: true } },
+            contract: {
+              include: { event: true, company: true, freelancer: true },
+            },
             freelancer: true,
           },
         },
@@ -404,13 +408,27 @@ export class AdminService {
   updateCompanyVerification(
     id: string,
     status: VerificationStatus,
+    message: string | undefined,
     audit: AuditContext,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const rejectionMessage = this.prepareVerificationMessage(status, message);
       const updated = await tx.companyProfile.update({
         where: { id },
         data: { verificationStatus: status },
+        include: { user: { select: { id: true } } },
       });
+
+      if (status === VerificationStatus.REJECTED) {
+        await tx.notification.create({
+          data: {
+            userId: updated.user.id,
+            type: "VERIFICATION_REJECTED",
+            title: "Documentos da empresa precisam de correção",
+            body: rejectionMessage,
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -421,7 +439,7 @@ export class AdminService {
           action: "COMPANY_VERIFICATION_UPDATED",
           entity: "CompanyProfile",
           entityId: id,
-          metadata: { status },
+          metadata: { message: rejectionMessage, status },
         },
       });
 
@@ -432,13 +450,27 @@ export class AdminService {
   updateFreelancerVerification(
     id: string,
     status: VerificationStatus,
+    message: string | undefined,
     audit: AuditContext,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const rejectionMessage = this.prepareVerificationMessage(status, message);
       const updated = await tx.freelancerProfile.update({
         where: { id },
         data: { verificationStatus: status },
+        include: { user: { select: { id: true } } },
       });
+
+      if (status === VerificationStatus.REJECTED) {
+        await tx.notification.create({
+          data: {
+            userId: updated.user.id,
+            type: "VERIFICATION_REJECTED",
+            title: "Documentos profissionais precisam de correção",
+            body: rejectionMessage,
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -449,7 +481,7 @@ export class AdminService {
           action: "FREELANCER_VERIFICATION_UPDATED",
           entity: "FreelancerProfile",
           entityId: id,
-          metadata: { status },
+          metadata: { message: rejectionMessage, status },
         },
       });
 
@@ -457,11 +489,26 @@ export class AdminService {
     });
   }
 
-  updateDisputeStatus(
-    id: string,
-    status: DisputeStatus,
-    audit?: AuditContext,
+  private prepareVerificationMessage(
+    status: VerificationStatus,
+    message: string | undefined,
   ) {
+    const trimmedMessage = message?.trim();
+
+    if (status !== VerificationStatus.REJECTED) {
+      return trimmedMessage || undefined;
+    }
+
+    if (!trimmedMessage) {
+      throw new BadRequestException(
+        "Verification rejection message is required",
+      );
+    }
+
+    return trimmedMessage;
+  }
+
+  updateDisputeStatus(id: string, status: DisputeStatus, audit?: AuditContext) {
     return this.prisma.$transaction(async (tx) => {
       const dispute = await tx.dispute.update({
         where: { id },
@@ -485,12 +532,11 @@ export class AdminService {
         await tx.contract.update({
           where: { id: dispute.contractId },
           data: {
-            status:
-              dispute.contract.paymentSplits.some(
-                (split) => split.payment.status === PaymentStatus.PAID,
-              )
-                ? ContractStatus.CONFIRMED
-                : ContractStatus.PENDING_PAYMENT,
+            status: dispute.contract.paymentSplits.some(
+              (split) => split.payment.status === PaymentStatus.PAID,
+            )
+              ? ContractStatus.CONFIRMED
+              : ContractStatus.PENDING_PAYMENT,
           },
         });
       }
@@ -639,9 +685,10 @@ export class AdminService {
           },
         },
       }),
-      splits: resolution === DisputeFinancialResolution.RELEASE_FREELANCER
-        ? released
-        : unblocked,
+      splits:
+        resolution === DisputeFinancialResolution.RELEASE_FREELANCER
+          ? released
+          : unblocked,
     };
   }
 
@@ -730,10 +777,15 @@ export class AdminService {
     await this.assertCanManageAdmins(requesterUserId);
 
     if (targetUserId === requesterUserId && !isActive) {
-      throw new BadRequestException("You cannot deactivate your own admin user");
+      throw new BadRequestException(
+        "You cannot deactivate your own admin user",
+      );
     }
 
-    if (!isActive && target.adminProfile?.accessLevel === AdminAccessLevel.OWNER) {
+    if (
+      !isActive &&
+      target.adminProfile?.accessLevel === AdminAccessLevel.OWNER
+    ) {
       await this.assertAtLeastOneOtherActiveOwner(targetUserId);
     }
   }
@@ -766,7 +818,9 @@ export class AdminService {
     });
 
     if (!otherOwner) {
-      throw new BadRequestException("At least one active owner admin is required");
+      throw new BadRequestException(
+        "At least one active owner admin is required",
+      );
     }
   }
 

@@ -122,7 +122,7 @@ export function ConfirmationDialog({
             <X size={18} />
           </button>
         </div>
-        <p className="modal-copy">{description}</p>
+        <div className="modal-copy">{description}</div>
         <div className="modal-actions">
           <button className="secondary-button" onClick={onCancel} type="button">
             Cancelar

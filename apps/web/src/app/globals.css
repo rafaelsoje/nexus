@@ -2803,6 +2803,10 @@ input[type="file"]::file-selector-button:hover {
   margin: 0;
 }
 
+.modal-form {
+  margin-top: 0;
+}
+
 .modal-copy strong {
   color: var(--white);
 }

@@ -284,6 +284,7 @@ export class AdminController {
     return this.adminService.updateCompanyVerification(
       id,
       dto.status,
+      dto.message,
       this.auditContext(user, request),
     );
   }
@@ -303,6 +304,7 @@ export class AdminController {
     return this.adminService.updateFreelancerVerification(
       id,
       dto.status,
+      dto.message,
       this.auditContext(user, request),
     );
   }
