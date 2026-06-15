@@ -8,7 +8,7 @@ const tinyPng =
 
 type Session = {
   accessToken: string;
-  user: { role: "ADMIN" | "COMPANY" | "FREELANCER" };
+  user: { id: string; role: "ADMIN" | "COMPANY" | "FREELANCER" };
 };
 
 type Skill = { id: string; name: string };
@@ -19,6 +19,10 @@ type FreelancerProfile = {
 type CompanyProfile = {
   id: string;
   email?: string;
+  companyName?: string;
+  document?: string | null;
+  responsibleName?: string;
+  phone?: string | null;
   wallet?: unknown;
   verificationDocuments?: Array<{ id: string; originalName: string }>;
 };
@@ -67,6 +71,27 @@ type GatewayAccountItem = {
   pixKey?: string | null;
   rawGatewayResponse?: unknown;
   status: string;
+};
+type CompanyTeamItem = {
+  members: Array<{
+    id: string;
+    role: string;
+    isActive: boolean;
+    user: { email: string };
+  }>;
+  invitations: Array<{
+    id: string;
+    email: string;
+    role: string;
+    status: string;
+    token?: string;
+  }>;
+};
+type AdminUserItem = {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
 };
 
 const sensitivePublicKeys = [
@@ -244,6 +269,146 @@ test.describe.serial("NEXO e2e API flows", () => {
     ).toBeTruthy();
   });
 
+  test("company and freelancer can cancel pre-contract hiring steps", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const skills = await get<Skill[]>(request, company, "/api/skills");
+    const freelancerProfile = await get<FreelancerProfile>(
+      request,
+      freelancer,
+      "/api/freelancers/profile",
+    );
+    const skillId = freelancerProfile.skills?.[0]?.skill.id ?? skills[0].id;
+
+    await post(request, freelancer, "/api/freelancers/skills", {
+      skills: [{ skillId, dailyRateCents: 41000 }],
+    });
+
+    const window = futureWindow(1300);
+    const event = await post<EventItem>(request, company, "/api/events", {
+      name: `E2E Cancelamentos Fluxo ${Date.now()}`,
+      startsAt: window.startsAt,
+      endsAt: window.endsAt,
+      location: "Centro E2E",
+      city: "Aracaju",
+      state: "SE",
+      eventType: "Teste automatizado",
+      desiredProfessionals: 1,
+      requirements: [{ skillId, quantity: 1, dailyRateCents: 41000 }],
+    });
+
+    const invitation = await post<InvitationItem>(
+      request,
+      company,
+      "/api/invitations",
+      {
+        eventId: event.id,
+        freelancerId: freelancerProfile.id,
+        eventRequirementId: event.requirements?.[0]?.id,
+        expiresAt: futureWindow(1299).startsAt,
+        message: "Convite que sera cancelado.",
+      },
+    );
+    const cancelledInvitation = await post<InvitationItem>(
+      request,
+      company,
+      `/api/invitations/${invitation.id}/cancel`,
+    );
+    expect(cancelledInvitation.status).toBe("CANCELLED");
+
+    const application = await post<ApplicationItem>(
+      request,
+      freelancer,
+      "/api/applications",
+      {
+        eventId: event.id,
+        eventRequirementId: event.requirements?.[0]?.id,
+        message: "Candidatura inicial.",
+        proposedAmountCents: 42000,
+      },
+    );
+    const updatedApplication = await patch<ApplicationItem>(
+      request,
+      freelancer,
+      `/api/applications/${application.id}`,
+      {
+        message: "Candidatura atualizada.",
+        proposedAmountCents: 43000,
+      },
+    );
+    expect(updatedApplication.proposedAmountCents).toBe(43000);
+
+    const cancelledApplication = await post<ApplicationItem>(
+      request,
+      freelancer,
+      `/api/applications/${application.id}/cancel`,
+    );
+    expect(cancelledApplication.status).toBe("CANCELLED");
+
+    const cancelledEvent = await post<EventItem>(
+      request,
+      company,
+      `/api/events/${event.id}/cancel`,
+    );
+    expect(cancelledEvent.status).toBe("CANCELLED");
+  });
+
+  test("company owner manages team invitations and members", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const email = `e2e-team-${Date.now()}@nexo.local`;
+
+    const invitation = await post<{ id: string; token: string; status: string }>(
+      request,
+      company,
+      "/api/companies/team/invitations",
+      { email, role: "OPERATOR" },
+    );
+    expect(invitation.status).toBe("PENDING");
+
+    const cancelledInvitation = await post<{ status: string }>(
+      request,
+      company,
+      `/api/companies/team/invitations/${invitation.id}/cancel`,
+    );
+    expect(cancelledInvitation.status).toBe("CANCELLED");
+
+    const acceptedInvitation = await post<{ token: string }>(
+      request,
+      company,
+      "/api/companies/team/invitations",
+      { email, role: "OPERATOR" },
+    );
+    await post(request, null, "/api/companies/team/invitations/accept", {
+      token: acceptedInvitation.token,
+      name: "E2E Membro Empresa",
+      phone: "79999999999",
+      password,
+    });
+
+    const team = await get<CompanyTeamItem>(request, company, "/api/companies/team");
+    const member = team.members.find((item) => item.user.email === email);
+    expect(member).toBeTruthy();
+
+    const updatedMember = await patch<{ role: string }>(
+      request,
+      company,
+      `/api/companies/team/members/${member?.id}/role`,
+      { role: "VIEWER" },
+    );
+    expect(updatedMember.role).toBe("VIEWER");
+
+    const inactiveMember = await post<{ isActive: boolean }>(
+      request,
+      company,
+      `/api/companies/team/members/${member?.id}/deactivate`,
+    );
+    expect(inactiveMember.isActive).toBeFalsy();
+  });
+
   test("profile document upload appears in admin verification queue", async ({
     request,
   }) => {
@@ -299,6 +464,91 @@ test.describe.serial("NEXO e2e API flows", () => {
     );
 
     await del(request, company, `/api/documents/${document.id}`);
+  });
+
+  test("company can anonymize its own account and remove private data", async ({
+    request,
+  }) => {
+    const email = `e2e-lgpd-${Date.now()}@nexo.local`;
+    const session = await post<Session>(request, null, "/api/auth/register", {
+      name: "Empresa LGPD E2E",
+      email,
+      phone: "79999999999",
+      password,
+      role: "COMPANY",
+    });
+    const admin = await login(request, "admin@nexo.local");
+
+    const profile = await post<CompanyProfile>(
+      request,
+      session,
+      "/api/companies/profile",
+      {
+        companyName: "Empresa LGPD E2E",
+        responsibleName: "Responsavel LGPD",
+        document: "12345678000199",
+        phone: "79999999999",
+        email,
+        city: "Aracaju",
+        state: "SE",
+      },
+    );
+    expect(profile.email).toBe(email);
+
+    const document = await post<{ id: string }>(
+      request,
+      session,
+      "/api/documents/verification",
+      {
+        category: "document",
+        originalName: "e2e-lgpd-documento.png",
+        mimeType: "image/png",
+        data: `data:image/png;base64,${tinyPng}`,
+      },
+    );
+    expect(document.id).toBeTruthy();
+
+    const result = await post<{ ok: boolean }>(
+      request,
+      session,
+      "/api/users/me/anonymize",
+      { password },
+    );
+    expect(result.ok).toBeTruthy();
+
+    const loginResponse = await request.post("/api/auth/login", {
+      data: { email, password },
+    });
+    expect(loginResponse.status()).toBe(401);
+
+    await expectStatus(request, session, "GET", "/api/users/me", [401]);
+
+    const users = await get<AdminUserItem[]>(request, admin, "/api/admin/users");
+    const anonymizedUser = users.find((item) => item.id === session.user.id);
+    expect(anonymizedUser?.isActive).toBeFalsy();
+    expect(anonymizedUser?.email).toContain("deleted-");
+    expect(anonymizedUser?.name).toContain("Conta excluída");
+
+    const anonymizedProfile = await prisma.companyProfile.findUnique({
+      where: { id: profile.id },
+      select: {
+        companyName: true,
+        document: true,
+        responsibleName: true,
+        phone: true,
+        email: true,
+        city: true,
+      },
+    });
+    expect(anonymizedProfile?.companyName).toBe("Empresa excluída");
+    expect(anonymizedProfile?.document).toBeNull();
+    expect(anonymizedProfile?.phone).toBeNull();
+    expect(anonymizedProfile?.city).toBeNull();
+
+    const remainingDocument = await prisma.verificationDocument.findUnique({
+      where: { id: document.id },
+    });
+    expect(remainingDocument).toBeNull();
   });
 
   test("participant opens dispute and admin resolves it", async ({ request }) => {
@@ -954,6 +1204,15 @@ async function moveContractToRecentlyFinished(contractId: string) {
 }
 
 async function cleanupE2eArtifacts() {
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: "e2e-lgpd-" } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: "e2e-team-" } },
+  });
+  await prisma.companyInvitation.deleteMany({
+    where: { email: { startsWith: "e2e-team-" } },
+  });
   await prisma.verificationDocument.deleteMany({
     where: { originalName: { startsWith: "e2e-" } },
   });

@@ -71,6 +71,12 @@ export class EventsController {
   }
 
   @Roles(UserRole.COMPANY)
+  @Post(":id/cancel")
+  cancel(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.eventsService.cancel(user.sub, id);
+  }
+
+  @Roles(UserRole.COMPANY)
   @Delete(":id")
   delete(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
     return this.eventsService.delete(user.sub, id);

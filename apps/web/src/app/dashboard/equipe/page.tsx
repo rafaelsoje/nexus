@@ -89,6 +89,52 @@ export default function CompanyTeamPage() {
     }
   }
 
+  async function updateMemberRole(memberId: string, nextRole: CompanyMemberRole) {
+    setError(null);
+    setMessage(null);
+
+    try {
+      await apiRequest(`/api/companies/team/members/${memberId}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: nextRole }),
+      });
+      setMessage("Papel do membro atualizado.");
+      await loadTeam();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar membro.");
+    }
+  }
+
+  async function deactivateMember(memberId: string) {
+    setError(null);
+    setMessage(null);
+
+    try {
+      await apiRequest(`/api/companies/team/members/${memberId}/deactivate`, {
+        method: "POST",
+      });
+      setMessage("Membro removido da equipe.");
+      await loadTeam();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao remover membro.");
+    }
+  }
+
+  async function cancelInvitation(invitationId: string) {
+    setError(null);
+    setMessage(null);
+
+    try {
+      await apiRequest(`/api/companies/team/invitations/${invitationId}/cancel`, {
+        method: "POST",
+      });
+      setMessage("Convite cancelado.");
+      await loadTeam();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao cancelar convite.");
+    }
+  }
+
   const inviteLink =
     typeof window !== "undefined" && lastInvite?.token
       ? `${window.location.origin}/convite/empresa?token=${lastInvite.token}`
@@ -179,9 +225,45 @@ export default function CompanyTeamPage() {
               <article className="list-row" key={member.id}>
                 <div>
                   <strong>{member.user.name}</strong>
-                  <span>{member.user.email}</span>
+                  <span>
+                    {member.user.email}
+                    {!member.isActive ? " - inativo na equipe" : ""}
+                  </span>
                 </div>
-                <small>{roleLabels[member.role]}</small>
+                <div className="row-actions">
+                  {member.role === "OWNER" ? (
+                    <small>{roleLabels[member.role]}</small>
+                  ) : (
+                    <>
+                      <select
+                        aria-label={`Papel de ${member.user.name}`}
+                        disabled={!member.isActive}
+                        onChange={(event) =>
+                          updateMemberRole(
+                            member.id,
+                            event.target.value as CompanyMemberRole,
+                          )
+                        }
+                        value={member.role}
+                      >
+                        {roles.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      {member.isActive ? (
+                        <button
+                          className="icon-action ghost"
+                          onClick={() => deactivateMember(member.id)}
+                          type="button"
+                        >
+                          Remover
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
               </article>
             ))}
             {team && !team.members.length ? (
@@ -208,7 +290,18 @@ export default function CompanyTeamPage() {
                   {new Date(invitation.expiresAt).toLocaleDateString("pt-BR")}
                 </span>
               </div>
-              <small>{invitationStatusLabels[invitation.status]}</small>
+              <div className="row-actions">
+                <small>{invitationStatusLabels[invitation.status]}</small>
+                {invitation.status === "PENDING" ? (
+                  <button
+                    className="icon-action ghost"
+                    onClick={() => cancelInvitation(invitation.id)}
+                    type="button"
+                  >
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
             </article>
           ))}
           {team && !team.invitations.length ? (

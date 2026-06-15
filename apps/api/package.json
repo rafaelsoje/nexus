@@ -11,7 +11,8 @@
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "prisma:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
+    "prisma:seed": "dotenv -e ../../.env -- tsx prisma/seed-base.ts",
+    "prisma:seed:demo": "dotenv -e ../../.env -- tsx prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",
@@ -42,6 +43,6 @@
     "typescript": "^5.6.3"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed-base.ts"
   }
 }

@@ -24,6 +24,12 @@ export default function SpecialtiesPage() {
     setLoading(true);
 
     try {
+      if (session?.user.role === "ADMIN") {
+        setSkills(await apiRequest<Skill[]>("/api/skills"));
+        setProfile(null);
+        return;
+      }
+
       if (session?.user.role !== "FREELANCER") {
         setLoading(false);
         return;
@@ -79,6 +85,37 @@ export default function SpecialtiesPage() {
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao salvar currículo.",
+      );
+    }
+  }
+
+  async function handleCreateSkill(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const name = String(form.get("name") || "").trim();
+    const description = String(form.get("description") || "").trim();
+    setError("");
+    setSuccess("");
+
+    if (!name) {
+      setError("Informe o nome da especialidade.");
+      return;
+    }
+
+    try {
+      await apiRequest("/api/skills", {
+        method: "POST",
+        body: JSON.stringify({ name, description }),
+      });
+      formElement.reset();
+      setSuccess("Especialidade criada.");
+      await loadSpecialties();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao criar especialidade.",
       );
     }
   }
@@ -182,10 +219,75 @@ export default function SpecialtiesPage() {
       {success ? <StatusMessage type="success">{success}</StatusMessage> : null}
       {loading ? <EmptyState>Carregando especialidades...</EmptyState> : null}
 
-      {session.user.role !== "FREELANCER" ? (
+      {session.user.role === "COMPANY" ? (
         <EmptyState>
-          Especialidades e diárias são usadas apenas no perfil freelancer.
+          Especialidades são cadastradas pela administração da plataforma.
         </EmptyState>
+      ) : null}
+
+      {session.user.role === "ADMIN" ? (
+        <section className="dashboard-grid">
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <span className="eyebrow">Base da plataforma</span>
+                <h2>Criar especialidade</h2>
+              </div>
+              <Settings size={18} />
+            </div>
+            <p className="form-note">
+              Cadastre aqui as funções que empresas poderão solicitar nos
+              eventos e freelancers poderão adicionar ao currículo.
+            </p>
+            <form className="form compact" onSubmit={handleCreateSkill}>
+              <Field label="Nome da especialidade">
+                <input
+                  name="name"
+                  placeholder="Ex.: Áudio, Iluminação, Fotografia"
+                  required
+                />
+              </Field>
+              <Field label="Descrição">
+                <textarea
+                  name="description"
+                  placeholder="Explique rapidamente quando essa função deve ser usada."
+                  rows={4}
+                />
+              </Field>
+              <button className="primary-button full" type="submit">
+                Criar especialidade
+              </button>
+            </form>
+          </article>
+
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <span className="eyebrow">Disponíveis no sistema</span>
+                <h2>Especialidades cadastradas</h2>
+              </div>
+              <Star size={18} />
+            </div>
+            <div className="list">
+              {skills.length ? (
+                skills.map((skill) => (
+                  <div className="list-row" key={skill.id}>
+                    <div>
+                      <strong>{skill.name}</strong>
+                      <span>{skill.description || "Sem descrição."}</span>
+                    </div>
+                    <small>{skill.slug}</small>
+                  </div>
+                ))
+              ) : (
+                <EmptyState>
+                  Nenhuma especialidade cadastrada. Crie a primeira para liberar
+                  criação de eventos e currículo freelancer.
+                </EmptyState>
+              )}
+            </div>
+          </article>
+        </section>
       ) : null}
 
       {session.user.role === "FREELANCER" ? (

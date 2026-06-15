@@ -20,6 +20,7 @@ import { CompaniesService } from "./companies.service";
 import { InviteCompanyMemberDto } from "./dto/invite-company-member.dto";
 import { AcceptCompanyInvitationDto } from "./dto/accept-company-invitation.dto";
 import { UpdateCompanyLogoDto } from "./dto/update-company-logo.dto";
+import { UpdateCompanyMemberRoleDto } from "./dto/update-company-member-role.dto";
 
 @Controller("companies")
 export class CompaniesController {
@@ -77,6 +78,37 @@ export class CompaniesController {
     @Body() dto: InviteCompanyMemberDto,
   ) {
     return this.companiesService.inviteMember(user.sub, dto);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post("team/invitations/:id/cancel")
+  cancelInvitation(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+  ) {
+    return this.companiesService.cancelInvitation(user.sub, id);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Patch("team/members/:id/role")
+  updateMemberRole(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @Body() dto: UpdateCompanyMemberRoleDto,
+  ) {
+    return this.companiesService.updateMemberRole(user.sub, id, dto.role);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post("team/members/:id/deactivate")
+  deactivateMember(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+  ) {
+    return this.companiesService.deactivateMember(user.sub, id);
   }
 
   @Post("team/invitations/accept")

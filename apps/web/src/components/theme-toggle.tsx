@@ -7,7 +7,7 @@ type Theme = "dark" | "light";
 
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") {
-    return "dark";
+    return "light";
   }
 
   const storedTheme = window.localStorage.getItem("nexo-theme");
@@ -16,13 +16,11 @@ function getInitialTheme(): Theme {
     return storedTheme;
   }
 
-  return window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
+  return "light";
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const initialTheme = getInitialTheme();

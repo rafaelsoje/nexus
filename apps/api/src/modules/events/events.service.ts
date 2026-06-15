@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  ApplicationStatus,
   ContractStatus,
   EventStatus,
+  InvitationStatus,
   VerificationStatus,
 } from "@prisma/client";
 import { publicFreelancerSelect } from "../../common/selectors/public-profiles";
@@ -158,6 +160,56 @@ export class EventsService {
         },
       },
       include: { requirements: { include: { skill: true } } },
+    });
+  }
+
+  async cancel(userId: string, eventId: string) {
+    await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
+    const event = await this.findMine(userId, eventId);
+
+    if (event.status === EventStatus.CANCELLED) {
+      return event;
+    }
+
+    const cancellableContractStatuses: ContractStatus[] = [
+      ContractStatus.PENDING_PAYMENT,
+      ContractStatus.CANCELLED,
+      ContractStatus.NO_SHOW,
+    ];
+    const blockingContract = event.contracts.find(
+      (contract) => !cancellableContractStatuses.includes(contract.status),
+    );
+
+    if (blockingContract) {
+      throw new BadRequestException(
+        "Event has contracts that must be handled before cancellation",
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.invitation.updateMany({
+        where: { eventId: event.id, status: InvitationStatus.PENDING },
+        data: { status: InvitationStatus.CANCELLED, respondedAt: new Date() },
+      });
+
+      await tx.application.updateMany({
+        where: { eventId: event.id, status: ApplicationStatus.PENDING },
+        data: { status: ApplicationStatus.CANCELLED, respondedAt: new Date() },
+      });
+
+      await tx.contract.updateMany({
+        where: {
+          eventId: event.id,
+          status: ContractStatus.PENDING_PAYMENT,
+        },
+        data: { status: ContractStatus.CANCELLED },
+      });
+
+      return tx.event.update({
+        where: { id: event.id },
+        data: { status: EventStatus.CANCELLED },
+        include: { requirements: { include: { skill: true } } },
+      });
     });
   }
 

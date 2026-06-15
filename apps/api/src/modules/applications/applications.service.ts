@@ -25,6 +25,7 @@ import {
   companyReadRoles,
 } from "../company-access/company-access.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
+import { UpdateApplicationDto } from "./dto/update-application.dto";
 
 @Injectable()
 export class ApplicationsService {
@@ -198,6 +199,82 @@ export class ApplicationsService {
       });
 
       return application;
+    });
+  }
+
+  async updateMine(
+    userId: string,
+    applicationId: string,
+    dto: UpdateApplicationDto,
+  ) {
+    const freelancer = await this.findFreelancerByUserId(userId);
+    const application = await this.prisma.application.findFirst({
+      where: { id: applicationId, freelancerId: freelancer.id },
+      include: { event: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException("Application not found");
+    }
+
+    if (application.status !== ApplicationStatus.PENDING) {
+      throw new BadRequestException("Only pending applications can be updated");
+    }
+
+    if (application.event.startsAt <= new Date()) {
+      throw new BadRequestException("Event is not open for applications");
+    }
+
+    return this.prisma.application.update({
+      where: { id: application.id },
+      data: {
+        message: dto.message,
+        proposedAmountCents: dto.proposedAmountCents,
+      },
+      include: {
+        event: { include: { requirements: { include: { skill: true } } } },
+        eventRequirement: { include: { skill: true } },
+        company: { select: publicCompanySelect },
+        contract: true,
+      },
+    });
+  }
+
+  async cancelMine(userId: string, applicationId: string) {
+    const freelancer = await this.findFreelancerByUserId(userId);
+    const application = await this.prisma.application.findFirst({
+      where: { id: applicationId, freelancerId: freelancer.id },
+      include: { event: true, company: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException("Application not found");
+    }
+
+    if (application.status === ApplicationStatus.CANCELLED) {
+      return application;
+    }
+
+    if (application.status !== ApplicationStatus.PENDING) {
+      throw new BadRequestException("Only pending applications can be cancelled");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedApplication = await tx.application.update({
+        where: { id: application.id },
+        data: {
+          status: ApplicationStatus.CANCELLED,
+          respondedAt: new Date(),
+        },
+      });
+
+      await this.companyAccess.notifyCompanyMembers(tx, application.companyId, {
+        type: "APPLICATION_CANCELLED",
+        title: "Candidatura cancelada",
+        body: `${freelancer.displayName ?? "Profissional"} cancelou a candidatura para ${application.event.name}.`,
+      });
+
+      return updatedApplication;
     });
   }
 

@@ -23,10 +23,9 @@ export default function RootLayout({
     (() => {
       try {
         const storedTheme = window.localStorage.getItem("nexo-theme");
-        const systemTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-        document.documentElement.dataset.theme = storedTheme || systemTheme;
+        document.documentElement.dataset.theme = storedTheme || "light";
       } catch {
-        document.documentElement.dataset.theme = "dark";
+        document.documentElement.dataset.theme = "light";
       }
     })();
   `;

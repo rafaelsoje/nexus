@@ -1,6 +1,15 @@
 "use client";
 
-import { CreditCard, FileText, Settings, ShieldCheck, Upload, X } from "lucide-react";
+import {
+  CreditCard,
+  FileText,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+  Upload,
+  X,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
   FormEvent,
@@ -16,7 +25,7 @@ import {
   useRequiredSession,
 } from "../../../components/dashboard-shell";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
-import { apiFileRequest, apiRequest } from "../../../lib/api";
+import { apiFileRequest, apiRequest, clearSession } from "../../../lib/api";
 import type {
   CompanyProfile,
   FreelancerProfile,
@@ -24,6 +33,7 @@ import type {
 } from "../../../lib/dashboard-types";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const session = useRequiredSession();
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(
     null,
@@ -215,6 +225,33 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAnonymizeAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const confirmation = String(form.get("confirmation") || "").trim();
+    const password = String(form.get("password") || "");
+    setError("");
+    setSuccess("");
+
+    if (confirmation !== "EXCLUIR") {
+      setError('Digite EXCLUIR para confirmar a solicitação.');
+      return;
+    }
+
+    try {
+      await apiRequest("/api/users/me/anonymize", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      });
+      clearSession();
+      router.push("/login");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao excluir a conta.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -342,7 +379,55 @@ export default function ProfilePage() {
           pelas telas operacionais.
         </EmptyState>
       ) : null}
+
+      {session.user.role === "COMPANY" || session.user.role === "FREELANCER" ? (
+        <AccountDeletionPanel onSubmit={handleAnonymizeAccount} />
+      ) : null}
     </DashboardShell>
+  );
+}
+
+function AccountDeletionPanel({
+  onSubmit,
+}: Readonly<{
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}>) {
+  return (
+    <section className="panel" style={{ marginTop: "1rem" }}>
+      <div className="panel-header">
+        <div>
+          <span className="eyebrow">Privacidade</span>
+          <h2>Excluir conta</h2>
+        </div>
+        <ShieldAlert size={18} />
+      </div>
+      <p className="form-note">
+        Esta ação desativa seu acesso, apaga documentos de verificação e
+        remove/mascara dados pessoais. Histórico operacional, contratos,
+        avaliações e auditoria ficam preservados sem seus dados privados.
+      </p>
+      <form className="form compact" onSubmit={onSubmit}>
+        <Field label="Confirmação">
+          <input
+            autoComplete="off"
+            name="confirmation"
+            placeholder="Digite EXCLUIR"
+            required
+          />
+        </Field>
+        <Field label="Senha atual">
+          <input
+            autoComplete="current-password"
+            name="password"
+            required
+            type="password"
+          />
+        </Field>
+        <button className="primary-button danger-button full" type="submit">
+          Excluir minha conta
+        </button>
+      </form>
+    </section>
   );
 }
 

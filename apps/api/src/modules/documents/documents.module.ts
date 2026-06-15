@@ -31,5 +31,6 @@ import { LocalDocumentStorage } from "./storage/local-document.storage";
       },
     },
   ],
+  exports: [DOCUMENT_STORAGE],
 })
 export class DocumentsModule {}

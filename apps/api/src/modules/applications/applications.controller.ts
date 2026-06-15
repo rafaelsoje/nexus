@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { UserRole } from "@prisma/client";
 import {
   CurrentUser,
@@ -9,6 +17,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { ApplicationsService } from "./applications.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
+import { UpdateApplicationDto } from "./dto/update-application.dto";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("applications")
@@ -34,6 +43,22 @@ export class ApplicationsController {
     @Body() dto: CreateApplicationDto,
   ) {
     return this.applicationsService.create(user.sub, dto);
+  }
+
+  @Roles(UserRole.FREELANCER)
+  @Patch(":id")
+  update(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @Body() dto: UpdateApplicationDto,
+  ) {
+    return this.applicationsService.updateMine(user.sub, id, dto);
+  }
+
+  @Roles(UserRole.FREELANCER)
+  @Post(":id/cancel")
+  cancel(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.applicationsService.cancelMine(user.sub, id);
   }
 
   @Roles(UserRole.COMPANY)

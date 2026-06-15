@@ -154,6 +154,54 @@ export default function OpportunitiesPage() {
     }
   }
 
+  async function updateApplication(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const proposedAmount = Number(form.get("proposedAmount") || 0);
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/applications/${String(form.get("applicationId"))}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          message: String(form.get("message") || ""),
+          proposedAmountCents: proposedAmount
+            ? Math.round(proposedAmount * 100)
+            : undefined,
+        }),
+      });
+      setSuccess("Candidatura atualizada.");
+      await loadOpportunities();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao atualizar candidatura.",
+      );
+    }
+  }
+
+  async function cancelApplication(applicationId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/applications/${applicationId}/cancel`, {
+        method: "POST",
+      });
+      setSuccess("Candidatura cancelada.");
+      await loadOpportunities();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Erro ao cancelar candidatura.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -200,6 +248,8 @@ export default function OpportunitiesPage() {
 
           <ApplicationsPanel
             applications={applications}
+            onCancel={cancelApplication}
+            onUpdate={updateApplication}
             title="Minhas candidaturas"
           />
         </section>
@@ -438,8 +488,15 @@ function OpportunityApplicationForm({
 
 function ApplicationsPanel({
   applications,
+  onCancel,
+  onUpdate,
   title,
-}: Readonly<{ applications: Application[]; title: string }>) {
+}: Readonly<{
+  applications: Application[];
+  onCancel: (applicationId: string) => void;
+  onUpdate: (event: FormEvent<HTMLFormElement>) => void;
+  title: string;
+}>) {
   return (
     <article className="panel">
       <div className="panel-header">
@@ -462,6 +519,40 @@ function ApplicationsPanel({
                     : "Sem proposta de valor"}
                 </small>
               </div>
+              {application.status === "PENDING" ? (
+                <form className="inline-negotiation" onSubmit={onUpdate}>
+                  <input
+                    name="applicationId"
+                    type="hidden"
+                    value={application.id}
+                  />
+                  <input
+                    defaultValue={formatAmountInput(
+                      application.proposedAmountCents,
+                    )}
+                    min={0}
+                    name="proposedAmount"
+                    placeholder="Valor"
+                    step="0.01"
+                    type="number"
+                  />
+                  <input
+                    defaultValue={application.message ?? ""}
+                    name="message"
+                    placeholder="Mensagem"
+                  />
+                  <button className="icon-action" type="submit">
+                    Atualizar
+                  </button>
+                  <button
+                    className="icon-action ghost"
+                    onClick={() => onCancel(application.id)}
+                    type="button"
+                  >
+                    Cancelar
+                  </button>
+                </form>
+              ) : null}
             </div>
           ))}
         </div>

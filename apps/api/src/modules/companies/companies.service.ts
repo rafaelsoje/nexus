@@ -199,6 +199,102 @@ export class CompaniesService {
     return { ...invitation, token };
   }
 
+  async cancelInvitation(userId: string, invitationId: string) {
+    const membership = await this.companyAccess.findMembership(
+      userId,
+      companyManageRoles,
+    );
+    const invitation = await this.prisma.companyInvitation.findFirst({
+      where: { id: invitationId, companyId: membership.companyId },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException("Company invitation not found");
+    }
+
+    if (invitation.status !== CompanyInvitationStatus.PENDING) {
+      throw new BadRequestException("Only pending invitations can be cancelled");
+    }
+
+    return this.prisma.companyInvitation.update({
+      where: { id: invitation.id },
+      data: { status: CompanyInvitationStatus.CANCELLED },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async updateMemberRole(
+    userId: string,
+    memberId: string,
+    role: CompanyMemberRole,
+  ) {
+    const membership = await this.companyAccess.findMembership(
+      userId,
+      companyManageRoles,
+    );
+
+    if (role === CompanyMemberRole.OWNER) {
+      throw new BadRequestException("Owner role cannot be assigned here");
+    }
+
+    const member = await this.findManagedMember(membership.companyId, memberId);
+
+    if (member.role === CompanyMemberRole.OWNER) {
+      throw new BadRequestException("Owner role cannot be changed");
+    }
+
+    return this.prisma.companyMember.update({
+      where: { id: member.id },
+      data: { role },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+  }
+
+  async deactivateMember(userId: string, memberId: string) {
+    const membership = await this.companyAccess.findMembership(
+      userId,
+      companyManageRoles,
+    );
+    const member = await this.findManagedMember(membership.companyId, memberId);
+
+    if (member.role === CompanyMemberRole.OWNER) {
+      throw new BadRequestException("Owner cannot be removed");
+    }
+
+    return this.prisma.companyMember.update({
+      where: { id: member.id },
+      data: { isActive: false },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+  }
+
   async acceptInvitation(dto: AcceptCompanyInvitationDto) {
     const invitation = await this.prisma.companyInvitation.findFirst({
       where: {
@@ -274,6 +370,18 @@ export class CompaniesService {
         role: member.role,
       };
     });
+  }
+
+  private async findManagedMember(companyId: string, memberId: string) {
+    const member = await this.prisma.companyMember.findFirst({
+      where: { id: memberId, companyId },
+    });
+
+    if (!member) {
+      throw new NotFoundException("Company member not found");
+    }
+
+    return member;
   }
 
   listForAdmin() {

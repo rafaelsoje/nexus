@@ -233,6 +233,50 @@ export class InvitationsService {
     });
   }
 
+  async cancel(userId: string, invitationId: string) {
+    const company = await this.companyAccess.findCompanyForUser(
+      userId,
+      companyOperateRoles,
+    );
+    const invitation = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, companyId: company.id },
+      include: { event: true, freelancer: true },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException("Invitation not found");
+    }
+
+    if (invitation.status === InvitationStatus.CANCELLED) {
+      return invitation;
+    }
+
+    if (invitation.status !== InvitationStatus.PENDING) {
+      throw new BadRequestException("Only pending invitations can be cancelled");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedInvitation = await tx.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: InvitationStatus.CANCELLED,
+          respondedAt: new Date(),
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: invitation.freelancer.userId,
+          type: "INVITATION_CANCELLED",
+          title: "Convite cancelado",
+          body: `${company.companyName} cancelou o convite para ${invitation.event.name}.`,
+        },
+      });
+
+      return updatedInvitation;
+    });
+  }
+
   async accept(userId: string, invitationId: string) {
     const freelancer = await this.findFreelancerByUserId(userId);
     this.assertFreelancerVerified(freelancer);

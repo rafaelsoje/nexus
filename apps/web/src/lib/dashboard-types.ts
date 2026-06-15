@@ -1,6 +1,11 @@
 import type { UserRole } from "./api";
 
-export type Skill = { id: string; name: string; slug: string };
+export type Skill = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+};
 
 export type EventRequirement = {
   id?: string;

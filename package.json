@@ -14,7 +14,8 @@
     "prisma:generate": "pnpm --filter @nexus/api prisma:generate",
     "prisma:migrate": "pnpm --filter @nexus/api prisma:migrate",
     "prisma:deploy": "pnpm --filter @nexus/api prisma:deploy",
-    "prisma:seed": "pnpm --filter @nexus/api prisma:seed"
+    "prisma:seed": "pnpm --filter @nexus/api prisma:seed",
+    "prisma:seed:demo": "pnpm --filter @nexus/api prisma:seed:demo"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

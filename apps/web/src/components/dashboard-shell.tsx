@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronDown,
   ClipboardList,
+  FileText,
   MessageCircle,
   CreditCard,
   LayoutDashboard,
@@ -20,7 +21,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   apiRequest,
   clearSession,
@@ -94,6 +95,12 @@ const navItems: NavItem[] = [
     roles: ["ADMIN", "COMPANY"],
   },
   {
+    href: "/dashboard/especialidades",
+    label: "Especialidades",
+    icon: ClipboardList,
+    roles: ["ADMIN", "FREELANCER"],
+  },
+  {
     href: "/dashboard/favoritos",
     label: "Favoritos",
     icon: Star,
@@ -103,6 +110,12 @@ const navItems: NavItem[] = [
     href: "/dashboard/convites",
     label: "Convites",
     icon: Bell,
+    roles: ["COMPANY", "FREELANCER"],
+  },
+  {
+    href: "/dashboard/contratos",
+    label: "Contratos",
+    icon: FileText,
     roles: ["COMPANY", "FREELANCER"],
   },
   {
@@ -429,9 +442,31 @@ export function AccountMenu({
   role: UserRole;
 }>) {
   const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen]);
 
   return (
-    <div className="account-menu">
+    <div className="account-menu" ref={menuRef}>
       <button
         aria-expanded={isOpen}
         className="account-button"

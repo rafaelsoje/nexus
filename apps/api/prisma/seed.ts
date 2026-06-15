@@ -1,32 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import { platformSkills, slugify } from "./platform-seed-data";
 
 const prisma = new PrismaClient();
 
 const demoPassword = process.env.SEED_DEMO_PASSWORD ?? "Nexo@12345";
-
-const skills = [
-  "Técnico de áudio",
-  "Técnico de luz",
-  "Operador de LED",
-  "Roadie",
-  "Produtor",
-  "Câmera",
-  "Fotógrafo",
-  "Operador de streaming",
-  "Montador",
-  "Carregador",
-  "DJ",
-  "Recepcionista",
-  "Segurança",
-  "Staff de apoio",
-  "Bartender",
-  "Garçom",
-  "Brigadista",
-  "Cerimonialista",
-  "Social media",
-  "Designer de palco",
-];
 
 const companySeeds = [
   {
@@ -245,15 +223,6 @@ const freelancerSeeds = [
     ],
   },
 ] as const;
-
-function slugify(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 function moneyFromRequirements(
   requirements: Array<{ quantity: number; dailyRateCents: number }>,
@@ -863,13 +832,18 @@ async function main() {
   const passwordHash = await bcrypt.hash(demoPassword, 12);
 
   const skillMap = new Map<string, string>();
-  for (const name of skills) {
+  for (const skillSeed of platformSkills) {
     const skill = await prisma.skill.upsert({
-      where: { slug: slugify(name) },
-      update: { name, isActive: true },
+      where: { slug: slugify(skillSeed.name) },
+      update: {
+        name: skillSeed.name,
+        description: skillSeed.description,
+        isActive: true,
+      },
       create: {
-        name,
-        slug: slugify(name),
+        name: skillSeed.name,
+        slug: slugify(skillSeed.name),
+        description: skillSeed.description,
       },
     });
     skillMap.set(skill.slug, skill.id);

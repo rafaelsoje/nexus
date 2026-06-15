@@ -41,6 +41,12 @@ export class InvitationsController {
     return this.invitationsService.listSent(user.sub);
   }
 
+  @Roles(UserRole.COMPANY)
+  @Post(":id/cancel")
+  cancel(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
+    return this.invitationsService.cancel(user.sub, id);
+  }
+
   @Roles(UserRole.FREELANCER)
   @Get("received")
   listReceived(@CurrentUser() user: CurrentUserPayload) {

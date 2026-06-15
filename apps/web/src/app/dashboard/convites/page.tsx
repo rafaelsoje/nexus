@@ -121,6 +121,23 @@ export default function InvitationsPage() {
     }
   }
 
+  async function cancelInvitation(invitationId: string) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/api/invitations/${invitationId}/cancel`, {
+        method: "POST",
+      });
+      setSuccess("Convite cancelado.");
+      await loadInvitations();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao cancelar convite.",
+      );
+    }
+  }
+
   if (!session) {
     return null;
   }
@@ -253,6 +270,13 @@ export default function InvitationsPage() {
                   <input name="message" placeholder="Mensagem da proposta" />
                   <button className="icon-action" type="submit">
                     Propor
+                  </button>
+                  <button
+                    className="icon-action ghost"
+                    onClick={() => cancelInvitation(invitation.id)}
+                    type="button"
+                  >
+                    Cancelar convite
                   </button>
                 </form>
               ) : null}

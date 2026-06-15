@@ -40,7 +40,9 @@ export default function EventsPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
+  const [eventToCancel, setEventToCancel] = useState<EventItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState("");
+  const [cancelingEventId, setCancelingEventId] = useState("");
 
   const adminMetrics = useMemo(
     () => ({
@@ -235,6 +237,34 @@ export default function EventsPage() {
       );
     } finally {
       setDeletingEventId("");
+    }
+  }
+
+  async function handleCancelEvent() {
+    if (!eventToCancel) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setCancelingEventId(eventToCancel.id);
+
+    try {
+      await apiRequest(`/api/events/${eventToCancel.id}/cancel`, {
+        method: "POST",
+      });
+      if (editingEvent?.id === eventToCancel.id) {
+        resetEventForm();
+      }
+      setSuccess("Evento cancelado.");
+      setEventToCancel(null);
+      await loadEvents();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Erro ao cancelar evento.",
+      );
+    } finally {
+      setCancelingEventId("");
     }
   }
 
@@ -485,6 +515,15 @@ export default function EventsPage() {
                       <Copy size={14} />
                       Duplicar
                     </button>
+                    {item.status !== "CANCELLED" ? (
+                      <button
+                        className="icon-action ghost"
+                        onClick={() => setEventToCancel(item)}
+                        type="button"
+                      >
+                        Cancelar
+                      </button>
+                    ) : null}
                     <button
                       className="icon-action ghost danger-action"
                       onClick={() => setEventToDelete(item)}
@@ -550,6 +589,59 @@ export default function EventsPage() {
                 {deletingEventId === eventToDelete.id
                   ? "Excluindo..."
                   : "Excluir evento"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {eventToCancel ? (
+        <div
+          className="agenda-modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setEventToCancel(null)}
+        >
+          <section
+            aria-labelledby="cancel-event-title"
+            aria-modal="true"
+            className="agenda-modal confirmation-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="agenda-modal-header">
+              <div>
+                <span>Cancelar evento</span>
+                <h2 id="cancel-event-title">Confirmar cancelamento</h2>
+              </div>
+              <button
+                aria-label="Fechar"
+                className="agenda-modal-close"
+                onClick={() => setEventToCancel(null)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <p className="modal-copy">
+              O evento <strong>{eventToCancel.name}</strong> será cancelado.
+              Convites e candidaturas pendentes também serão cancelados.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setEventToCancel(null)}
+                type="button"
+              >
+                Voltar
+              </button>
+              <button
+                className="primary-button"
+                disabled={cancelingEventId === eventToCancel.id}
+                onClick={handleCancelEvent}
+                type="button"
+              >
+                {cancelingEventId === eventToCancel.id
+                  ? "Cancelando..."
+                  : "Cancelar evento"}
               </button>
             </div>
           </section>

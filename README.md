@@ -303,12 +303,16 @@ Suba banco e Redis:
 docker compose up -d
 ```
 
-Rode as migrations e o seed:
+Rode as migrations e o seed base:
 
 ```bash
 pnpm prisma:migrate
 pnpm prisma:seed
 ```
+
+O seed base cria apenas o administrador padrão e as especialidades iniciais da
+plataforma. Ele não cria empresas, freelancers, eventos, convites ou contratos
+demo.
 
 Inicie API e Web:
 
@@ -357,6 +361,7 @@ pnpm prisma:generate
 pnpm prisma:migrate
 pnpm prisma:deploy
 pnpm prisma:seed
+pnpm prisma:seed:demo
 ```
 
 Checks usados durante o desenvolvimento:
@@ -376,11 +381,37 @@ O workflow `.github/workflows/ci.yml` sobe PostgreSQL e Redis, cria um `.env` te
 
 O comando `pnpm ci:check` roda Prisma generate, typecheck da API, typecheck da Web, testes unitários da API, build do monorepo e testes e2e.
 
-## Contas Demo
+## Seed Base e Contas Demo
 
-Após rodar `pnpm prisma:seed`, use:
+Para preparar uma base limpa para testes manuais, rode:
 
-Essas contas são apenas para desenvolvimento/demonstração. A senha é definida por `SEED_DEMO_PASSWORD` no `.env`; se a variável não existir, o seed usa o padrão local de desenvolvimento. Não rode o seed demo nem mantenha senhas demo em produção real.
+```bash
+pnpm prisma:migrate
+pnpm prisma:seed
+```
+
+Esse seed padrão cria apenas:
+
+- o primeiro administrador do sistema;
+- as especialidades iniciais usadas em eventos e currículos.
+
+Ele não cria empresas, freelancers, eventos, convites, candidaturas, contratos
+ou pagamentos demo. Assim você consegue cadastrar os usuários e empresas na mão.
+
+Conta criada pelo seed padrão:
+
+- Admin: `admin@nexo.local`
+
+A senha é definida por `SEED_DEMO_PASSWORD` no `.env`; se a variável não
+existir, o seed usa o padrão local de desenvolvimento.
+
+Para popular o sistema com cenários completos de demonstração, rode:
+
+```bash
+pnpm prisma:seed:demo
+```
+
+Depois disso, use:
 
 - Admin: `admin@nexo.local`
 - Empresa: `empresa@nexo.local`
@@ -405,6 +436,9 @@ Contas extras de freelancers:
 - `montagem@nexo.local`
 
 O seed cria uma base de testes com 4 empresas, 10 freelancers, 19 eventos, múltiplas oportunidades abertas de várias empresas, múltiplas especialidades, convites pendentes/aceitos/recusados, candidaturas, chats com mensagens, contratos em diferentes status, pagamentos simulados, carteira com saldo/repasse/saque, avaliações, notificações, disponibilidade bloqueada e contestação em análise. As contas principais `empresa@nexo.local` e `freelancer@nexo.local` concentram mais dados para testar o fluxo completo sem preparar cenário manual.
+
+Essas contas são apenas para desenvolvimento/demonstração. Não rode o seed demo
+nem mantenha senhas demo em produção real.
 
 ## Rotas Web
 
