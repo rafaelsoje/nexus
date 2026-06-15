@@ -70,7 +70,7 @@ export default function CompanyRegisterPage() {
           state: String(form.get("state")),
         }),
       });
-      router.push("/dashboard");
+      router.push("/dashboard/perfil#verificacao-documentos");
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao cadastrar empresa.",

@@ -1631,7 +1631,7 @@ function VerificationDocumentsPanel({
   );
 
   return (
-    <article className="panel">
+    <article className="panel" id="verificacao-documentos">
       <div className="panel-header">
         <h2>Documentos</h2>
         <FileText size={18} />

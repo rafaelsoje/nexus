@@ -359,6 +359,7 @@ export type CompanyProfile = {
   neighborhood?: string;
   city?: string;
   state?: string;
+  verificationStatus?: VerificationStatus;
   verificationDocuments?: VerificationDocument[];
 };
 

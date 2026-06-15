@@ -91,7 +91,7 @@ export default function FreelancerRegisterPage() {
           dailyRateCents: Number(form.get("dailyRate")) * 100,
         }),
       });
-      router.push("/dashboard");
+      router.push("/dashboard/perfil#verificacao-documentos");
     } catch (caught) {
       setError(
         caught instanceof Error

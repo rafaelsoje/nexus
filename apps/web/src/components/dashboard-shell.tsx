@@ -16,6 +16,7 @@ import {
   Star,
   UserCog,
   UsersRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,6 +35,15 @@ import { ThemeToggle } from "./theme-toggle";
 type AccountSummary = {
   name: string;
   imageUrl?: string;
+};
+
+type VerificationNotice = {
+  name: string;
+  role: Extract<UserRole, "COMPANY" | "FREELANCER">;
+};
+
+type VerificationDocumentSummary = {
+  id: string;
 };
 
 type NotificationSummary = {
@@ -56,6 +66,7 @@ const roleLabels: Record<UserRole, string> = {
   COMPANY: "Empresa",
   FREELANCER: "Freelancer",
 };
+const verificationPromptStoragePrefix = "nexus.verificationPrompt.dismissed";
 
 const navItems: NavItem[] = [
   {
@@ -201,6 +212,8 @@ export function DashboardShell({
   );
   const [importantNotifications, setImportantNotifications] = useState(0);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
+  const [verificationNotice, setVerificationNotice] =
+    useState<VerificationNotice | null>(null);
 
   useEffect(() => {
     function syncSession() {
@@ -220,6 +233,7 @@ export function DashboardShell({
   useEffect(() => {
     if (!session) {
       setAccountSummary(null);
+      setVerificationNotice(null);
       return;
     }
 
@@ -233,17 +247,24 @@ export function DashboardShell({
             avatarUrl?: string;
             displayName?: string;
             fullName?: string;
+            verificationDocuments?: VerificationDocumentSummary[];
           }>("/api/freelancers/profile");
+          const name =
+            profile.displayName ??
+            profile.fullName ??
+            currentSession.user.name ??
+            "Freelancer";
 
           if (isCurrent) {
             setAccountSummary({
               imageUrl: profile.avatarUrl,
-              name:
-                profile.displayName ??
-                profile.fullName ??
-                currentSession.user.name ??
-                "Freelancer",
+              name,
             });
+            syncVerificationNotice(
+              currentSession,
+              profile.verificationDocuments,
+              name,
+            );
           }
           return;
         }
@@ -252,19 +273,27 @@ export function DashboardShell({
           const profile = await apiRequest<{
             companyName?: string;
             logoUrl?: string;
+            verificationDocuments?: VerificationDocumentSummary[];
           }>("/api/companies/profile");
+          const name =
+            profile.companyName ?? currentSession.user.name ?? "Empresa";
 
           if (isCurrent) {
             setAccountSummary({
               imageUrl: profile.logoUrl,
-              name:
-                profile.companyName ?? currentSession.user.name ?? "Empresa",
+              name,
             });
+            syncVerificationNotice(
+              currentSession,
+              profile.verificationDocuments,
+              name,
+            );
           }
           return;
         }
 
         setAccountSummary({ name: currentSession.user.name ?? "Admin" });
+        setVerificationNotice(null);
       } catch {
         if (isCurrent) {
           setAccountSummary({ name: currentSession.user.name });
@@ -405,8 +434,47 @@ export function DashboardShell({
         </header>
         {children}
       </section>
+      {session && verificationNotice ? (
+        <VerificationRequiredDialog
+          notice={verificationNotice}
+          onDismiss={() => {
+            markVerificationPromptDismissed(session.user.id);
+            setVerificationNotice(null);
+          }}
+        />
+      ) : null}
     </main>
   );
+
+  function syncVerificationNotice(
+    currentSession: AuthSession,
+    documents: VerificationDocumentSummary[] | undefined,
+    name: string,
+  ) {
+    if (
+      currentSession.user.role !== "COMPANY" &&
+      currentSession.user.role !== "FREELANCER"
+    ) {
+      setVerificationNotice(null);
+      return;
+    }
+
+    if (documents?.length) {
+      clearVerificationPromptDismissed(currentSession.user.id);
+      setVerificationNotice(null);
+      return;
+    }
+
+    if (isVerificationPromptDismissed(currentSession.user.id)) {
+      setVerificationNotice(null);
+      return;
+    }
+
+    setVerificationNotice({
+      name,
+      role: currentSession.user.role,
+    });
+  }
 }
 
 export function formatUserRole(value: string) {
@@ -537,6 +605,96 @@ function getInitials(name: string) {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "N"
   );
+}
+
+function VerificationRequiredDialog({
+  notice,
+  onDismiss,
+}: Readonly<{
+  notice: VerificationNotice;
+  onDismiss: () => void;
+}>) {
+  const isCompany = notice.role === "COMPANY";
+
+  return (
+    <div
+      className="agenda-modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onDismiss();
+        }
+      }}
+      role="presentation"
+    >
+      <div
+        aria-modal="true"
+        className="agenda-modal verification-required-modal"
+        role="dialog"
+      >
+        <div className="agenda-modal-header">
+          <div>
+            <span>Verificação pendente</span>
+            <h2>Envie seus documentos</h2>
+          </div>
+          <button
+            aria-label="Fechar aviso de verificação"
+            className="agenda-modal-close"
+            onClick={onDismiss}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-copy">
+          <p>
+            {notice.name} ainda não enviou documentos para verificação. Essa
+            etapa libera a operação com segurança na plataforma.
+          </p>
+          <p>
+            {isCompany
+              ? "Sem a verificação, a empresa não consegue cadastrar eventos."
+              : "Sem a verificação, o freelancer não consegue ver as vagas disponíveis."}
+          </p>
+        </div>
+        <div className="modal-actions">
+          <button className="secondary-button" onClick={onDismiss} type="button">
+            Lembrar depois
+          </button>
+          <Link
+            className="primary-button"
+            href="/dashboard/perfil#verificacao-documentos"
+            onClick={onDismiss}
+          >
+            Enviar documentos agora
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getVerificationPromptStorageKey(userId: string) {
+  return `${verificationPromptStoragePrefix}:${userId}`;
+}
+
+function isVerificationPromptDismissed(userId: string) {
+  return (
+    typeof window !== "undefined" &&
+    window.sessionStorage.getItem(getVerificationPromptStorageKey(userId)) ===
+      "true"
+  );
+}
+
+function markVerificationPromptDismissed(userId: string) {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(getVerificationPromptStorageKey(userId), "true");
+  }
+}
+
+function clearVerificationPromptDismissed(userId: string) {
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(getVerificationPromptStorageKey(userId));
+  }
 }
 
 export function ModuleHeaderAction({
