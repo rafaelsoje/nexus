@@ -27,6 +27,31 @@ API_PORT="${API_PORT:-3102}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PM2_NAME="${API_PM2_NAME:-nexus-api}"
 WEB_PM2_NAME="${WEB_PM2_NAME:-nexus-web}"
+HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
+HEALTH_SLEEP_SECONDS="${HEALTH_SLEEP_SECONDS:-2}"
+
+wait_for_url() {
+  local name="$1"
+  local url="$2"
+  local curl_args="${3:-}"
+
+  echo "==> Aguardando ${name}: ${url}"
+
+  for attempt in $(seq 1 "$HEALTH_RETRIES"); do
+    if curl -fsS $curl_args "$url" >/dev/null 2>&1; then
+      echo "==> ${name} respondeu na tentativa ${attempt}/${HEALTH_RETRIES}"
+      return 0
+    fi
+
+    sleep "$HEALTH_SLEEP_SECONDS"
+  done
+
+  echo "Erro: ${name} nao respondeu em ${url}."
+  echo "Consulte os logs:"
+  echo "  pm2 logs ${API_PM2_NAME} --lines 80"
+  echo "  pm2 logs ${WEB_PM2_NAME} --lines 80"
+  return 1
+}
 
 if [ "${EUID:-$(id -u)}" -eq 0 ] && [ "${ALLOW_ROOT_DEPLOY:-0}" != "1" ]; then
   echo "Nao rode este deploy como root."
@@ -71,11 +96,12 @@ pm2 delete "$WEB_PM2_NAME" >/dev/null 2>&1 || true
 
 PORT="$API_PORT" pm2 start "pnpm --filter @nexus/api start" --name "$API_PM2_NAME"
 PORT="$WEB_PORT" pm2 start "pnpm --filter @nexus/web start" --name "$WEB_PM2_NAME"
-pm2 save
 
 echo "==> Verificando servicos locais"
-curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null
-curl -fsSI "http://127.0.0.1:${WEB_PORT}" >/dev/null
+wait_for_url "API" "http://127.0.0.1:${API_PORT}/api/health"
+wait_for_url "Web" "http://127.0.0.1:${WEB_PORT}" "-I"
+
+pm2 save
 
 echo "Deploy concluido."
 echo "API local: http://127.0.0.1:${API_PORT}"
