@@ -11,6 +11,7 @@
     "ci:check": "pnpm prisma:generate && pnpm --filter @nexus/api lint && pnpm --filter @nexus/web exec tsc --noEmit && pnpm --filter @nexus/api test && pnpm build && pnpm e2e",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\" && pnpm --filter @nexus/api exec prisma format",
+    "deploy:vps": "bash scripts/deploy-vps.sh",
     "prisma:generate": "pnpm --filter @nexus/api prisma:generate",
     "prisma:migrate": "pnpm --filter @nexus/api prisma:migrate",
     "prisma:deploy": "pnpm --filter @nexus/api prisma:deploy",
