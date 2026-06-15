@@ -37,6 +37,7 @@ import {
   type AuthSession,
   type UserRole,
 } from "../../lib/api";
+import type { CompanyProfile } from "../../lib/dashboard-types";
 
 type Skill = { id: string; name: string; slug: string };
 type EventItem = {
@@ -245,6 +246,9 @@ export default function DashboardPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(
+    null,
+  );
   const [freelancerProfile, setFreelancerProfile] =
     useState<FreelancerProfile | null>(null);
   const [adminData, setAdminData] = useState<AdminData | null>(null);
@@ -252,7 +256,6 @@ export default function DashboardPage() {
     null,
   );
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
 
   const role = session?.user.role;
 
@@ -305,7 +308,6 @@ export default function DashboardPage() {
     }
 
     setError("");
-    setLoading(true);
 
     try {
       const [loadedSkills, loadedReport] = await Promise.all([
@@ -322,18 +324,21 @@ export default function DashboardPage() {
           loadedInvitations,
           loadedContracts,
           loadedPayments,
+          profile,
         ] = await Promise.all([
           apiRequest<EventItem[]>("/api/events"),
           apiRequest<Freelancer[]>("/api/freelancers"),
           apiRequest<Invitation[]>("/api/invitations/sent"),
           apiRequest<Contract[]>("/api/contracts"),
           apiRequest<Payment[]>("/api/payments"),
+          apiRequest<CompanyProfile>("/api/companies/profile"),
         ]);
         setEvents(loadedEvents);
         setFreelancers(loadedFreelancers);
         setInvitations(loadedInvitations);
         setContracts(loadedContracts);
         setPayments(loadedPayments);
+        setCompanyProfile(profile);
       }
 
       if (currentRole === "FREELANCER") {
@@ -388,8 +393,6 @@ export default function DashboardPage() {
           ? caught.message
           : "Erro ao carregar dashboard.",
       );
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -448,10 +451,17 @@ export default function DashboardPage() {
     return null;
   }
 
+  const dashboardDisplayName =
+    role === "COMPANY"
+      ? companyProfile?.companyName ?? "sua empresa"
+      : role === "FREELANCER"
+        ? freelancerProfile?.displayName ?? session.user.name
+        : session.user.name;
+
   return (
     <DashboardShell
       eyebrow={session.user.role}
-      title={`Olá, ${session.user.name}`}
+      title={`Olá, ${dashboardDisplayName}`}
     >
       {error ? <StatusMessage type="error">{error}</StatusMessage> : null}
 
@@ -464,8 +474,7 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      {loading ? <EmptyState>Carregando operação...</EmptyState> : null}
-      {!loading && role === "COMPANY" ? (
+      {role === "COMPANY" ? (
         <CompanyDashboard
           contracts={contracts}
           events={events}
@@ -474,7 +483,7 @@ export default function DashboardPage() {
           reportSummary={reportSummary}
         />
       ) : null}
-      {!loading && role === "FREELANCER" ? (
+      {role === "FREELANCER" ? (
         <FreelancerDashboard
           availability={availability}
           contracts={contracts}
@@ -484,7 +493,7 @@ export default function DashboardPage() {
           wallet={wallet}
         />
       ) : null}
-      {!loading && role === "ADMIN" && adminData ? (
+      {role === "ADMIN" && adminData ? (
         <AdminDashboard data={adminData} reportSummary={reportSummary} />
       ) : null}
     </DashboardShell>
