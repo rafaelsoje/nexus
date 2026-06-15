@@ -1658,7 +1658,7 @@ function VerificationDocumentsPanel({
             type="file"
           />
         </Field>
-        <button className="secondary-button full" type="submit">
+        <button className="primary-button full" type="submit">
           {submitLabel}
         </button>
       </form>
