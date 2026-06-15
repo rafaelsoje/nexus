@@ -327,7 +327,70 @@ URLs:
 
 ## Deploy
 
-Para publicar em um VPS e permitir que sócios acompanhem a evolução do produto, consulte o guia [DEPLOY.md](DEPLOY.md).
+O projeto tem um script de deploy manual para o VPS em
+`scripts/deploy-vps.sh`. Depois de criar commits localmente, envie o código para
+o repositório bare do VPS:
+
+```bash
+git push vps main
+```
+
+No VPS, entre no diretório publicado e rode:
+
+```bash
+cd /var/www/nexo
+pnpm deploy:vps
+```
+
+O comando `pnpm deploy:vps` executa:
+
+- atualização do código por `git pull --ff-only`, quando houver remote `origin`;
+- instalação de dependências com `pnpm install --frozen-lockfile`;
+- geração do Prisma Client;
+- aplicação das migrations com `pnpm prisma:deploy`;
+- build da API e da Web;
+- reinício dos processos PM2;
+- teste local da API e da Web.
+
+Padrões usados pelo script:
+
+- API local: `127.0.0.1:3102`
+- Web local: `127.0.0.1:3000`
+- PM2 API: `nexus-api`
+- PM2 Web: `nexus-web`
+- Diretório: `/var/www/nexo`
+- Branch: `main`
+
+Esses valores podem ser sobrescritos por variáveis:
+
+```bash
+APP_DIR=/var/www/nexo API_PORT=3102 WEB_PORT=3000 pnpm deploy:vps
+```
+
+Se o VPS usa hook Git para atualizar `/var/www/nexo` automaticamente e você não
+quiser que o script rode `git pull`, use:
+
+```bash
+SKIP_GIT_PULL=1 pnpm deploy:vps
+```
+
+Não rode o deploy como `root`. Se algum build anterior tiver criado arquivos
+como `root` e aparecer erro `EACCES`, corrija a posse uma vez:
+
+```bash
+sudo chown -R rafael:rafael /var/www/nexo /home/rafael/.pm2
+```
+
+Resumo do fluxo após cada commit:
+
+```bash
+# na sua máquina
+git push vps main
+
+# no VPS
+cd /var/www/nexo
+pnpm deploy:vps
+```
 
 ## Pendências Para Produção
 
