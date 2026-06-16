@@ -38,12 +38,19 @@ type AccountSummary = {
 };
 
 type VerificationNotice = {
+  missingDocuments: boolean;
+  missingSkills?: boolean;
   name: string;
   role: Extract<UserRole, "COMPANY" | "FREELANCER">;
 };
 
 type VerificationDocumentSummary = {
   id: string;
+};
+
+type SkillSummary = {
+  id?: string;
+  skillId?: string;
 };
 
 type NotificationSummary = {
@@ -247,6 +254,7 @@ export function DashboardShell({
             avatarUrl?: string;
             displayName?: string;
             fullName?: string;
+            skills?: SkillSummary[];
             verificationDocuments?: VerificationDocumentSummary[];
           }>("/api/freelancers/profile");
           const name =
@@ -264,6 +272,7 @@ export function DashboardShell({
               currentSession,
               profile.verificationDocuments,
               name,
+              profile.skills,
             );
           }
           return;
@@ -450,6 +459,7 @@ export function DashboardShell({
     currentSession: AuthSession,
     documents: VerificationDocumentSummary[] | undefined,
     name: string,
+    skills?: SkillSummary[],
   ) {
     if (
       currentSession.user.role !== "COMPANY" &&
@@ -459,7 +469,11 @@ export function DashboardShell({
       return;
     }
 
-    if (documents?.length) {
+    const missingDocuments = !documents?.length;
+    const missingSkills =
+      currentSession.user.role === "FREELANCER" && !skills?.length;
+
+    if (!missingDocuments && !missingSkills) {
       clearVerificationPromptDismissed(currentSession.user.id);
       setVerificationNotice(null);
       return;
@@ -471,6 +485,8 @@ export function DashboardShell({
     }
 
     setVerificationNotice({
+      missingDocuments,
+      missingSkills,
       name,
       role: currentSession.user.role,
     });
@@ -615,6 +631,13 @@ function VerificationRequiredDialog({
   onDismiss: () => void;
 }>) {
   const isCompany = notice.role === "COMPANY";
+  const title = isCompany
+    ? "Envie os documentos da empresa"
+    : notice.missingDocuments && notice.missingSkills
+      ? "Complete sua verificação e especialidades"
+      : notice.missingDocuments
+        ? "Envie seus documentos"
+        : "Cadastre suas especialidades";
 
   return (
     <div
@@ -634,7 +657,7 @@ function VerificationRequiredDialog({
         <div className="agenda-modal-header">
           <div>
             <span>Verificação pendente</span>
-            <h2>Envie seus documentos</h2>
+            <h2>{title}</h2>
           </div>
           <button
             aria-label="Fechar aviso de verificação"
@@ -647,26 +670,38 @@ function VerificationRequiredDialog({
         </div>
         <div className="modal-copy">
           <p>
-            {notice.name} ainda não enviou documentos para verificação. Essa
-            etapa libera a operação com segurança na plataforma.
+            {isCompany
+              ? `${notice.name} ainda precisa enviar documentos para verificação. Essa etapa libera a operação com segurança na plataforma.`
+              : `${notice.name} precisa concluir os documentos e as especialidades para ficar disponível no fluxo de eventos.`}
           </p>
           <p>
             {isCompany
               ? "Sem a verificação, a empresa não consegue cadastrar eventos."
-              : "Sem a verificação, o freelancer não consegue ver as vagas disponíveis."}
+              : "Sem documentos aprovados e sem especialidades cadastradas, o freelancer não consegue ver vagas compatíveis, se candidatar ou receber novos convites."}
           </p>
         </div>
         <div className="modal-actions">
           <button className="secondary-button" onClick={onDismiss} type="button">
             Lembrar depois
           </button>
-          <Link
-            className="primary-button"
-            href="/dashboard/perfil#verificacao-documentos"
-            onClick={onDismiss}
-          >
-            Enviar documentos agora
-          </Link>
+          {notice.missingSkills ? (
+            <Link
+              className="secondary-button"
+              href="/dashboard/especialidades"
+              onClick={onDismiss}
+            >
+              Cadastrar especialidades
+            </Link>
+          ) : null}
+          {notice.missingDocuments ? (
+            <Link
+              className="primary-button"
+              href="/dashboard/perfil#verificacao-documentos"
+              onClick={onDismiss}
+            >
+              Enviar documentos agora
+            </Link>
+          ) : null}
         </div>
       </div>
     </div>

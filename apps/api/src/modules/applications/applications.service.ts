@@ -37,6 +37,7 @@ export class ApplicationsService {
 
   async listOpportunities(userId: string) {
     const freelancer = await this.findFreelancerByUserId(userId);
+    this.assertFreelancerVerified(freelancer);
     const skillIds = freelancer.skills.map((item) => item.skillId);
     const now = new Date();
 

@@ -2267,6 +2267,43 @@ input[type="file"]::file-selector-button:hover {
   padding: 1rem;
 }
 
+.setup-guidance {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.setup-guidance strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.setup-guidance span {
+  line-height: 1.5;
+}
+
+.setup-checklist {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.setup-checklist span {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.setup-checklist .done {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: rgba(22, 163, 74, 0.28);
+  color: #15803d;
+}
+
+.setup-checklist .pending {
+  background: rgba(0, 191, 255, 0.08);
+  border-color: rgba(0, 191, 255, 0.28);
+  color: var(--text);
+}
+
 .form-fieldset {
   border: 0;
   display: grid;

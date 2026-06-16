@@ -14,8 +14,6 @@ export default function FreelancerRegisterPage() {
   const [cookiesAccepted, setCookiesAccepted] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [cepMessage, setCepMessage] = useState("");
-  const [cepValue, setCepValue] = useState("");
   const [cpfValue, setCpfValue] = useState("");
 
   useEffect(() => {
@@ -48,15 +46,9 @@ export default function FreelancerRegisterPage() {
     }
 
     const cpf = onlyDigits(String(form.get("cpf")));
-    const postalCode = onlyDigits(String(form.get("postalCode")));
 
     if (cpf.length !== 11) {
       setError("CPF inválido. Informe 11 números.");
-      return;
-    }
-
-    if (postalCode.length !== 8) {
-      setError("CEP inválido. Informe 8 números.");
       return;
     }
 
@@ -78,17 +70,8 @@ export default function FreelancerRegisterPage() {
         method: "POST",
         body: JSON.stringify({
           fullName: String(form.get("name")),
-          displayName: String(form.get("displayName")),
+          displayName: String(form.get("name")),
           cpf,
-          postalCode,
-          addressStreet: String(form.get("addressStreet")),
-          addressNumber: String(form.get("addressNumber")),
-          addressComplement: String(form.get("addressComplement")),
-          neighborhood: String(form.get("neighborhood")),
-          city: String(form.get("city")),
-          state: String(form.get("state")),
-          transportation: String(form.get("transportation")),
-          dailyRateCents: Number(form.get("dailyRate")) * 100,
         }),
       });
       router.push("/dashboard/perfil#verificacao-documentos");
@@ -103,46 +86,6 @@ export default function FreelancerRegisterPage() {
     }
   }
 
-  async function lookupCep(value: string) {
-    const postalCode = onlyDigits(value);
-    setCepMessage("");
-
-    if (!postalCode) {
-      return;
-    }
-
-    if (postalCode.length !== 8) {
-      setCepMessage("CEP inválido. Informe 8 números.");
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `https://viacep.com.br/ws/${postalCode}/json/`,
-      );
-      const data = (await response.json()) as {
-        bairro?: string;
-        erro?: boolean;
-        localidade?: string;
-        logradouro?: string;
-        uf?: string;
-      };
-
-      if (data.erro) {
-        setCepMessage("CEP não encontrado.");
-        return;
-      }
-
-      setFieldValue("addressStreet", data.logradouro ?? "");
-      setFieldValue("neighborhood", data.bairro ?? "");
-      setFieldValue("city", data.localidade ?? "");
-      setFieldValue("state", data.uf ?? "");
-      setCepMessage("Endereço preenchido pelo CEP.");
-    } catch {
-      setCepMessage("Não foi possível consultar o CEP agora.");
-    }
-  }
-
   return (
     <AuthCard
       title="Cadastrar freelancer"
@@ -151,9 +94,6 @@ export default function FreelancerRegisterPage() {
       <form className="form" onSubmit={handleSubmit}>
         <Field label="Nome">
           <input name="name" required />
-        </Field>
-        <Field label="Nome profissional">
-          <input name="displayName" required />
         </Field>
         <Field label="CPF">
           <input
@@ -164,46 +104,6 @@ export default function FreelancerRegisterPage() {
             required
             value={cpfValue}
           />
-        </Field>
-        <Field label="CEP">
-          <input
-            inputMode="numeric"
-            name="postalCode"
-            onBlur={(event) => lookupCep(event.target.value)}
-            onChange={(event) => setCepValue(formatCep(event.target.value))}
-            placeholder="00000-000"
-            required
-            value={cepValue}
-          />
-        </Field>
-        {cepMessage ? <small className="form-note">{cepMessage}</small> : null}
-        <Field label="Endereço">
-          <input name="addressStreet" required />
-        </Field>
-        <div className="form-grid">
-          <Field label="Número">
-            <input name="addressNumber" required />
-          </Field>
-          <Field label="Complemento">
-            <input name="addressComplement" />
-          </Field>
-        </div>
-        <Field label="Bairro">
-          <input name="neighborhood" required />
-        </Field>
-        <div className="form-grid">
-          <Field label="Cidade">
-            <input name="city" required />
-          </Field>
-          <Field label="UF">
-            <input name="state" maxLength={2} required />
-          </Field>
-        </div>
-        <Field label="Transporte">
-          <input name="transportation" />
-        </Field>
-        <Field label="Diária base">
-          <input name="dailyRate" type="number" min={0} step={1} />
         </Field>
         <Field label="Telefone">
           <input name="phone" />
@@ -263,18 +163,4 @@ function formatCpf(value: string) {
     .replace(/^(\d{3})(\d)/, "$1.$2")
     .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
     .replace(/\.(\d{3})(\d)/, ".$1-$2");
-}
-
-function formatCep(value: string) {
-  const digits = onlyDigits(value).slice(0, 8);
-
-  return digits.replace(/^(\d{5})(\d)/, "$1-$2");
-}
-
-function setFieldValue(name: string, value: string) {
-  const field = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
-
-  if (field) {
-    field.value = value;
-  }
 }

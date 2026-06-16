@@ -24,10 +24,18 @@ const statusLabels: Record<string, string> = {
 };
 
 type FreelancerProfileForOpportunities = {
+  verificationDocuments?: Array<{ id: string }>;
+  verificationStatus?: string;
   skills?: Array<{
     skillId?: string;
     skill?: { id: string };
   }>;
+};
+
+type FreelancerSetupState = {
+  missingDocuments: boolean;
+  missingSkills: boolean;
+  pendingVerification: boolean;
 };
 
 export default function OpportunitiesPage() {
@@ -35,6 +43,8 @@ export default function OpportunitiesPage() {
   const [opportunities, setOpportunities] = useState<EventItem[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [error, setError] = useState("");
+  const [freelancerSetup, setFreelancerSetup] =
+    useState<FreelancerSetupState | null>(null);
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -44,20 +54,35 @@ export default function OpportunitiesPage() {
 
     try {
       if (session?.user.role === "FREELANCER") {
-        const [loadedOpportunities, loadedApplications, profile] =
-          await Promise.all([
-            apiRequest<EventItem[]>("/api/applications/opportunities"),
-            apiRequest<Application[]>("/api/applications/mine"),
-            apiRequest<FreelancerProfileForOpportunities>(
-              "/api/freelancers/profile",
-            ),
-          ]);
+        const profile = await apiRequest<FreelancerProfileForOpportunities>(
+          "/api/freelancers/profile",
+        );
+        const setup = getFreelancerSetupState(profile);
+        setFreelancerSetup(setup);
+
+        const loadedApplications =
+          await apiRequest<Application[]>("/api/applications/mine");
+        setApplications(loadedApplications);
+
+        if (
+          setup.missingDocuments ||
+          setup.missingSkills ||
+          setup.pendingVerification
+        ) {
+          setOpportunities([]);
+          return;
+        }
+
+        const loadedOpportunities = await apiRequest<EventItem[]>(
+          "/api/applications/opportunities",
+        );
         setOpportunities(
           filterOpportunitiesByFreelancerSkills(loadedOpportunities, profile),
         );
-        setApplications(loadedApplications);
         return;
       }
+
+      setFreelancerSetup(null);
 
       if (session?.user.role === "COMPANY") {
         const loadedApplications = await apiRequest<Application[]>(
@@ -229,7 +254,12 @@ export default function OpportunitiesPage() {
               <h2>Eventos abertos</h2>
               <BriefcaseBusiness size={18} />
             </div>
-            {opportunities.length ? (
+            {freelancerSetup &&
+            (freelancerSetup.missingDocuments ||
+              freelancerSetup.missingSkills ||
+              freelancerSetup.pendingVerification) ? (
+              <FreelancerSetupNotice setup={freelancerSetup} />
+            ) : opportunities.length ? (
               <div className="list">
                 {opportunities.map((event) => (
                   <OpportunityApplicationForm
@@ -337,6 +367,61 @@ export default function OpportunitiesPage() {
         </section>
       ) : null}
     </DashboardShell>
+  );
+}
+
+function getFreelancerSetupState(profile: FreelancerProfileForOpportunities) {
+  return {
+    missingDocuments: !profile.verificationDocuments?.length,
+    missingSkills: !profile.skills?.length,
+    pendingVerification: profile.verificationStatus !== "VERIFIED",
+  };
+}
+
+function FreelancerSetupNotice({
+  setup,
+}: Readonly<{ setup: FreelancerSetupState }>) {
+  return (
+    <div className="empty-state setup-guidance">
+      <strong>Complete seu perfil para ver oportunidades.</strong>
+      <span>
+        Para ver vagas compatíveis, se candidatar e receber convites, você
+        precisa ter documentos enviados, aprovação do administrador e pelo menos
+        uma especialidade cadastrada.
+      </span>
+      <div className="setup-checklist">
+        <span className={setup.missingDocuments ? "pending" : "done"}>
+          {setup.missingDocuments
+            ? "Enviar documentos de verificação"
+            : "Documentos enviados"}
+        </span>
+        <span className={setup.pendingVerification ? "pending" : "done"}>
+          {setup.pendingVerification
+            ? "Aguardar aprovação do administrador"
+            : "Cadastro aprovado"}
+        </span>
+        <span className={setup.missingSkills ? "pending" : "done"}>
+          {setup.missingSkills
+            ? "Cadastrar especialidades e diárias"
+            : "Especialidades cadastradas"}
+        </span>
+      </div>
+      <div className="button-row">
+        {setup.missingDocuments ? (
+          <Link
+            className="primary-button"
+            href="/dashboard/perfil#verificacao-documentos"
+          >
+            Enviar documentos
+          </Link>
+        ) : null}
+        {setup.missingSkills ? (
+          <Link className="secondary-button" href="/dashboard/especialidades">
+            Cadastrar especialidades
+          </Link>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
