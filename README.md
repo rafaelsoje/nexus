@@ -47,7 +47,7 @@ Já implementado:
 - Gateway de pagamento abstraído com provider simulado configurável, recebedores, webhooks e idempotência local.
 - Conta gateway/KYC simulada para freelancer em módulo dedicado, com dados de recebimento privados e mascarados.
 - Payout/saque simulado solicitado pelo freelancer e processado pelo admin.
-- Regra inicial pós-evento com prazo de 1 dia útil para no-show e processamento admin de repasses vencidos.
+- Regra pós-evento com prazo de 1 dia útil para no-show, processamento admin de repasses vencidos e automação agendada configurável.
 - Avaliações pós-contrato com atualização automática da média de reputação.
 - Central de notificações com avisos automáticos para convites, pagamentos, avaliações e contestações.
 - Abertura de contestações com bloqueio financeiro do split.
@@ -68,7 +68,6 @@ Já implementado:
 Próximas entregas orientadas pelo novo documento:
 
 - Gateway real com cartão, boleto/Pix quando definido, comprovantes e webhooks.
-- Automação agendada das regras pós-evento, sem depender de acionamento administrativo manual.
 - Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
 - Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
 - Separação progressiva entre perfil público e privado, evitando expor carteira, documentos, dados bancários e contato fora das telas autorizadas.
@@ -416,7 +415,7 @@ Itens pendentes sem considerar credenciais reais de gateway:
 - Mapear idempotência conforme provedor real.
 - Implementar KYC real do recebedor.
 - Implementar comprovantes reais de pagamento, estorno e payout.
-- Separar permissões admin por papel operacional, como financeiro, suporte, verificação e owner.
+- Revisar e ampliar testes das permissões admin por papel operacional, como financeiro, suporte, verificação e owner.
 - Configurar backup automático do PostgreSQL e testar restore.
 - Definir política de retenção de documentos e dados.
 - Adicionar logs estruturados, monitoramento e alertas.

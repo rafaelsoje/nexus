@@ -1,6 +1,6 @@
 # Fluxo de uso da NEXO
 
-Este documento explica como o MVP foi programado para ser usado por empresas, freelancers e administração. Ele descreve o fluxo real disponível no app local, usando a base criada pelo `pnpm prisma:seed`.
+Este documento explica como o MVP foi programado para ser usado por empresas, freelancers e administração. Ele descreve o fluxo real disponível no app local. Para uma base limpa use `pnpm prisma:seed`; para demonstrar contas, eventos, convites, candidaturas, contratos e pagamentos use `pnpm prisma:seed:demo`.
 
 ## Visão geral
 
@@ -38,6 +38,12 @@ pnpm prisma:seed
 pnpm dev
 ```
 
+O comando `pnpm prisma:seed` cria apenas o administrador padrão e as especialidades iniciais. Se quiser usar as contas demo abaixo e encontrar oportunidades, convites, contratos, pagamentos, avaliações e contestações já preenchidos, rode também:
+
+```bash
+pnpm prisma:seed:demo
+```
+
 URLs:
 
 - Web: `http://localhost:3000`
@@ -49,7 +55,7 @@ Contas principais:
 - Empresa: `empresa@nexo.local` / `Nexo@12345`
 - Freelancer: `freelancer@nexo.local` / `Nexo@12345`
 
-O seed também cria empresas, freelancers, eventos, convites, contratos, pagamentos, avaliações, notificações, bloqueios de agenda e uma contestação para demonstração.
+O seed demo cria empresas, freelancers, eventos, convites, contratos, pagamentos, avaliações, notificações, bloqueios de agenda e uma contestação para demonstração.
 
 Nas contas principais, você já deve encontrar bastante conteúdo:
 
@@ -375,7 +381,7 @@ Ainda não é produção real:
 - envio real de e-mail;
 - WhatsApp ou notificações em tempo real;
 - storage externo de documentos;
-- auditoria completa de todas as ações sensíveis;
+- cobertura completa de auditoria e testes para todas as ações sensíveis;
 - comprovantes reais;
 - política definitiva de retenção documental;
 - deploy com monitoramento e backups.

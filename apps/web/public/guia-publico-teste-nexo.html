@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guia de teste da NEXO</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-soft: #eef5ff;
+        --text: #162033;
+        --muted: #5f6f8d;
+        --line: #d8e1ef;
+        --brand: #0ea5e9;
+        --brand-strong: #2563eb;
+        --accent: #7c3aed;
+        --ok: #0f766e;
+        --warn: #b45309;
+        --shadow: 0 24px 70px rgba(37, 99, 235, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 34rem),
+          radial-gradient(circle at top right, rgba(124, 58, 237, 0.12), transparent 30rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .hero {
+        padding: 56px 24px 32px;
+      }
+
+      .hero-inner,
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--brand-strong);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 850px;
+        font-size: clamp(2rem, 4.2vw, 3.9rem);
+      }
+
+      h2 {
+        font-size: clamp(1.55rem, 3vw, 2.15rem);
+      }
+
+      h3 {
+        font-size: 1.05rem;
+      }
+
+      .lead {
+        max-width: 790px;
+        margin: 20px 0 0;
+        color: var(--muted);
+        font-size: 1.12rem;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        font-weight: 750;
+        text-decoration: none;
+      }
+
+      .button.primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, var(--brand), var(--accent));
+        color: #ffffff;
+      }
+
+      .quick-info {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin: 34px 0 0;
+      }
+
+      .info-card,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: var(--shadow);
+      }
+
+      .info-card {
+        padding: 18px;
+      }
+
+      .info-card strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .info-card span,
+      p,
+      li {
+        color: var(--muted);
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+        padding-bottom: 56px;
+      }
+
+      nav {
+        position: sticky;
+        top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+        padding: 14px;
+      }
+
+      nav strong {
+        display: block;
+        margin: 4px 8px 10px;
+      }
+
+      nav a {
+        display: block;
+        padding: 9px 10px;
+        border-radius: 6px;
+        color: var(--muted);
+        font-size: 0.94rem;
+        text-decoration: none;
+      }
+
+      nav a:hover {
+        background: var(--surface-soft);
+        color: var(--brand-strong);
+      }
+
+      .content {
+        display: grid;
+        gap: 18px;
+      }
+
+      section {
+        padding: clamp(20px, 4vw, 34px);
+      }
+
+      section > p:last-child,
+      section > ul:last-child,
+      section > ol:last-child {
+        margin-bottom: 0;
+      }
+
+      .section-header {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .icon {
+        display: grid;
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--surface-soft);
+        color: var(--brand-strong);
+        font-weight: 900;
+      }
+
+      .note {
+        margin: 16px 0;
+        padding: 14px 16px;
+        border: 1px solid #bae6fd;
+        border-radius: 8px;
+        background: #effaff;
+        color: #075985;
+      }
+
+      .warning {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: var(--warn);
+      }
+
+      .success {
+        border-color: #99f6e4;
+        background: #ecfdf5;
+        color: var(--ok);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .mini-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfdff;
+        padding: 14px;
+      }
+
+      .mini-card strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      ol,
+      ul {
+        padding-left: 1.3rem;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .steps {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+        padding-left: 0;
+        list-style: none;
+      }
+
+      .steps li {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        color: var(--text);
+      }
+
+      .step-copy {
+        display: block;
+        min-width: 0;
+      }
+
+      .steps span {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--surface-soft);
+        color: var(--brand-strong);
+        font-size: 0.84rem;
+        font-weight: 850;
+      }
+
+      code {
+        display: inline;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #f8fafc;
+        padding: 2px 6px;
+        color: #334155;
+        font-size: 0.92em;
+        white-space: nowrap;
+      }
+
+      .footer {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto 40px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      @media (max-width: 900px) {
+        main,
+        .quick-info,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        nav {
+          position: static;
+        }
+
+        .hero {
+          padding-top: 36px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">NEXO | Guia publico de teste</p>
+        <h1>Como testar o fluxo da plataforma sem se perder no caminho</h1>
+        <p class="lead">
+          Um roteiro simples para validar cadastro, perfis, eventos, busca de
+          profissionais, convites, candidaturas, contratos, agenda, avaliacoes,
+          verificacoes e operacao administrativa.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#roteiro">Comecar pelo roteiro</a>
+          <a class="button" href="#empresa">Fluxo da empresa</a>
+          <a class="button" href="#freelancer">Fluxo do freelancer</a>
+        </div>
+        <div class="quick-info">
+          <div class="info-card">
+            <strong>Objetivo</strong>
+            <span>Validar se a jornada faz sentido para empresas, freelancers e operacao.</span>
+          </div>
+          <div class="info-card">
+            <strong>Pagamento</strong>
+            <span>Pagamentos reais ainda nao devem ser considerados neste teste.</span>
+          </div>
+          <div class="info-card">
+            <strong>Ambiente local</strong>
+            <span>Normalmente o sistema roda em <code>http://localhost:3000</code>.</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <nav aria-label="Indice do guia">
+        <strong>Indice</strong>
+        <a href="#visao-geral">Visao geral</a>
+        <a href="#acesso">Link do sistema</a>
+        <a href="#perfis">Perfis</a>
+        <a href="#antes">Antes de comecar</a>
+        <a href="#publico">Fluxo publico</a>
+        <a href="#cadastro-empresa">Cadastro de empresa</a>
+        <a href="#empresa">Fluxo da empresa</a>
+        <a href="#cadastro-freelancer">Cadastro de freelancer</a>
+        <a href="#freelancer">Fluxo do freelancer</a>
+        <a href="#admin">Fluxo do administrador</a>
+        <a href="#atencao">O que observar</a>
+        <a href="#nao-producao">Ainda nao e producao</a>
+        <a href="#roteiro">Roteiro completo</a>
+        <a href="#feedback">Enviar feedback</a>
+      </nav>
+
+      <div class="content">
+        <section id="visao-geral">
+          <div class="section-header">
+            <div class="icon">N</div>
+            <h2>Visao Geral</h2>
+          </div>
+          <p>
+            A NEXO conecta empresas de eventos e profissionais freelancers. A
+            ideia e diminuir ligacoes, mensagens soltas, planilhas e pagamentos
+            manuais na hora de montar equipes para eventos.
+          </p>
+          <p>
+            Neste teste, o foco e avaliar o fluxo do sistema: cadastro, perfil,
+            eventos, busca de profissionais, convites, candidaturas, contratos,
+            agenda, avaliacoes, verificacoes e operacao administrativa.
+          </p>
+          <div class="note warning">
+            Pagamentos reais ainda nao fazem parte desta validacao.
+          </div>
+        </section>
+
+        <section id="acesso">
+          <div class="section-header">
+            <div class="icon">01</div>
+            <h2>Link do Sistema</h2>
+          </div>
+          <p>Acesse o endereco informado pelo responsavel pelo teste.</p>
+          <div class="note">Em ambiente local, normalmente use <code>http://localhost:3000</code>.</div>
+          <p>Se voce recebeu outro link, use o link recebido.</p>
+        </section>
+
+        <section id="perfis">
+          <div class="section-header">
+            <div class="icon">02</div>
+            <h2>Perfis do Sistema</h2>
+          </div>
+          <div class="grid">
+            <div class="mini-card">
+              <strong>Empresa</strong>
+              <p>Cria eventos, busca freelancers, envia convites, recebe candidaturas e acompanha contratos.</p>
+            </div>
+            <div class="mini-card">
+              <strong>Freelancer</strong>
+              <p>Cria perfil profissional, informa especialidades, recebe convites, se candidata e acompanha agenda.</p>
+            </div>
+            <div class="mini-card">
+              <strong>Administrador</strong>
+              <p>Verifica usuarios, acompanha eventos, contratos, contestacoes, auditoria e operacao.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="antes">
+          <div class="section-header">
+            <div class="icon">03</div>
+            <h2>Antes de Comecar</h2>
+          </div>
+          <p>Se o sistema estiver com uma base vazia, pode ser necessario que o responsavel tecnico crie:</p>
+          <ul>
+            <li>um usuario administrador;</li>
+            <li>as especialidades usadas no sistema, como audio, iluminacao, fotografia, recepcao, seguranca, bar e montagem.</li>
+          </ul>
+          <div class="note">
+            Sem especialidades cadastradas, empresas nao conseguem criar eventos completos e freelancers nao conseguem configurar corretamente suas funcoes.
+          </div>
+        </section>
+
+        <section id="publico">
+          <div class="section-header">
+            <div class="icon">04</div>
+            <h2>Fluxo Publico</h2>
+          </div>
+          <p>Antes de entrar no sistema, voce pode navegar por:</p>
+          <ul>
+            <li>Pagina inicial: apresenta a proposta da NEXO.</li>
+            <li>Empresas: explica a plataforma para contratantes.</li>
+            <li>Freelancers: explica a plataforma para profissionais.</li>
+            <li>Termos: mostra termos, privacidade, LGPD e cookies.</li>
+            <li>Login: entrada de usuarios ja cadastrados.</li>
+            <li>Cadastro de empresa: cria uma conta de empresa.</li>
+            <li>Cadastro de freelancer: cria uma conta profissional.</li>
+            <li>Recuperar senha: permite gerar token de recuperacao em ambiente de teste.</li>
+          </ul>
+        </section>
+
+        <section id="cadastro-empresa">
+          <div class="section-header">
+            <div class="icon">05</div>
+            <h2>Cadastro de Empresa</h2>
+          </div>
+          <ol class="steps">
+            <li><span>1</span><div class="step-copy">Acesse <code>Cadastro de empresa</code>.</div></li>
+            <li><span>2</span><div class="step-copy">Informe nome, e-mail, telefone e senha.</div></li>
+            <li><span>3</span><div class="step-copy">Aceite os termos.</div></li>
+            <li><span>4</span><div class="step-copy">Entre no dashboard.</div></li>
+            <li><span>5</span><div class="step-copy">Acesse <code>Perfil</code>.</div></li>
+            <li><span>6</span><div class="step-copy">Complete nome fantasia, responsavel legal, CNPJ, logo, endereco, telefone e e-mail corporativo.</div></li>
+            <li><span>7</span><div class="step-copy">Envie documentos de verificacao.</div></li>
+            <li><span>8</span><div class="step-copy">Aguarde aprovacao administrativa.</div></li>
+          </ol>
+          <div class="note">Algumas acoes importantes exigem empresa verificada.</div>
+        </section>
+
+        <section id="empresa">
+          <div class="section-header">
+            <div class="icon">06</div>
+            <h2>Fluxo da Empresa</h2>
+          </div>
+          <h3>1. Perfil</h3>
+          <p>Complete ou revise os dados da empresa. Envie documentos e logo, se quiser testar upload.</p>
+          <h3>2. Equipe</h3>
+          <ul>
+            <li>criar convite;</li>
+            <li>copiar o link de aceite;</li>
+            <li>cancelar convite pendente;</li>
+            <li>alterar papel de membro;</li>
+            <li>remover membro da equipe.</li>
+          </ul>
+          <h3>3. Eventos</h3>
+          <p>Crie um evento informando nome, datas, horario, local, cidade, estado, descricao, funcoes, quantidade por funcao e valor de diaria.</p>
+          <ul>
+            <li>editar evento;</li>
+            <li>duplicar evento;</li>
+            <li>excluir evento sem contratos;</li>
+            <li>cancelar evento.</li>
+          </ul>
+          <div class="note warning">
+            Ao cancelar um evento, convites e candidaturas pendentes tambem sao cancelados. Se ja houver contratos avancados, o sistema pode bloquear o cancelamento.
+          </div>
+          <h3>4. Profissionais</h3>
+          <p>Busque por evento, funcao, nome ou apelido, cidade, diaria minima/maxima, ferramentas, transporte e disponibilidade.</p>
+          <ul>
+            <li>favoritar;</li>
+            <li>enviar convite individual;</li>
+            <li>selecionar varios profissionais;</li>
+            <li>enviar convites em lote.</li>
+          </ul>
+          <h3>5. Convites</h3>
+          <p>Acompanhe convites enviados, proponha outro valor, aceite contraproposta do freelancer ou cancele convite pendente.</p>
+          <h3>6. Oportunidades</h3>
+          <p>Veja candidaturas recebidas. Para cada candidatura, voce pode aprovar, recusar ou abrir chat para negociar.</p>
+          <h3>7. Chat</h3>
+          <p>Use o chat para conversar sobre convites, candidaturas e contratos. A conversa fica registrada no sistema.</p>
+          <h3>8. Contratos</h3>
+          <p>Acompanhe evento, profissional, valor combinado, status e data. Dependendo do status, aparecem acoes como cancelar, concluir ou marcar no-show.</p>
+          <h3>9. Avaliacoes</h3>
+          <p>Depois de um contrato elegivel, a empresa pode avaliar o freelancer.</p>
+          <h3>10. Notificacoes</h3>
+          <p>Veja avisos sobre convites, candidaturas, contratos, avaliacoes e outras acoes.</p>
+          <h3>11. Excluir conta</h3>
+          <p>No perfil existe uma area de exclusao de conta. Ela exige senha e confirmacao textual. Use apenas se realmente quiser testar o fluxo de LGPD.</p>
+        </section>
+
+        <section id="cadastro-freelancer">
+          <div class="section-header">
+            <div class="icon">07</div>
+            <h2>Cadastro de Freelancer</h2>
+          </div>
+          <ol class="steps">
+            <li><span>1</span><div class="step-copy">Acesse <code>Cadastro de freelancer</code>.</div></li>
+            <li><span>2</span><div class="step-copy">Informe nome, e-mail, telefone e senha.</div></li>
+            <li><span>3</span><div class="step-copy">Aceite os termos.</div></li>
+            <li><span>4</span><div class="step-copy">Entre no dashboard.</div></li>
+            <li><span>5</span><div class="step-copy">Acesse <code>Perfil</code>.</div></li>
+            <li><span>6</span><div class="step-copy">Complete os dados pessoais e profissionais.</div></li>
+            <li><span>7</span><div class="step-copy">Envie documentos de verificacao.</div></li>
+            <li><span>8</span><div class="step-copy">Aguarde aprovacao administrativa.</div></li>
+          </ol>
+          <div class="note">Algumas acoes importantes exigem freelancer verificado.</div>
+        </section>
+
+        <section id="freelancer">
+          <div class="section-header">
+            <div class="icon">08</div>
+            <h2>Fluxo do Freelancer</h2>
+          </div>
+          <h3>1. Perfil</h3>
+          <p>Complete nome completo, nome profissional, CPF, documento de identidade, foto/avatar, CEP, endereco, transporte e documentos de verificacao.</p>
+          <h3>2. Especialidades</h3>
+          <p>Informe suas funcoes profissionais. Para cada especialidade, preencha diaria, nivel de conhecimento, habilidades, equipamentos, cursos e resumo da experiencia.</p>
+          <h3>3. Agenda</h3>
+          <p>Veja eventos e bloqueios de agenda. Crie indisponibilidades para outro trabalho, compromisso pessoal, manutencao de equipamento ou viagem.</p>
+          <h3>4. Oportunidades</h3>
+          <ul>
+            <li>aceitar o valor indicado pela empresa;</li>
+            <li>enviar proposta com outro valor;</li>
+            <li>escrever uma mensagem;</li>
+            <li>editar candidatura pendente;</li>
+            <li>cancelar candidatura pendente.</li>
+          </ul>
+          <h3>5. Convites</h3>
+          <p>Veja convites recebidos. Para cada convite pendente, voce pode aceitar, recusar, enviar contraproposta ou aceitar valor negociado.</p>
+          <h3>6. Chat</h3>
+          <p>Use o chat para conversar com a empresa sobre convites, candidaturas e contratos.</p>
+          <h3>7. Contratos</h3>
+          <p>Acompanhe contratos em andamento e encerrados. Dependendo do status, voce pode cancelar ou concluir quando permitido.</p>
+          <h3>8. Avaliacoes</h3>
+          <p>Depois de um contrato elegivel, o freelancer pode avaliar a empresa.</p>
+          <h3>9. Notificacoes</h3>
+          <p>Veja avisos sobre convites, candidaturas, contratos, avaliacoes e outras acoes.</p>
+          <h3>10. Excluir conta</h3>
+          <p>No perfil existe a opcao de excluir conta. Ela exige senha e confirmacao textual. Use essa funcao com cuidado.</p>
+        </section>
+
+        <section id="admin">
+          <div class="section-header">
+            <div class="icon">09</div>
+            <h2>Fluxo do Administrador</h2>
+          </div>
+          <p>O administrador e usado pela operacao da plataforma. Principais telas:</p>
+          <ul>
+            <li>Inicio: resumo geral.</li>
+            <li>Eventos: visao operacional dos eventos.</li>
+            <li>Profissionais: lista de profissionais.</li>
+            <li>Verificacoes: aprovacao/reprovacao de empresas e freelancers.</li>
+            <li>Usuarios: ativar ou desativar usuarios.</li>
+            <li>Administradores: criar e gerenciar outros admins.</li>
+            <li>Auditoria: ver registros de acoes sensiveis.</li>
+            <li>Contestacoes: acompanhar problemas reportados.</li>
+            <li>Avaliacoes: acompanhar reputacao e historico.</li>
+            <li>Pagamentos: existe no MVP, mas nao e o foco deste teste.</li>
+          </ul>
+          <div class="note success">
+            No teste, o administrador deve aprovar/reprovar verificacoes, conferir documentos, desativar usuarios e revisar auditoria.
+          </div>
+        </section>
+
+        <section id="atencao">
+          <div class="section-header">
+            <div class="icon">10</div>
+            <h2>O Que Testar com Atencao</h2>
+          </div>
+          <ul>
+            <li>O cadastro e facil?</li>
+            <li>Os nomes das telas sao claros?</li>
+            <li>Voce entendeu o que precisa fazer em cada etapa?</li>
+            <li>Faltou alguma explicacao?</li>
+            <li>Os botoes usam palavras faceis?</li>
+            <li>O fluxo de empresa faz sentido?</li>
+            <li>O fluxo de freelancer faz sentido?</li>
+            <li>A diferenca entre convite e candidatura ficou obvia?</li>
+            <li>O contrato aparece no momento esperado?</li>
+            <li>O chat ajuda na negociacao?</li>
+            <li>A agenda do freelancer e util?</li>
+            <li>A area administrativa resolve o basico da operacao?</li>
+          </ul>
+        </section>
+
+        <section id="nao-producao">
+          <div class="section-header">
+            <div class="icon">11</div>
+            <h2>Pontos que Ainda Nao Sao Producao Real</h2>
+          </div>
+          <ul>
+            <li>pagamento real;</li>
+            <li>cartao, Pix ou boleto real;</li>
+            <li>saque real para freelancer;</li>
+            <li>e-mail real;</li>
+            <li>WhatsApp;</li>
+            <li>notificacoes em tempo real;</li>
+            <li>storage externo de documentos;</li>
+            <li>comprovantes reais;</li>
+            <li>deploy final com monitoramento e backups.</li>
+          </ul>
+        </section>
+
+        <section id="roteiro">
+          <div class="section-header">
+            <div class="icon">12</div>
+            <h2>Roteiro para Teste Completo</h2>
+          </div>
+          <ol class="steps">
+            <li><span>1</span><div class="step-copy">Cadastre uma empresa.</div></li>
+            <li><span>2</span><div class="step-copy">Complete o perfil da empresa.</div></li>
+            <li><span>3</span><div class="step-copy">Envie documentos da empresa.</div></li>
+            <li><span>4</span><div class="step-copy">Cadastre um freelancer.</div></li>
+            <li><span>5</span><div class="step-copy">Complete o perfil do freelancer.</div></li>
+            <li><span>6</span><div class="step-copy">Cadastre especialidades do freelancer.</div></li>
+            <li><span>7</span><div class="step-copy">Envie documentos do freelancer.</div></li>
+            <li><span>8</span><div class="step-copy">Entre como admin e aprove as verificacoes.</div></li>
+            <li><span>9</span><div class="step-copy">Entre como empresa e crie um evento.</div></li>
+            <li><span>10</span><div class="step-copy">Busque profissionais.</div></li>
+            <li><span>11</span><div class="step-copy">Envie convite para o freelancer.</div></li>
+            <li><span>12</span><div class="step-copy">Entre como freelancer e responda o convite.</div></li>
+            <li><span>13</span><div class="step-copy">Teste contraproposta de valor.</div></li>
+            <li><span>14</span><div class="step-copy">Use o chat.</div></li>
+            <li><span>15</span><div class="step-copy">Aceite o convite ou aprove uma candidatura.</div></li>
+            <li><span>16</span><div class="step-copy">Veja se o contrato foi criado.</div></li>
+            <li><span>17</span><div class="step-copy">Veja se o contrato aparece para empresa e freelancer.</div></li>
+            <li><span>18</span><div class="step-copy">Teste agenda do freelancer.</div></li>
+            <li><span>19</span><div class="step-copy">Teste avaliacoes quando o contrato permitir.</div></li>
+            <li><span>20</span><div class="step-copy">Anote duvidas, erros e sugestoes.</div></li>
+          </ol>
+        </section>
+
+        <section id="feedback">
+          <div class="section-header">
+            <div class="icon">13</div>
+            <h2>Como Enviar Feedback</h2>
+          </div>
+          <p>Ao enviar feedback, tente responder:</p>
+          <ul>
+            <li>O que voce tentou fazer?</li>
+            <li>Em qual tela estava?</li>
+            <li>O que esperava que acontecesse?</li>
+            <li>O que aconteceu de fato?</li>
+            <li>A mensagem de erro ajudou?</li>
+            <li>Voce ficou confuso em algum momento?</li>
+            <li>O que mudaria no texto, botao ou fluxo?</li>
+          </ul>
+          <div class="note">
+            Se possivel, envie print da tela junto com o comentario.
+          </div>
+          <p>
+            O objetivo do teste nao e apenas encontrar bugs tecnicos, mas
+            descobrir se o fluxo faz sentido. Feedbacks simples, como
+            "nao entendi este botao" ou "achei essa etapa longa", sao muito
+            importantes.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <p class="footer">NEXO | Guia publico de teste</p>
+  </body>
+</html>

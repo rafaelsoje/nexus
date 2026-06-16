@@ -832,6 +832,133 @@ test.describe.serial("NEXO e2e API flows", () => {
     expect(adminAccounts.some((item) => item.id === gatewayAccount.id)).toBeTruthy();
   });
 
+  test("events contracts and chat are isolated to hiring participants", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const otherCompany = await login(request, "aurora@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const otherFreelancer = await login(request, "audio@nexo.local");
+    const { contractId, eventId } = await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1710,
+      name: "E2E Isolamento Operacional",
+    });
+
+    const ownEvent = await get<EventItem>(request, company, `/api/events/${eventId}`);
+    expect(ownEvent.id).toBe(eventId);
+
+    const otherCompanyEvents = await get<EventItem[]>(
+      request,
+      otherCompany,
+      "/api/events",
+    );
+    expect(otherCompanyEvents.some((item) => item.id === eventId)).toBeFalsy();
+
+    await expectStatus(request, otherCompany, "GET", `/api/events/${eventId}`, [
+      404,
+    ]);
+    await expectStatus(
+      request,
+      otherCompany,
+      "PATCH",
+      `/api/events/${eventId}`,
+      [404],
+      { name: "Tentativa indevida" },
+    );
+    await expectStatus(
+      request,
+      otherCompany,
+      "POST",
+      `/api/events/${eventId}/cancel`,
+      [404],
+    );
+
+    const companyContracts = await get<ContractItem[]>(
+      request,
+      company,
+      "/api/contracts",
+    );
+    expect(companyContracts.some((item) => item.id === contractId)).toBeTruthy();
+
+    const otherCompanyContracts = await get<ContractItem[]>(
+      request,
+      otherCompany,
+      "/api/contracts",
+    );
+    expect(
+      otherCompanyContracts.some((item) => item.id === contractId),
+    ).toBeFalsy();
+
+    const otherFreelancerContracts = await get<ContractItem[]>(
+      request,
+      otherFreelancer,
+      "/api/contracts",
+    );
+    expect(
+      otherFreelancerContracts.some((item) => item.id === contractId),
+    ).toBeFalsy();
+
+    await expectStatus(
+      request,
+      otherCompany,
+      "PATCH",
+      `/api/contracts/${contractId}/status`,
+      [404],
+      { status: "COMPLETED" },
+    );
+    await expectStatus(
+      request,
+      otherFreelancer,
+      "PATCH",
+      `/api/contracts/${contractId}/status`,
+      [404],
+      { status: "COMPLETED" },
+    );
+
+    const companyThreads = await get<ChatThreadItem[]>(
+      request,
+      company,
+      "/api/chat/threads",
+    );
+    const thread = companyThreads.find((item) => item.event?.id === eventId);
+    expect(thread).toBeTruthy();
+
+    const otherCompanyThreads = await get<ChatThreadItem[]>(
+      request,
+      otherCompany,
+      "/api/chat/threads",
+    );
+    expect(otherCompanyThreads.some((item) => item.id === thread?.id)).toBeFalsy();
+
+    const otherFreelancerThreads = await get<ChatThreadItem[]>(
+      request,
+      otherFreelancer,
+      "/api/chat/threads",
+    );
+    expect(
+      otherFreelancerThreads.some((item) => item.id === thread?.id),
+    ).toBeFalsy();
+
+    await expectStatus(
+      request,
+      otherCompany,
+      "POST",
+      `/api/chat/threads/${thread?.id}/messages`,
+      [404],
+      { body: "Mensagem indevida" },
+    );
+    await expectStatus(
+      request,
+      otherFreelancer,
+      "POST",
+      `/api/chat/threads/${thread?.id}/messages`,
+      [404],
+      { body: "Mensagem indevida" },
+    );
+  });
+
   test("common users cannot access admin financial endpoints", async ({
     request,
   }) => {
