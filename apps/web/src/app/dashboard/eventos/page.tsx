@@ -1,6 +1,14 @@
 "use client";
 
-import { CalendarDays, Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import {
+  CalendarDays,
+  Copy,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -11,7 +19,11 @@ import {
 import { ListPanel } from "../../../components/dashboard-widgets";
 import { EmptyState, Field, StatusMessage } from "../../../components/ui";
 import { apiRequest, formatCurrency } from "../../../lib/api";
-import type { EventItem, Skill } from "../../../lib/dashboard-types";
+import type {
+  CompanyProfile,
+  EventItem,
+  Skill,
+} from "../../../lib/dashboard-types";
 
 type RequirementRow = {
   key: string;
@@ -35,6 +47,9 @@ export default function EventsPage() {
   const [requirementRows, setRequirementRows] = useState<RequirementRow[]>([
     emptyRequirement,
   ]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(
+    null,
+  );
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -62,16 +77,21 @@ export default function EventsPage() {
     setLoading(true);
 
     try {
-      const [loadedSkills, loadedEvents] = await Promise.all([
-        apiRequest<Skill[]>("/api/skills"),
-        session?.user.role === "ADMIN"
-          ? apiRequest<EventItem[]>("/api/admin/events")
-          : session?.user.role === "COMPANY"
-            ? apiRequest<EventItem[]>("/api/events")
-            : Promise.resolve([]),
-      ]);
+      const [loadedSkills, loadedEvents, loadedCompanyProfile] =
+        await Promise.all([
+          apiRequest<Skill[]>("/api/skills"),
+          session?.user.role === "ADMIN"
+            ? apiRequest<EventItem[]>("/api/admin/events")
+            : session?.user.role === "COMPANY"
+              ? apiRequest<EventItem[]>("/api/events")
+              : Promise.resolve([]),
+          session?.user.role === "COMPANY"
+            ? apiRequest<CompanyProfile>("/api/companies/profile")
+            : Promise.resolve(null),
+        ]);
       setSkills(loadedSkills);
       setEvents(loadedEvents);
+      setCompanyProfile(loadedCompanyProfile);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Erro ao carregar eventos.",
@@ -101,6 +121,13 @@ export default function EventsPage() {
     const form = new FormData(formElement);
     setError("");
     setSuccess("");
+
+    if (session?.user.role === "COMPANY" && !canCreateCompanyEvents) {
+      setError(
+        "A empresa precisa estar aprovada por um administrador antes de criar eventos.",
+      );
+      return;
+    }
 
     try {
       const requirements = requirementRows
@@ -280,6 +307,13 @@ export default function EventsPage() {
     );
   }
 
+  const companyHasDocuments = Boolean(
+    companyProfile?.verificationDocuments?.length,
+  );
+  const canCreateCompanyEvents =
+    session.user.role !== "COMPANY" ||
+    companyProfile?.verificationStatus === "VERIFIED";
+
   return (
     <DashboardShell
       action={<ModuleHeaderAction onRefresh={loadEvents} />}
@@ -318,153 +352,161 @@ export default function EventsPage() {
               <h2>{editingEvent ? "Editar evento" : "Criar evento"}</h2>
               <CalendarDays size={18} />
             </div>
+            {!canCreateCompanyEvents ? (
+              <CompanyVerificationNotice hasDocuments={companyHasDocuments} />
+            ) : null}
             <form
               className="form compact"
               key={editingEvent?.id ?? "create-event"}
               onSubmit={handleSubmitEvent}
             >
-              <Field label="Nome">
-                <input defaultValue={editingEvent?.name} name="name" required />
-              </Field>
-              <div className="form-grid">
-                <Field label="Início">
-                  <input
-                    defaultValue={toDateTimeLocal(editingEvent?.startsAt)}
-                    name="startsAt"
-                    type="datetime-local"
-                    required
-                  />
+              <fieldset
+                className="form-fieldset"
+                disabled={!canCreateCompanyEvents}
+              >
+                <Field label="Nome">
+                  <input defaultValue={editingEvent?.name} name="name" required />
                 </Field>
-                <Field label="Fim">
-                  <input
-                    defaultValue={toDateTimeLocal(editingEvent?.endsAt)}
-                    name="endsAt"
-                    type="datetime-local"
-                    required
-                  />
-                </Field>
-              </div>
-              <Field label="Local">
-                <input
-                  defaultValue={editingEvent?.location}
-                  name="location"
-                  required
-                />
-              </Field>
-              <div className="form-grid">
-                <Field label="Cidade">
-                  <input defaultValue={editingEvent?.city} name="city" />
-                </Field>
-                <Field label="UF">
-                  <input
-                    defaultValue={editingEvent?.state}
-                    name="state"
-                    maxLength={2}
-                  />
-                </Field>
-              </div>
-              <Field label="Descrição">
-                <input
-                  defaultValue={editingEvent?.description}
-                  name="description"
-                  placeholder="Briefing, acesso, uniforme, horários..."
-                />
-              </Field>
-              <div className="requirement-editor">
-                <div className="panel-header">
-                  <h3>Funções do evento</h3>
-                  <button
-                    className="icon-action"
-                    onClick={addRequirementRow}
-                    type="button"
-                  >
-                    <Plus size={14} />
-                    Adicionar
-                  </button>
+                <div className="form-grid">
+                  <Field label="Início">
+                    <input
+                      defaultValue={toDateTimeLocal(editingEvent?.startsAt)}
+                      name="startsAt"
+                      type="datetime-local"
+                      required
+                    />
+                  </Field>
+                  <Field label="Fim">
+                    <input
+                      defaultValue={toDateTimeLocal(editingEvent?.endsAt)}
+                      name="endsAt"
+                      type="datetime-local"
+                      required
+                    />
+                  </Field>
                 </div>
-                {requirementRows.map((row) => (
-                  <div className="requirement-row" key={row.key}>
-                    <Field label="Especialidade">
-                      <select
-                        onChange={(event) =>
-                          updateRequirementRow(
-                            row.key,
-                            "skillId",
-                            event.target.value,
-                          )
-                        }
-                        required
-                        value={row.skillId}
-                      >
-                        <option value="" disabled>
-                          Selecione
-                        </option>
-                        {skills.map((skill) => (
-                          <option key={skill.id} value={skill.id}>
-                            {skill.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Qtd.">
-                      <input
-                        min={1}
-                        onChange={(event) =>
-                          updateRequirementRow(
-                            row.key,
-                            "quantity",
-                            Number(event.target.value),
-                          )
-                        }
-                        required
-                        type="number"
-                        value={row.quantity}
-                      />
-                    </Field>
-                    <Field label="Diária">
-                      <input
-                        min={0}
-                        onChange={(event) =>
-                          updateRequirementRow(
-                            row.key,
-                            "dailyRate",
-                            Number(event.target.value),
-                          )
-                        }
-                        required
-                        type="number"
-                        value={row.dailyRate}
-                      />
-                    </Field>
+                <Field label="Local">
+                  <input
+                    defaultValue={editingEvent?.location}
+                    name="location"
+                    required
+                  />
+                </Field>
+                <div className="form-grid">
+                  <Field label="Cidade">
+                    <input defaultValue={editingEvent?.city} name="city" />
+                  </Field>
+                  <Field label="UF">
+                    <input
+                      defaultValue={editingEvent?.state}
+                      name="state"
+                      maxLength={2}
+                    />
+                  </Field>
+                </div>
+                <Field label="Descrição">
+                  <input
+                    defaultValue={editingEvent?.description}
+                    name="description"
+                    placeholder="Briefing, acesso, uniforme, horários..."
+                  />
+                </Field>
+                <div className="requirement-editor">
+                  <div className="panel-header">
+                    <h3>Funções do evento</h3>
                     <button
-                      aria-label="Remover função"
-                      className="icon-action ghost"
-                      disabled={requirementRows.length === 1}
-                      onClick={() => removeRequirementRow(row.key)}
+                      className="icon-action"
+                      onClick={addRequirementRow}
                       type="button"
                     >
-                      <Trash2 size={14} />
+                      <Plus size={14} />
+                      Adicionar
                     </button>
                   </div>
-                ))}
-              </div>
-              <input
-                name="eventType"
-                type="hidden"
-                value={editingEvent?.eventType ?? "Evento"}
-              />
-              <button className="primary-button full" type="submit">
-                {editingEvent ? "Salvar alterações" : "Criar evento"}
-              </button>
-              {editingEvent ? (
-                <button
-                  className="secondary-button full"
-                  onClick={resetEventForm}
-                  type="button"
-                >
-                  Cancelar edição
+                  {requirementRows.map((row) => (
+                    <div className="requirement-row" key={row.key}>
+                      <Field label="Especialidade">
+                        <select
+                          onChange={(event) =>
+                            updateRequirementRow(
+                              row.key,
+                              "skillId",
+                              event.target.value,
+                            )
+                          }
+                          required
+                          value={row.skillId}
+                        >
+                          <option value="" disabled>
+                            Selecione
+                          </option>
+                          {skills.map((skill) => (
+                            <option key={skill.id} value={skill.id}>
+                              {skill.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Qtd.">
+                        <input
+                          min={1}
+                          onChange={(event) =>
+                            updateRequirementRow(
+                              row.key,
+                              "quantity",
+                              Number(event.target.value),
+                            )
+                          }
+                          required
+                          type="number"
+                          value={row.quantity}
+                        />
+                      </Field>
+                      <Field label="Diária">
+                        <input
+                          min={0}
+                          onChange={(event) =>
+                            updateRequirementRow(
+                              row.key,
+                              "dailyRate",
+                              Number(event.target.value),
+                            )
+                          }
+                          required
+                          type="number"
+                          value={row.dailyRate}
+                        />
+                      </Field>
+                      <button
+                        aria-label="Remover função"
+                        className="icon-action ghost"
+                        disabled={requirementRows.length === 1}
+                        onClick={() => removeRequirementRow(row.key)}
+                        type="button"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <input
+                  name="eventType"
+                  type="hidden"
+                  value={editingEvent?.eventType ?? "Evento"}
+                />
+                <button className="primary-button full" type="submit">
+                  {editingEvent ? "Salvar alterações" : "Criar evento"}
                 </button>
-              ) : null}
+                {editingEvent ? (
+                  <button
+                    className="secondary-button full"
+                    onClick={resetEventForm}
+                    type="button"
+                  >
+                    Cancelar edição
+                  </button>
+                ) : null}
+              </fieldset>
             </form>
           </article>
         ) : null}
@@ -663,6 +705,36 @@ function formatEventStatus(status: string) {
   };
 
   return labels[status] ?? status;
+}
+
+function CompanyVerificationNotice({
+  hasDocuments,
+}: Readonly<{ hasDocuments: boolean }>) {
+  return (
+    <div className="verification-block">
+      <span className="verification-block-icon" aria-hidden="true">
+        <ShieldCheck size={20} />
+      </span>
+      <div>
+        <strong>
+          {hasDocuments
+            ? "Cadastro em análise"
+            : "Verificação necessária para criar eventos"}
+        </strong>
+        <p>
+          {hasDocuments
+            ? "Seus documentos já foram enviados. Um administrador precisa aprovar a empresa antes da criação de eventos ser liberada."
+            : "Para criar eventos na plataforma, complete o perfil da empresa e envie os documentos para análise do administrador. Recomendamos enviar o Contrato social e o Cartão CNPJ."}
+        </p>
+        <Link
+          className="primary-button"
+          href="/dashboard/perfil#verificacao-documentos"
+        >
+          {hasDocuments ? "Ver documentos enviados" : "Enviar documentos"}
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function formatRequirements(item: EventItem) {

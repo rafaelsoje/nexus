@@ -2249,6 +2249,58 @@ input[type="file"]::file-selector-button:hover {
   padding: 1rem;
 }
 
+.form-fieldset {
+  border: 0;
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.form-fieldset:disabled {
+  opacity: 0.58;
+}
+
+.verification-block {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--surface-soft) 88%, var(--primary) 12%);
+  border: 1px solid rgba(0, 191, 255, 0.28);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 1rem 0;
+  padding: 0.95rem;
+}
+
+.verification-block-icon {
+  align-items: center;
+  background: rgba(0, 191, 255, 0.12);
+  border-radius: 0.45rem;
+  color: var(--primary);
+  display: inline-flex;
+  height: 2.4rem;
+  justify-content: center;
+  width: 2.4rem;
+}
+
+.verification-block strong {
+  color: var(--white);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.verification-block p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 0.8rem;
+}
+
+.verification-block .primary-button {
+  min-height: 2.35rem;
+}
+
 .icon-action {
   min-height: 2.1rem;
   padding: 0 0.65rem;

@@ -1719,7 +1719,7 @@ type DocumentOption = {
 };
 
 const companyDocumentOptions: DocumentOption[] = [
-  { value: "document", label: "Contrato social ou documento cadastral" },
+  { value: "social_contract", label: "Contrato social" },
   { value: "cnpj", label: "Cartão CNPJ" },
   { value: "address", label: "Comprovante de endereço da empresa" },
   { value: "portfolio", label: "Portfólio ou imagem institucional" },
@@ -1734,6 +1734,7 @@ const freelancerDocumentOptions: DocumentOption[] = [
 
 const documentLabels: Record<string, string> = {
   document: "Documento cadastral",
+  social_contract: "Contrato social",
   cnpj: "Cartão CNPJ",
   identity: "Identidade",
   address: "Comprovante de endereço",
