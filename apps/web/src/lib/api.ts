@@ -282,7 +282,7 @@ const apiMessageTranslations: Record<string, string> = {
   "Verified profiles cannot delete verification documents":
     "Perfis aprovados não podem remover documentos de verificação.",
   "Owner role cannot be invited":
-    "O papel de dono só pertence ao primeiro administrador da empresa.",
+    "O papel de administrador principal pertence ao usuário que criou o cadastro da empresa.",
   "User already belongs to a company":
     "Este usuário já está vinculado a uma empresa.",
   "User already belongs to another account type":

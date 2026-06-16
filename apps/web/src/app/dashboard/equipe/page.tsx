@@ -23,7 +23,7 @@ const roles: Array<{ value: Exclude<CompanyMemberRole, "OWNER">; label: string }
   ];
 
 const roleLabels: Record<CompanyMemberRole, string> = {
-  OWNER: "Dono",
+  OWNER: "Administrador principal",
   ADMIN: "Administrador",
   FINANCE: "Financeiro",
   OPERATOR: "Operação",
@@ -216,6 +216,11 @@ export default function CompanyTeamPage() {
             <div>
               <span className="eyebrow">Membros</span>
               <h2>Usuários vinculados</h2>
+              <p>
+                O administrador principal é quem criou o cadastro da empresa na
+                plataforma. Ele pode ser o dono, responsável legal ou um
+                funcionário autorizado.
+              </p>
             </div>
             <UsersRound size={20} />
           </div>

@@ -50,7 +50,7 @@ export default function CompanyRegisterPage() {
       const session = await apiRequest<AuthSession>("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({
-          name: String(form.get("responsibleName")),
+          name: String(form.get("userName")),
           email: String(form.get("email")),
           password: String(form.get("password")),
           phone: String(form.get("phone")),
@@ -87,7 +87,10 @@ export default function CompanyRegisterPage() {
         <Field label="Empresa">
           <input name="companyName" required />
         </Field>
-        <Field label="Responsável">
+        <Field label="Seu nome">
+          <input name="userName" required />
+        </Field>
+        <Field label="Responsável legal">
           <input name="responsibleName" required />
         </Field>
         <Field label="CNPJ">
