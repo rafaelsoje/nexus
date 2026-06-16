@@ -157,6 +157,7 @@ model User {
   passwordHash          String
   role                  UserRole
   phone                 String?
+  avatarUrl             String?
   refreshTokenHash      String?
   resetTokenHash        String?
   resetTokenExpiresAt   DateTime?

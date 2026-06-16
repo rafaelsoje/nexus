@@ -21,6 +21,7 @@ import { InviteCompanyMemberDto } from "./dto/invite-company-member.dto";
 import { AcceptCompanyInvitationDto } from "./dto/accept-company-invitation.dto";
 import { UpdateCompanyLogoDto } from "./dto/update-company-logo.dto";
 import { UpdateCompanyMemberRoleDto } from "./dto/update-company-member-role.dto";
+import { UpdateCompanyMemberProfileDto } from "./dto/update-company-member-profile.dto";
 
 @Controller("companies")
 export class CompaniesController {
@@ -99,6 +100,17 @@ export class CompaniesController {
     @Body() dto: UpdateCompanyMemberRoleDto,
   ) {
     return this.companiesService.updateMemberRole(user.sub, id, dto.role);
+  }
+
+  @Roles(UserRole.COMPANY)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Patch("team/members/:id/profile")
+  updateMemberProfile(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string,
+    @Body() dto: UpdateCompanyMemberProfileDto,
+  ) {
+    return this.companiesService.updateMemberProfile(user.sub, id, dto);
   }
 
   @Roles(UserRole.COMPANY)

@@ -1610,6 +1610,24 @@ input.compact-checkbox {
   min-width: 0;
 }
 
+.list-row > .member-summary {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.member-summary > div:last-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.team-member-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .split-row,
 .split-action-group {
   align-items: center;

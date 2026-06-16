@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Copy, Send, UsersRound } from "lucide-react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import { Copy, Pencil, Send, Upload, UsersRound, X } from "lucide-react";
 import {
   DashboardShell,
   ModuleHeaderAction,
@@ -9,6 +9,7 @@ import {
 } from "../../../components/dashboard-shell";
 import { apiRequest } from "../../../lib/api";
 import type {
+  CompanyMember,
   CompanyMemberRole,
   CompanyTeam,
   CompanyTeamInvitation,
@@ -46,6 +47,13 @@ export default function CompanyTeamPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<CompanyMember | null>(null);
+  const [memberProfileForm, setMemberProfileForm] = useState({
+    avatarUrl: "",
+    name: "",
+    phone: "",
+  });
+  const [savingMemberProfile, setSavingMemberProfile] = useState(false);
   const [lastInvite, setLastInvite] = useState<CompanyTeamInvitation | null>(
     null,
   );
@@ -117,6 +125,68 @@ export default function CompanyTeamPage() {
       await loadTeam();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao remover membro.");
+    }
+  }
+
+  function openMemberProfile(member: CompanyMember) {
+    setEditingMember(member);
+    setMemberProfileForm({
+      avatarUrl: member.user.avatarUrl ?? "",
+      name: member.user.name,
+      phone: member.user.phone ?? "",
+    });
+    setError(null);
+    setMessage(null);
+  }
+
+  async function handleMemberAvatarFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const avatarUrl = await readFileAsDataUrl(file);
+
+    setMemberProfileForm((current) => ({
+      ...current,
+      avatarUrl,
+    }));
+    event.target.value = "";
+  }
+
+  async function updateMemberProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingMember) {
+      return;
+    }
+
+    setSavingMemberProfile(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      await apiRequest<CompanyMember>(
+        `/api/companies/team/members/${editingMember.id}/profile`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            avatarUrl: memberProfileForm.avatarUrl,
+            name: memberProfileForm.name,
+            phone: memberProfileForm.phone,
+          }),
+        },
+      );
+      setMessage("Perfil do membro atualizado.");
+      setEditingMember(null);
+      await loadTeam();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Erro ao atualizar perfil do membro.",
+      );
+    } finally {
+      setSavingMemberProfile(false);
     }
   }
 
@@ -228,16 +298,39 @@ export default function CompanyTeamPage() {
           <div className="list">
             {team?.members.map((member) => (
               <article className="list-row" key={member.id}>
-                <div>
-                  <strong>{member.user.name}</strong>
-                  <span>
-                    {member.user.email}
-                    {!member.isActive ? " - inativo na equipe" : ""}
-                  </span>
+                <div className="member-summary">
+                  <div className="profile-avatar small" aria-hidden="true">
+                    {member.user.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" src={member.user.avatarUrl} />
+                    ) : (
+                      <span>{getInitials(member.user.name)}</span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>{member.user.name}</strong>
+                    <span>
+                      {member.user.email}
+                      {member.user.phone ? ` · ${member.user.phone}` : ""}
+                      {!member.isActive ? " - inativo na equipe" : ""}
+                    </span>
+                  </div>
                 </div>
                 <div className="row-actions">
                   {member.role === "OWNER" ? (
-                    <small>{roleLabels[member.role]}</small>
+                    <>
+                      <small>{roleLabels[member.role]}</small>
+                      {member.isActive ? (
+                        <button
+                          className="icon-action edit-action"
+                          onClick={() => openMemberProfile(member)}
+                          type="button"
+                        >
+                          <Pencil size={14} />
+                          Editar perfil
+                        </button>
+                      ) : null}
+                    </>
                   ) : (
                     <>
                       <select
@@ -257,6 +350,16 @@ export default function CompanyTeamPage() {
                           </option>
                         ))}
                       </select>
+                      {member.isActive ? (
+                        <button
+                          className="icon-action edit-action"
+                          onClick={() => openMemberProfile(member)}
+                          type="button"
+                        >
+                          <Pencil size={14} />
+                          Perfil
+                        </button>
+                      ) : null}
                       {member.isActive ? (
                         <button
                           className="icon-action ghost"
@@ -314,6 +417,149 @@ export default function CompanyTeamPage() {
           ) : null}
         </div>
       </section>
+
+      {editingMember ? (
+        <div
+          className="agenda-modal-backdrop"
+          onMouseDown={() => setEditingMember(null)}
+          role="presentation"
+        >
+          <form
+            aria-labelledby="member-profile-title"
+            className="agenda-modal team-member-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={updateMemberProfile}
+            role="dialog"
+          >
+            <div className="agenda-modal-header">
+              <div>
+                <span>Perfil da equipe</span>
+                <h2 id="member-profile-title">Editar dados do membro</h2>
+              </div>
+              <button
+                aria-label="Fechar"
+                className="agenda-modal-close"
+                onClick={() => setEditingMember(null)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="modal-copy">
+              Estes dados são opcionais e ajudam a identificar melhor quem faz
+              parte da operação da empresa. O e-mail continua sendo o acesso do
+              usuário.
+            </p>
+
+            <div className="avatar-upload-row">
+              <div className="profile-avatar large" aria-hidden="true">
+                {memberProfileForm.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" src={memberProfileForm.avatarUrl} />
+                ) : (
+                  <span>{getInitials(memberProfileForm.name)}</span>
+                )}
+              </div>
+              <div className="team-member-photo-actions">
+                <label className="secondary-button file-button">
+                  <Upload size={16} />
+                  Escolher foto
+                  <input
+                    accept="image/*"
+                    className="file-input-hidden"
+                    onChange={handleMemberAvatarFile}
+                    type="file"
+                  />
+                </label>
+                {memberProfileForm.avatarUrl ? (
+                  <button
+                    className="secondary-button"
+                    onClick={() =>
+                      setMemberProfileForm((current) => ({
+                        ...current,
+                        avatarUrl: "",
+                      }))
+                    }
+                    type="button"
+                  >
+                    Remover foto
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <label className="field">
+              <span>Nome</span>
+              <input
+                required
+                value={memberProfileForm.name}
+                onChange={(event) =>
+                  setMemberProfileForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Telefone</span>
+              <input
+                inputMode="tel"
+                placeholder="(00) 00000-0000"
+                value={memberProfileForm.phone}
+                onChange={(event) =>
+                  setMemberProfileForm((current) => ({
+                    ...current,
+                    phone: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>E-mail de acesso</span>
+              <input disabled value={editingMember.user.email} />
+            </label>
+
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setEditingMember(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="primary-button"
+                disabled={savingMemberProfile}
+                type="submit"
+              >
+                {savingMemberProfile ? "Salvando..." : "Salvar perfil"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </DashboardShell>
+  );
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getInitials(name?: string) {
+  return (
+    name
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "N"
   );
 }

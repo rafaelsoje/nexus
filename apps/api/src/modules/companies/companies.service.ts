@@ -22,6 +22,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { InviteCompanyMemberDto } from "./dto/invite-company-member.dto";
 import { AcceptCompanyInvitationDto } from "./dto/accept-company-invitation.dto";
 import { UpdateCompanyLogoDto } from "./dto/update-company-logo.dto";
+import { UpdateCompanyMemberProfileDto } from "./dto/update-company-member-profile.dto";
 
 @Injectable()
 export class CompaniesService {
@@ -131,6 +132,7 @@ export class CompaniesService {
               name: true,
               email: true,
               phone: true,
+              avatarUrl: true,
               isActive: true,
             },
           },
@@ -260,6 +262,56 @@ export class CompaniesService {
             name: true,
             email: true,
             phone: true,
+            avatarUrl: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateMemberProfile(
+    userId: string,
+    memberId: string,
+    dto: UpdateCompanyMemberProfileDto,
+  ) {
+    const membership = await this.companyAccess.findMembership(
+      userId,
+      companyManageRoles,
+    );
+    const member = await this.findManagedMember(membership.companyId, memberId);
+
+    if (!member.isActive) {
+      throw new BadRequestException("Inactive members cannot be updated");
+    }
+
+    const name = dto.name?.trim();
+    const phone = dto.phone?.trim();
+    const avatarUrl = dto.avatarUrl?.trim();
+
+    if (dto.name !== undefined && !name) {
+      throw new BadRequestException("Member name is required");
+    }
+
+    await this.prisma.user.update({
+      where: { id: member.userId },
+      data: {
+        ...(dto.name !== undefined ? { name } : {}),
+        ...(dto.phone !== undefined ? { phone: phone || null } : {}),
+        ...(dto.avatarUrl !== undefined ? { avatarUrl: avatarUrl || null } : {}),
+      },
+    });
+
+    return this.prisma.companyMember.findUniqueOrThrow({
+      where: { id: member.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            avatarUrl: true,
             isActive: true,
           },
         },
@@ -288,6 +340,7 @@ export class CompaniesService {
             name: true,
             email: true,
             phone: true,
+            avatarUrl: true,
             isActive: true,
           },
         },
