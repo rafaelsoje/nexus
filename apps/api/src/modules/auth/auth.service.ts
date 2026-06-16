@@ -24,7 +24,10 @@ export class AuthService {
     private readonly emailService: EmailService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(
+    dto: RegisterDto,
+    audit?: { ip?: string; userAgent?: string },
+  ) {
     if (dto.role === UserRole.ADMIN) {
       throw new ForbiddenException("Admin users cannot self-register");
     }
@@ -38,20 +41,37 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
-        role: dto.role,
-        passwordHash,
-      },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          role: dto.role,
+          passwordHash,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: created.id,
+          role: created.role,
+          ip: audit?.ip,
+          userAgent: audit?.userAgent,
+          action: "USER_REGISTERED",
+          entity: "User",
+          entityId: created.id,
+          metadata: { role: created.role },
+        },
+      });
+
+      return created;
     });
 
     return this.issueTokens(user);
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, audit?: { ip?: string; userAgent?: string }) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -64,7 +84,21 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    return this.issueTokens(user);
+    const session = await this.issueTokens(user);
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        role: user.role,
+        ip: audit?.ip,
+        userAgent: audit?.userAgent,
+        action: "USER_LOGGED_IN",
+        entity: "User",
+        entityId: user.id,
+      },
+    });
+
+    return session;
   }
 
   async refresh(refreshToken: string) {

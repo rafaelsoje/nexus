@@ -6,10 +6,11 @@ import {
   Header,
   Param,
   Post,
+  Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { createReadStream } from "fs";
 import {
   CurrentUser,
@@ -27,17 +28,27 @@ export class DocumentsController {
   @Post("verification")
   uploadVerificationDocument(
     @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
     @Body() dto: UploadVerificationDocumentDto,
   ) {
-    return this.documentsService.uploadVerificationDocument(user, dto);
+    return this.documentsService.uploadVerificationDocument(
+      user,
+      dto,
+      this.auditContext(user, request),
+    );
   }
 
   @Delete(":id")
   deleteVerificationDocument(
     @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
     @Param("id") id: string,
   ) {
-    return this.documentsService.deleteVerificationDocument(user, id);
+    return this.documentsService.deleteVerificationDocument(
+      user,
+      id,
+      this.auditContext(user, request),
+    );
   }
 
   @Get(":id/file")
@@ -58,5 +69,14 @@ export class DocumentsController {
       `inline; filename="${document.originalName.replaceAll('"', "")}"`,
     );
     createReadStream(document.storagePath).pipe(response);
+  }
+
+  private auditContext(user: CurrentUserPayload, request: Request) {
+    return {
+      userId: user.sub,
+      role: user.role,
+      ip: request.ip,
+      userAgent: request.get("user-agent"),
+    };
   }
 }

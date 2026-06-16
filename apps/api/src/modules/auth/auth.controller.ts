@@ -1,4 +1,5 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
+import { Request } from "express";
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -16,13 +17,13 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("register")
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() request: Request) {
+    return this.authService.register(dto, this.auditContext(request));
   }
 
   @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() request: Request) {
+    return this.authService.login(dto, this.auditContext(request));
   }
 
   @Post("refresh")
@@ -44,5 +45,12 @@ export class AuthController {
   @Post("logout")
   logout(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.logout(user.sub);
+  }
+
+  private auditContext(request: Request) {
+    return {
+      ip: request.ip,
+      userAgent: request.get("user-agent"),
+    };
   }
 }

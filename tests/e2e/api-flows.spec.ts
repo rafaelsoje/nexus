@@ -269,6 +269,87 @@ test.describe.serial("NEXO e2e API flows", () => {
     ).toBeTruthy();
   });
 
+  test("opportunities respect freelancer conflicts and availability blocks", async ({
+    request,
+  }) => {
+    const company = await login(request, "empresa@nexo.local");
+    const freelancer = await login(request, "freelancer@nexo.local");
+    const freelancerProfile = await get<FreelancerProfile>(
+      request,
+      freelancer,
+      "/api/freelancers/profile",
+    );
+    const skills = await get<Skill[]>(request, company, "/api/skills");
+    const skillId = freelancerProfile.skills?.[0]?.skill.id ?? skills[0].id;
+
+    await post(request, freelancer, "/api/freelancers/skills", {
+      skills: [{ skillId, dailyRateCents: 42000 }],
+    });
+
+    await createAcceptedContract(request, {
+      company,
+      freelancer,
+      offsetDays: 1210,
+      name: "E2E Conflito Agenda",
+    });
+
+    const conflictWindow = futureWindow(1210);
+    const contractConflictEvent = await post<EventItem>(
+      request,
+      company,
+      "/api/events",
+      {
+        name: `E2E Oportunidade Conflito Contrato ${Date.now()}`,
+        startsAt: conflictWindow.startsAt,
+        endsAt: conflictWindow.endsAt,
+        location: "Centro E2E",
+        city: "Aracaju",
+        state: "SE",
+        eventType: "Teste automatizado",
+        desiredProfessionals: 1,
+        requirements: [{ skillId, quantity: 1, dailyRateCents: 42000 }],
+      },
+    );
+
+    const blockedWindow = futureWindow(1220);
+    const availabilityConflictEvent = await post<EventItem>(
+      request,
+      company,
+      "/api/events",
+      {
+        name: `E2E Oportunidade Conflito Disponibilidade ${Date.now()}`,
+        startsAt: blockedWindow.startsAt,
+        endsAt: blockedWindow.endsAt,
+        location: "Centro E2E",
+        city: "Aracaju",
+        state: "SE",
+        eventType: "Teste automatizado",
+        desiredProfessionals: 1,
+        requirements: [{ skillId, quantity: 1, dailyRateCents: 42000 }],
+      },
+    );
+
+    await post(request, freelancer, "/api/availability", {
+      startsAt: blockedWindow.startsAt,
+      endsAt: blockedWindow.endsAt,
+      isAvailable: false,
+      reason: "Bloqueio e2e",
+    });
+
+    const opportunities = await get<EventItem[]>(
+      request,
+      freelancer,
+      `/api/applications/opportunities?skillId=${skillId}&minDailyRateCents=40000&maxDailyRateCents=43000`,
+    );
+
+    expect(
+      opportunities.some((item) => item.id === contractConflictEvent.id),
+    ).toBeFalsy();
+    expect(
+      opportunities.some((item) => item.id === availabilityConflictEvent.id),
+    ).toBeFalsy();
+  });
+
   test("company and freelancer can cancel pre-contract hiring steps", async ({
     request,
   }) => {
@@ -462,8 +543,47 @@ test.describe.serial("NEXO e2e API flows", () => {
     expect((updated as CompanyProfile & { verificationStatus: string }).verificationStatus).toBe(
       "VERIFIED",
     );
+  });
 
-    await del(request, company, `/api/documents/${document.id}`);
+  test("admin cannot verify company profile before required fields are complete", async ({
+    request,
+  }) => {
+    const admin = await login(request, "admin@nexo.local");
+    const email = `e2e-incomplete-company-${Date.now()}@nexo.local`;
+    const company = await post<Session>(request, null, "/api/auth/register", {
+      name: "Empresa Incompleta E2E",
+      email,
+      phone: "79999999999",
+      password,
+      role: "COMPANY",
+    });
+
+    const profile = await post<CompanyProfile>(
+      request,
+      company,
+      "/api/companies/profile",
+      {
+        companyName: "Empresa Incompleta E2E",
+        responsibleName: "Responsavel Incompleto",
+        email,
+      },
+    );
+
+    await post(request, company, "/api/documents/verification", {
+      category: "document",
+      originalName: "e2e-incomplete-company-documento.png",
+      mimeType: "image/png",
+      data: `data:image/png;base64,${tinyPng}`,
+    });
+
+    await expectStatus(
+      request,
+      admin,
+      "PATCH",
+      `/api/admin/companies/${profile.id}/verification`,
+      [400],
+      { status: "VERIFIED" },
+    );
   });
 
   test("company can anonymize its own account and remove private data", async ({
@@ -1336,6 +1456,9 @@ async function cleanupE2eArtifacts() {
   });
   await prisma.user.deleteMany({
     where: { email: { startsWith: "e2e-team-" } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: "e2e-incomplete-company-" } },
   });
   await prisma.companyInvitation.deleteMany({
     where: { email: { startsWith: "e2e-team-" } },

@@ -9,6 +9,7 @@ import {
   ContractStatus,
   EventStatus,
   InvitationStatus,
+  Prisma,
   VerificationStatus,
 } from "@prisma/client";
 import { publicFreelancerSelect } from "../../common/selectors/public-profiles";
@@ -22,6 +23,13 @@ import { CreateEventDto } from "./dto/create-event.dto";
 import { SearchAvailableFreelancersDto } from "./dto/search-available-freelancers.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
 
+type AuditContext = {
+  userId: string;
+  role?: string;
+  ip?: string;
+  userAgent?: string;
+};
+
 @Injectable()
 export class EventsService {
   constructor(
@@ -29,7 +37,7 @@ export class EventsService {
     private readonly companyAccess: CompanyAccessService,
   ) {}
 
-  async create(userId: string, dto: CreateEventDto) {
+  async create(userId: string, dto: CreateEventDto, audit?: AuditContext) {
     const company = await this.companyAccess.findCompanyForUser(
       userId,
       companyOperateRoles,
@@ -37,28 +45,36 @@ export class EventsService {
     this.assertCompanyVerified(company);
     this.assertValidRange(dto.startsAt, dto.endsAt);
 
-    return this.prisma.event.create({
-      data: {
-        companyId: company.id,
-        name: dto.name,
-        startsAt: new Date(dto.startsAt),
-        endsAt: new Date(dto.endsAt),
-        location: dto.location,
-        city: dto.city,
-        state: dto.state,
-        description: dto.description,
-        eventType: dto.eventType,
-        desiredProfessionals: dto.desiredProfessionals ?? 1,
-        status: EventStatus.OPEN,
-        requirements: {
-          create: dto.requirements?.map((item) => ({
-            skillId: item.skillId,
-            quantity: item.quantity,
-            dailyRateCents: item.dailyRateCents,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const event = await tx.event.create({
+        data: {
+          companyId: company.id,
+          name: dto.name,
+          startsAt: new Date(dto.startsAt),
+          endsAt: new Date(dto.endsAt),
+          location: dto.location,
+          city: dto.city,
+          state: dto.state,
+          description: dto.description,
+          eventType: dto.eventType,
+          desiredProfessionals: dto.desiredProfessionals ?? 1,
+          status: EventStatus.OPEN,
+          requirements: {
+            create: dto.requirements?.map((item) => ({
+              skillId: item.skillId,
+              quantity: item.quantity,
+              dailyRateCents: item.dailyRateCents,
+            })),
+          },
         },
-      },
-      include: { requirements: { include: { skill: true } } },
+        include: { requirements: { include: { skill: true } } },
+      });
+
+      await this.auditEvent(tx, audit, "EVENT_CREATED", event.id, {
+        companyId: company.id,
+      });
+
+      return event;
     });
   }
 
@@ -95,7 +111,12 @@ export class EventsService {
     return event;
   }
 
-  async update(userId: string, eventId: string, dto: UpdateEventDto) {
+  async update(
+    userId: string,
+    eventId: string,
+    dto: UpdateEventDto,
+    audit?: AuditContext,
+  ) {
     await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
     const startsAt = dto.startsAt ?? event.startsAt.toISOString();
@@ -107,7 +128,7 @@ export class EventsService {
         await tx.eventRequirement.deleteMany({ where: { eventId: event.id } });
       }
 
-      return tx.event.update({
+      const updated = await tx.event.update({
         where: { id: event.id },
         data: {
           name: dto.name,
@@ -131,39 +152,54 @@ export class EventsService {
         },
         include: { requirements: { include: { skill: true } } },
       });
+
+      await this.auditEvent(tx, audit, "EVENT_UPDATED", event.id, {
+        companyId: event.companyId,
+      });
+
+      return updated;
     });
   }
 
-  async duplicate(userId: string, eventId: string) {
+  async duplicate(userId: string, eventId: string, audit?: AuditContext) {
     await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
 
-    return this.prisma.event.create({
-      data: {
-        companyId: event.companyId,
-        name: `${event.name} (cópia)`,
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
-        location: event.location,
-        city: event.city,
-        state: event.state,
-        description: event.description,
-        eventType: event.eventType,
-        desiredProfessionals: event.desiredProfessionals,
-        status: EventStatus.OPEN,
-        requirements: {
-          create: event.requirements.map((item) => ({
-            skillId: item.skillId,
-            quantity: item.quantity,
-            dailyRateCents: item.dailyRateCents,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const duplicated = await tx.event.create({
+        data: {
+          companyId: event.companyId,
+          name: `${event.name} (cópia)`,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          location: event.location,
+          city: event.city,
+          state: event.state,
+          description: event.description,
+          eventType: event.eventType,
+          desiredProfessionals: event.desiredProfessionals,
+          status: EventStatus.OPEN,
+          requirements: {
+            create: event.requirements.map((item) => ({
+              skillId: item.skillId,
+              quantity: item.quantity,
+              dailyRateCents: item.dailyRateCents,
+            })),
+          },
         },
-      },
-      include: { requirements: { include: { skill: true } } },
+        include: { requirements: { include: { skill: true } } },
+      });
+
+      await this.auditEvent(tx, audit, "EVENT_DUPLICATED", duplicated.id, {
+        companyId: event.companyId,
+        sourceEventId: event.id,
+      });
+
+      return duplicated;
     });
   }
 
-  async cancel(userId: string, eventId: string) {
+  async cancel(userId: string, eventId: string, audit?: AuditContext) {
     await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
 
@@ -205,15 +241,21 @@ export class EventsService {
         data: { status: ContractStatus.CANCELLED },
       });
 
-      return tx.event.update({
+      const cancelled = await tx.event.update({
         where: { id: event.id },
         data: { status: EventStatus.CANCELLED },
         include: { requirements: { include: { skill: true } } },
       });
+
+      await this.auditEvent(tx, audit, "EVENT_CANCELLED", event.id, {
+        companyId: event.companyId,
+      });
+
+      return cancelled;
     });
   }
 
-  async delete(userId: string, eventId: string) {
+  async delete(userId: string, eventId: string, audit?: AuditContext) {
     await this.companyAccess.findCompanyForUser(userId, companyOperateRoles);
     const event = await this.findMine(userId, eventId);
 
@@ -221,7 +263,12 @@ export class EventsService {
       throw new BadRequestException("Event has contracts");
     }
 
-    await this.prisma.event.delete({ where: { id: event.id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.event.delete({ where: { id: event.id } });
+      await this.auditEvent(tx, audit, "EVENT_DELETED", event.id, {
+        companyId: event.companyId,
+      });
+    });
 
     return { ok: true };
   }
@@ -244,7 +291,8 @@ export class EventsService {
     const freelancers = await this.prisma.freelancerProfile.findMany({
       where: {
         user: { isActive: true },
-        verificationStatus: VerificationStatus.VERIFIED,
+        verificationStatus: query.verificationStatus ?? VerificationStatus.VERIFIED,
+        ratingAverage: query.minRating ? { gte: query.minRating } : undefined,
         city: query.city || undefined,
         dailyRateCents: {
           gte: query.minDailyRateCents,
@@ -338,5 +386,26 @@ export class EventsService {
     if (company.verificationStatus !== VerificationStatus.VERIFIED) {
       throw new ForbiddenException("Company must be verified");
     }
+  }
+
+  private auditEvent(
+    db: Prisma.TransactionClient | PrismaService,
+    audit: AuditContext | undefined,
+    action: string,
+    eventId: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    return db.auditLog.create({
+      data: {
+        userId: audit?.userId,
+        role: audit?.role,
+        ip: audit?.ip,
+        userAgent: audit?.userAgent,
+        action,
+        entity: "Event",
+        entityId: eventId,
+        metadata: metadata as Prisma.InputJsonValue | undefined,
+      },
+    });
   }
 }

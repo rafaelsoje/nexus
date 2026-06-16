@@ -7,9 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
+import { Request } from "express";
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -29,8 +31,12 @@ export class EventsController {
 
   @Roles(UserRole.COMPANY)
   @Post()
-  create(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateEventDto) {
-    return this.eventsService.create(user.sub, dto);
+  create(
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
+    @Body() dto: CreateEventDto,
+  ) {
+    return this.eventsService.create(user.sub, dto, this.auditContext(user, request));
   }
 
   @Roles(UserRole.COMPANY)
@@ -58,27 +64,49 @@ export class EventsController {
   @Patch(":id")
   update(
     @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
     @Param("id") id: string,
     @Body() dto: UpdateEventDto,
   ) {
-    return this.eventsService.update(user.sub, id, dto);
+    return this.eventsService.update(user.sub, id, dto, this.auditContext(user, request));
   }
 
   @Roles(UserRole.COMPANY)
   @Post(":id/duplicate")
-  duplicate(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
-    return this.eventsService.duplicate(user.sub, id);
+  duplicate(
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
+    @Param("id") id: string,
+  ) {
+    return this.eventsService.duplicate(user.sub, id, this.auditContext(user, request));
   }
 
   @Roles(UserRole.COMPANY)
   @Post(":id/cancel")
-  cancel(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
-    return this.eventsService.cancel(user.sub, id);
+  cancel(
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
+    @Param("id") id: string,
+  ) {
+    return this.eventsService.cancel(user.sub, id, this.auditContext(user, request));
   }
 
   @Roles(UserRole.COMPANY)
   @Delete(":id")
-  delete(@CurrentUser() user: CurrentUserPayload, @Param("id") id: string) {
-    return this.eventsService.delete(user.sub, id);
+  delete(
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() request: Request,
+    @Param("id") id: string,
+  ) {
+    return this.eventsService.delete(user.sub, id, this.auditContext(user, request));
+  }
+
+  private auditContext(user: CurrentUserPayload, request: Request) {
+    return {
+      userId: user.sub,
+      role: user.role,
+      ip: request.ip,
+      userAgent: request.get("user-agent"),
+    };
   }
 }

@@ -29,6 +29,13 @@ type RequestUser = {
   role: string;
 };
 
+type AuditContext = {
+  userId: string;
+  role?: string;
+  ip?: string;
+  userAgent?: string;
+};
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -41,6 +48,7 @@ export class DocumentsService {
   async uploadVerificationDocument(
     user: RequestUser,
     dto: UploadVerificationDocumentDto,
+    audit?: AuditContext,
   ) {
     if (user.role !== UserRole.COMPANY && user.role !== UserRole.FREELANCER) {
       throw new ForbiddenException(
@@ -76,22 +84,47 @@ export class DocumentsService {
     const fileName = `${randomUUID()}${extension}`;
     const stored = await this.storage.save({ fileName, data: buffer });
 
-    return this.prisma.verificationDocument.create({
-      data: {
-        category: dto.category.trim(),
-        originalName: basename(dto.originalName),
-        fileName: stored.fileName,
-        mimeType: dto.mimeType,
-        sizeBytes: buffer.length,
-        storagePath: stored.storagePath,
-        uploadedById: user.sub,
-        companyId: user.role === UserRole.COMPANY ? owner.id : undefined,
-        freelancerId: user.role === UserRole.FREELANCER ? owner.id : undefined,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const document = await tx.verificationDocument.create({
+        data: {
+          category: dto.category.trim(),
+          originalName: basename(dto.originalName),
+          fileName: stored.fileName,
+          mimeType: dto.mimeType,
+          sizeBytes: buffer.length,
+          storagePath: stored.storagePath,
+          uploadedById: user.sub,
+          companyId: user.role === UserRole.COMPANY ? owner.id : undefined,
+          freelancerId: user.role === UserRole.FREELANCER ? owner.id : undefined,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: audit?.userId ?? user.sub,
+          role: audit?.role ?? user.role,
+          ip: audit?.ip,
+          userAgent: audit?.userAgent,
+          action: "VERIFICATION_DOCUMENT_UPLOADED",
+          entity: "VerificationDocument",
+          entityId: document.id,
+          metadata: {
+            category: document.category,
+            mimeType: document.mimeType,
+            sizeBytes: document.sizeBytes,
+          },
+        },
+      });
+
+      return document;
     });
   }
 
-  async deleteVerificationDocument(user: RequestUser, id: string) {
+  async deleteVerificationDocument(
+    user: RequestUser,
+    id: string,
+    audit?: AuditContext,
+  ) {
     const document = await this.findAuthorizedDocument(user, id);
     const isVerifiedDocument =
       document.company?.verificationStatus === VerificationStatus.VERIFIED ||
@@ -103,7 +136,25 @@ export class DocumentsService {
       );
     }
 
-    await this.prisma.verificationDocument.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.verificationDocument.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          userId: audit?.userId ?? user.sub,
+          role: audit?.role ?? user.role,
+          ip: audit?.ip,
+          userAgent: audit?.userAgent,
+          action: "VERIFICATION_DOCUMENT_DELETED",
+          entity: "VerificationDocument",
+          entityId: id,
+          metadata: {
+            category: document.category,
+            companyId: document.companyId,
+            freelancerId: document.freelancerId,
+          },
+        },
+      });
+    });
 
     try {
       await this.storage.delete(document.storagePath);

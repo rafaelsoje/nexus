@@ -87,6 +87,8 @@ A empresa preenche ou revisa:
 
 Algumas ações importantes exigem empresa verificada. No ambiente demo, `empresa@nexo.local` e `aurora@nexo.local` já entram verificadas.
 
+Para aprovar a verificação, o backend exige documento enviado e perfil mínimo preenchido: nome da empresa, responsável, documento/CNPJ, telefone, e-mail, cidade e estado.
+
 ### 3. Gerenciar equipe interna
 
 Tela: `/dashboard/equipe`
@@ -223,6 +225,8 @@ Esses dados pessoais e de endereço ficam no perfil privado. Para a empresa, o s
 
 Algumas ações exigem freelancer verificado. No seed, vários freelancers já estão verificados.
 
+Para aprovar a verificação, o backend exige documento enviado, nome completo, CPF, nome/apelido profissional, cidade, estado, transporte e ao menos uma especialidade cadastrada.
+
 ### 3. Detalhar currículo técnico
 
 Tela: `/dashboard/especialidades`
@@ -275,7 +279,9 @@ Ao aceitar, a oportunidade entra no fluxo de contrato e aparece na agenda quando
 
 Tela: `/dashboard/oportunidades`
 
-O freelancer vê eventos abertos compatíveis com suas especialidades e pode se candidatar com:
+O freelancer vê eventos abertos compatíveis com suas especialidades, faixa de diária, empresa/cidade, tipo de evento e agenda livre. Eventos que conflitam com contrato pendente/confirmado ou bloqueio de indisponibilidade não aparecem como oportunidade.
+
+Ele pode se candidatar com:
 
 - mensagem;
 - proposta de valor.
@@ -333,6 +339,7 @@ O admin pode:
 - liberar repasse simulado;
 - processar repasses vencidos;
 - resolver contestações.
+- consultar auditoria de login, cadastro, documentos, eventos e ações financeiras sensíveis.
 
 ## Telas públicas
 

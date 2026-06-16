@@ -33,7 +33,7 @@ Já implementado:
 - Calendário visual do freelancer com eventos futuros, realizados, indisponibilidades e recebimentos.
 - Currículo profissional do freelancer com resumo, experiência, cursos, portfólio, disponibilidade de viagem e detalhes técnicos por especialidade.
 - Histórico público resumido de eventos realizados pela plataforma para análise da empresa.
-- Fluxo inicial de oportunidades abertas e candidaturas, com aprovação pela empresa gerando contrato.
+- Fluxo de oportunidades abertas e candidaturas, com filtros por empresa/cidade, tipo de evento, especialidade e faixa de diária, além de bloqueio por agenda e contratos conflitantes.
 - Chat interno por convite ou candidatura para negociação entre empresa e freelancer.
 - Negociação estruturada de valor em convites, com oferta, contraproposta, aceite e contrato usando o valor acordado.
 - Convites individuais ou em lote entre empresa e freelancers.
@@ -52,13 +52,13 @@ Já implementado:
 - Central de notificações com avisos automáticos para convites, pagamentos, avaliações e contestações.
 - Abertura de contestações com bloqueio financeiro do split.
 - Resolução financeira admin de contestações com desbloqueio, liberação de repasse ou estorno para empresa.
-- Verificação administrativa de empresas e profissionais.
+- Verificação administrativa de empresas e profissionais, exigindo documento enviado e campos mínimos de perfil antes da aprovação.
 - Upload local autenticado de documentos e imagens para verificação cadastral.
 - Perfil privado do freelancer com nome completo, CPF, documento, endereço completo com busca por CEP e upload/ajuste de avatar.
 - Exibição de avatar do freelancer nas telas de análise de profissionais.
 - Relatórios operacionais por perfil com KPIs, gráficos de status, série temporal e resumo financeiro de GMV, taxas, splits, payouts, estornos e chargebacks.
 - Tela admin de detalhe do pagamento com splits, webhooks, auditoria e ações financeiras.
-- Tela admin de auditoria geral com filtros por ação, entidade, usuário e período.
+- Tela admin de auditoria geral com filtros por ação, entidade, usuário e período, incluindo autenticação, documentos, eventos e ações financeiras sensíveis.
 - Base inicial de testes automatizados para regras de contrato, pagamento e avaliação.
 - Testes e2e de fluxos principais com Playwright.
 - Healthcheck público da API em `/api/health`.
@@ -70,7 +70,7 @@ Próximas entregas orientadas pelo novo documento:
 - Gateway real com cartão, boleto/Pix quando definido, comprovantes e webhooks.
 - Payout/saque real para conta do freelancer, com política de taxas da empresa e percentual do freelancer.
 - Linguagem de "Contestações" aplicada na interface, mantendo `disputes` como nome técnico interno.
-- Separação progressiva entre perfil público e privado, evitando expor carteira, documentos, dados bancários e contato fora das telas autorizadas.
+- Revisão visual contínua da separação entre perfil público e privado, mantendo no backend seletores e testes para evitar exposição de carteira, documentos, dados bancários e contato fora das telas autorizadas.
 - Upload de logo da empresa e storage externo para fotos, logos e documentos.
 - Provider real de e-mail para recuperação de senha e notificações.
 - Notificações em tempo real, e-mail ou WhatsApp.
@@ -265,9 +265,11 @@ Em desenvolvimento, `PAYMENT_GATEWAY_PROVIDER="simulated"` cria `sim_recipient_*
   - `Liberar repasse`: rejeita a disputa, desbloqueia e tenta liberar o split.
   - `Estornar empresa`: resolve a disputa e estorna splits pendentes para a carteira da empresa.
 
-### Auditoria Financeira
+### Auditoria
 
-As ações sensíveis geram `AuditLog`, incluindo criação de pagamento, processamento/reprocessamento de webhook, liberação de split, estorno, payout, bloqueio por disputa/no-show e resolução financeira de disputa. O admin consulta os logs em `/dashboard/auditoria`.
+Ações sensíveis geram `AuditLog`, incluindo cadastro, login, upload/exclusão de documento de verificação, criação/edição/duplicação/cancelamento/exclusão de evento, criação de pagamento, processamento/reprocessamento de webhook, liberação de split, estorno, payout, bloqueio por disputa/no-show e resolução financeira de disputa. O admin consulta os logs em `/dashboard/auditoria`.
+
+Eventos de auditoria relacionados a dados sensíveis guardam apenas metadados operacionais, como entidade, identificador, ação, IP e user agent quando disponível.
 
 O armazenamento de documentos passa por provider configurável. Em desenvolvimento use `DOCUMENT_STORAGE_PROVIDER="local"`. Para produção real, o próximo passo é implementar o provider `s3` ou `r2` usando as variáveis de bucket, endpoint, região e credenciais.
 
@@ -286,7 +288,9 @@ Nesse modo, a API registra o token no log e também o retorna para facilitar tes
 
 Empresas e freelancers podem enviar documentos na tela de perfil. O ambiente local aceita PDF, JPG, PNG e WebP até 5 MB por arquivo e salva em `apps/api/uploads/verification-documents`.
 
-A tela administrativa de verificações lista os documentos enviados e abre os arquivos por endpoint autenticado. Para produção, o próximo ajuste fica concentrado no módulo de documentos: trocar o armazenamento local por S3/R2, adicionar antivírus/validação documental e definir retenção/auditoria dos arquivos.
+A tela administrativa de verificações lista os documentos enviados e abre os arquivos por endpoint autenticado. Para aprovar uma empresa, o backend exige nome fantasia, responsável, CNPJ/documento, telefone, e-mail, cidade, estado e ao menos um documento. Para aprovar um freelancer, exige nome completo, CPF, nome público, cidade, estado, transporte, ao menos uma especialidade e ao menos um documento.
+
+Perfis já verificados não podem excluir documentos de verificação pelo fluxo comum. Para produção, o próximo ajuste fica concentrado no módulo de documentos: trocar o armazenamento local por S3/R2, adicionar antivírus/validação documental e definir retenção dos arquivos.
 
 ## Rodando Localmente
 
@@ -581,7 +585,7 @@ Fluxo freelancer:
 
 1. Cadastra ou acessa a conta.
 2. Completa perfil, especialidades, diária e agenda.
-3. Busca oportunidades abertas compatíveis.
+3. Busca oportunidades abertas compatíveis com especialidade, diária, empresa/cidade, tipo de evento e agenda livre.
 4. Envia candidatura com mensagem e proposta de valor.
 5. Recebe convites.
 6. Aceita, recusa ou faz contraproposta de valor.
@@ -624,9 +628,9 @@ Módulos principais:
 - `freelancers`: perfil, currículo técnico, especialidades e busca pública.
 - `skills`: especialidades.
 - `availability`: bloqueios de agenda do freelancer.
-- `events`: eventos, requisitos e busca de profissionais disponíveis.
+- `events`: eventos, requisitos, auditoria de alterações e busca de profissionais disponíveis.
 - `invitations`: convites e respostas.
-- `applications`: oportunidades abertas, candidaturas, aprovação/recusa e geração de contrato.
+- `applications`: oportunidades abertas, filtros de compatibilidade, bloqueio por conflito de agenda/contrato, candidaturas, aprovação/recusa e geração de contrato.
 - `contracts`: contratos por perfil.
 - `calendar`: experiência web inicial entregue com contratos, disponibilidade e carteira; módulo dedicado previsto para evolução.
 - `chat`: conversas internas vinculadas a convites, candidaturas e contratos.

@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { ApplicationsService } from "./applications.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
+import { SearchOpportunitiesDto } from "./dto/search-opportunities.dto";
 import { UpdateApplicationDto } from "./dto/update-application.dto";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,8 +28,11 @@ export class ApplicationsController {
 
   @Roles(UserRole.FREELANCER)
   @Get("opportunities")
-  listOpportunities(@CurrentUser() user: CurrentUserPayload) {
-    return this.applicationsService.listOpportunities(user.sub);
+  listOpportunities(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: SearchOpportunitiesDto,
+  ) {
+    return this.applicationsService.listOpportunities(user.sub, query);
   }
 
   @Roles(UserRole.FREELANCER)

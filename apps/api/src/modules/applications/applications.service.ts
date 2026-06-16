@@ -25,6 +25,7 @@ import {
   companyReadRoles,
 } from "../company-access/company-access.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
+import { SearchOpportunitiesDto } from "./dto/search-opportunities.dto";
 import { UpdateApplicationDto } from "./dto/update-application.dto";
 
 @Injectable()
@@ -35,11 +36,22 @@ export class ApplicationsService {
     private readonly companyAccess: CompanyAccessService,
   ) {}
 
-  async listOpportunities(userId: string) {
+  async listOpportunities(userId: string, query: SearchOpportunitiesDto = {}) {
     const freelancer = await this.findFreelancerByUserId(userId);
     this.assertFreelancerVerified(freelancer);
     const skillIds = freelancer.skills.map((item) => item.skillId);
+    const requestedSkillIds = query.skillId
+      ? skillIds.includes(query.skillId)
+        ? [query.skillId]
+        : []
+      : skillIds;
+    const normalizedCompanySearch = query.companySearch?.trim();
+    const normalizedEventType = query.eventType?.trim();
     const now = new Date();
+
+    if (!requestedSkillIds.length) {
+      return [];
+    }
 
     const events = await this.prisma.event.findMany({
       where: {
@@ -48,9 +60,36 @@ export class ApplicationsService {
         company: {
           user: { isActive: true },
           verificationStatus: VerificationStatus.VERIFIED,
+          OR: normalizedCompanySearch
+            ? [
+                {
+                  companyName: {
+                    contains: normalizedCompanySearch,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  city: {
+                    contains: normalizedCompanySearch,
+                    mode: "insensitive",
+                  },
+                },
+              ]
+            : undefined,
         },
-        requirements: skillIds.length
-          ? { some: { skillId: { in: skillIds } } }
+        eventType: normalizedEventType
+          ? { contains: normalizedEventType, mode: "insensitive" }
+          : undefined,
+        requirements: requestedSkillIds.length
+          ? {
+              some: {
+                skillId: { in: requestedSkillIds },
+                dailyRateCents: {
+                  gte: query.minDailyRateCents,
+                  lte: query.maxDailyRateCents,
+                },
+              },
+            }
           : undefined,
         applications: { none: { freelancerId: freelancer.id } },
         invitations: {
@@ -73,11 +112,16 @@ export class ApplicationsService {
       },
     });
 
-    return events
+    const compatibleEvents = events
       .map((event) => ({
         ...event,
         requirements: event.requirements.filter((item) =>
-          skillIds.includes(item.skillId),
+          requestedSkillIds.includes(item.skillId) &&
+          this.matchesDailyRateFilter(
+            item.dailyRateCents,
+            query.minDailyRateCents,
+            query.maxDailyRateCents,
+          ),
         ),
         openSpots: Math.max(
           event.desiredProfessionals - event.contracts.length,
@@ -85,6 +129,21 @@ export class ApplicationsService {
         ),
       }))
       .filter((event) => event.openSpots > 0);
+
+    const availability = await Promise.all(
+      compatibleEvents.map(async (event) => ({
+        event,
+        canWork: await this.canFreelancerWork(
+          freelancer.id,
+          event.startsAt,
+          event.endsAt,
+        ),
+      })),
+    );
+
+    return availability
+      .filter((item) => item.canWork)
+      .map((item) => item.event);
   }
 
   async listMine(userId: string) {
@@ -511,6 +570,55 @@ export class ApplicationsService {
         "Freelancer is unavailable in this time range",
       );
     }
+  }
+
+  private async canFreelancerWork(
+    freelancerId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ) {
+    const [contractCount, availabilityCount] = await Promise.all([
+      this.prisma.contract.count({
+        where: {
+          freelancerId,
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+          status: {
+            in: [ContractStatus.PENDING_PAYMENT, ContractStatus.CONFIRMED],
+          },
+        },
+      }),
+      this.prisma.availability.count({
+        where: {
+          freelancerId,
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+          isAvailable: false,
+        },
+      }),
+    ]);
+
+    return contractCount === 0 && availabilityCount === 0;
+  }
+
+  private matchesDailyRateFilter(
+    amountCents: number | null,
+    minDailyRateCents?: number,
+    maxDailyRateCents?: number,
+  ) {
+    if (amountCents === null) {
+      return minDailyRateCents === undefined && maxDailyRateCents === undefined;
+    }
+
+    if (minDailyRateCents !== undefined && amountCents < minDailyRateCents) {
+      return false;
+    }
+
+    if (maxDailyRateCents !== undefined && amountCents > maxDailyRateCents) {
+      return false;
+    }
+
+    return true;
   }
 
   private async assertEventHasOpenSpot(

@@ -1,5 +1,14 @@
 import { Type } from "class-transformer";
-import { IsDateString, IsInt, IsOptional, IsString, Min } from "class-validator";
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from "class-validator";
+import { VerificationStatus } from "@prisma/client";
 
 export class SearchAvailableFreelancersDto {
   @IsDateString()
@@ -27,6 +36,17 @@ export class SearchAvailableFreelancersDto {
   @IsOptional()
   @IsString()
   transportation?: string;
+
+  @IsOptional()
+  @IsEnum(VerificationStatus)
+  verificationStatus?: VerificationStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  minRating?: number;
 
   @IsOptional()
   @Type(() => Number)

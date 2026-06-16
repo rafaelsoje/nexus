@@ -414,7 +414,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
-      await this.assertVerificationDocumentsExist(tx, "company", id, status);
+      await this.assertVerificationRequirements(tx, "company", id, status);
       const updated = await tx.companyProfile.update({
         where: { id },
         data: { verificationStatus: status },
@@ -457,7 +457,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
-      await this.assertVerificationDocumentsExist(tx, "freelancer", id, status);
+      await this.assertVerificationRequirements(tx, "freelancer", id, status);
       const updated = await tx.freelancerProfile.update({
         where: { id },
         data: { verificationStatus: status },
@@ -511,7 +511,7 @@ export class AdminService {
     return trimmedMessage;
   }
 
-  private async assertVerificationDocumentsExist(
+  private async assertVerificationRequirements(
     tx: Prisma.TransactionClient,
     profileType: "company" | "freelancer",
     profileId: string,
@@ -532,6 +532,70 @@ export class AdminService {
     if (!document) {
       throw new BadRequestException("Verification documents are required");
     }
+
+    if (profileType === "company") {
+      const company = await tx.companyProfile.findUnique({
+        where: { id: profileId },
+        select: {
+          companyName: true,
+          document: true,
+          responsibleName: true,
+          phone: true,
+          email: true,
+          city: true,
+          state: true,
+        },
+      });
+
+      if (
+        !company ||
+        !this.hasRequiredText(company.companyName) ||
+        !this.hasRequiredText(company.document) ||
+        !this.hasRequiredText(company.responsibleName) ||
+        !this.hasRequiredText(company.phone) ||
+        !this.hasRequiredText(company.email) ||
+        !this.hasRequiredText(company.city) ||
+        !this.hasRequiredText(company.state)
+      ) {
+        throw new BadRequestException(
+          "Company profile must be completed before verification",
+        );
+      }
+
+      return;
+    }
+
+    const freelancer = await tx.freelancerProfile.findUnique({
+      where: { id: profileId },
+      select: {
+        fullName: true,
+        cpf: true,
+        displayName: true,
+        city: true,
+        state: true,
+        transportation: true,
+        skills: { select: { skillId: true } },
+      },
+    });
+
+    if (
+      !freelancer ||
+      !this.hasRequiredText(freelancer.fullName) ||
+      !this.hasRequiredText(freelancer.cpf) ||
+      !this.hasRequiredText(freelancer.displayName) ||
+      !this.hasRequiredText(freelancer.city) ||
+      !this.hasRequiredText(freelancer.state) ||
+      !this.hasRequiredText(freelancer.transportation) ||
+      freelancer.skills.length === 0
+    ) {
+      throw new BadRequestException(
+        "Freelancer profile and skills must be completed before verification",
+      );
+    }
+  }
+
+  private hasRequiredText(value?: string | null) {
+    return Boolean(value?.trim());
   }
 
   updateDisputeStatus(id: string, status: DisputeStatus, audit?: AuditContext) {
