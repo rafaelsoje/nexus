@@ -256,6 +256,9 @@ export default function VerificationsPage() {
                     </div>
                     <VerificationActions
                       currentStatus={company.verificationStatus}
+                      hasDocuments={Boolean(
+                        company.verificationDocuments?.length,
+                      )}
                       onApprove={() =>
                         updateCompanyStatus(company.id, "VERIFIED")
                       }
@@ -303,6 +306,9 @@ export default function VerificationsPage() {
                     </div>
                     <VerificationActions
                       currentStatus={freelancer.verificationStatus}
+                      hasDocuments={Boolean(
+                        freelancer.verificationDocuments?.length,
+                      )}
                       onApprove={() =>
                         updateFreelancerStatus(freelancer.id, "VERIFIED")
                       }
@@ -400,11 +406,13 @@ function DocumentSummary({
 
 function VerificationActions({
   currentStatus,
+  hasDocuments,
   onApprove,
   onReject,
   onReset,
 }: Readonly<{
   currentStatus: VerificationStatus;
+  hasDocuments: boolean;
   onApprove: () => void;
   onReject: () => void;
   onReset: () => void;
@@ -413,8 +421,13 @@ function VerificationActions({
     <div className="row-actions">
       <button
         className="icon-action"
-        disabled={currentStatus === "VERIFIED"}
+        disabled={currentStatus === "VERIFIED" || !hasDocuments}
         onClick={onApprove}
+        title={
+          !hasDocuments
+            ? "Envie ao menos um documento antes de aprovar."
+            : undefined
+        }
         type="button"
       >
         Aprovar

@@ -13,6 +13,7 @@ import {
   PayoutStatus,
   PaymentStatus,
   TransactionType,
+  Prisma,
   UserRole,
   VerificationStatus,
 } from "@prisma/client";
@@ -413,6 +414,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
+      await this.assertVerificationDocumentsExist(tx, "company", id, status);
       const updated = await tx.companyProfile.update({
         where: { id },
         data: { verificationStatus: status },
@@ -455,6 +457,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
+      await this.assertVerificationDocumentsExist(tx, "freelancer", id, status);
       const updated = await tx.freelancerProfile.update({
         where: { id },
         data: { verificationStatus: status },
@@ -506,6 +509,29 @@ export class AdminService {
     }
 
     return trimmedMessage;
+  }
+
+  private async assertVerificationDocumentsExist(
+    tx: Prisma.TransactionClient,
+    profileType: "company" | "freelancer",
+    profileId: string,
+    status: VerificationStatus,
+  ) {
+    if (status !== VerificationStatus.VERIFIED) {
+      return;
+    }
+
+    const document = await tx.verificationDocument.findFirst({
+      where:
+        profileType === "company"
+          ? { companyId: profileId }
+          : { freelancerId: profileId },
+      select: { id: true },
+    });
+
+    if (!document) {
+      throw new BadRequestException("Verification documents are required");
+    }
   }
 
   updateDisputeStatus(id: string, status: DisputeStatus, audit?: AuditContext) {

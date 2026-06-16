@@ -210,6 +210,8 @@ const apiMessageTranslations: Record<string, string> = {
     "O profissional precisa estar verificado para continuar.",
   "Contract participants must be verified":
     "Empresa e profissional precisam estar verificados para continuar.",
+  "Verification documents are required":
+    "É necessário enviar ao menos um documento antes de aprovar a verificação.",
   "Company profile not found": "Perfil da empresa não encontrado.",
   "Freelancer profile not found": "Perfil profissional não encontrado.",
   "Profile not found": "Perfil não encontrado.",
@@ -277,6 +279,8 @@ const apiMessageTranslations: Record<string, string> = {
   "File must be up to 5 MB": "O arquivo deve ter no máximo 5 MB.",
   "Invalid file data": "Arquivo inválido.",
   "You cannot access this document": "Você não pode acessar este documento.",
+  "Verified profiles cannot delete verification documents":
+    "Perfis aprovados não podem remover documentos de verificação.",
   "Owner role cannot be invited":
     "O papel de dono só pertence ao primeiro administrador da empresa.",
   "User already belongs to a company":

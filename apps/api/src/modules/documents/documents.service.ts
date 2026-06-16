@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { UserRole, VerificationStatus } from "@prisma/client";
 import { basename } from "path";
 import { randomUUID } from "crypto";
 import {
@@ -93,6 +93,16 @@ export class DocumentsService {
 
   async deleteVerificationDocument(user: RequestUser, id: string) {
     const document = await this.findAuthorizedDocument(user, id);
+    const isVerifiedDocument =
+      document.company?.verificationStatus === VerificationStatus.VERIFIED ||
+      document.freelancer?.verificationStatus === VerificationStatus.VERIFIED;
+
+    if (user.role !== UserRole.ADMIN && isVerifiedDocument) {
+      throw new ForbiddenException(
+        "Verified profiles cannot delete verification documents",
+      );
+    }
+
     await this.prisma.verificationDocument.delete({ where: { id } });
 
     try {
@@ -134,13 +144,14 @@ export class DocumentsService {
       include: {
         company: {
           select: {
+            verificationStatus: true,
             members: {
               where: { userId: user.sub, isActive: true },
               select: { id: true },
             },
           },
         },
-        freelancer: { select: { userId: true } },
+        freelancer: { select: { userId: true, verificationStatus: true } },
       },
     });
 

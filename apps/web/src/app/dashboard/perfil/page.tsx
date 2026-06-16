@@ -1053,6 +1053,7 @@ function CompanyProfileForm({
         onDeleteDocument={onDeleteDocument}
         onOpenDocument={onOpenDocument}
         onUploadDocument={onUploadDocument}
+        profileVerified={profile.verificationStatus === "VERIFIED"}
         submitLabel="Enviar documento da empresa"
       />
     </section>
@@ -1494,6 +1495,7 @@ function FreelancerProfileSection({
         onDeleteDocument={onDeleteDocument}
         onOpenDocument={onOpenDocument}
         onUploadDocument={onUploadDocument}
+        profileVerified={profile?.verificationStatus === "VERIFIED"}
         submitLabel="Enviar documento"
       />
       <GatewayAccountPanel
@@ -1617,6 +1619,7 @@ function VerificationDocumentsPanel({
   onDeleteDocument,
   onOpenDocument,
   onUploadDocument,
+  profileVerified,
   submitLabel,
 }: Readonly<{
   documents: VerificationDocument[];
@@ -1624,6 +1627,7 @@ function VerificationDocumentsPanel({
   onDeleteDocument: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
   onUploadDocument: (event: FormEvent<HTMLFormElement>) => void;
+  profileVerified?: boolean;
   submitLabel: string;
 }>) {
   const panelDocumentLabels = Object.fromEntries(
@@ -1683,13 +1687,15 @@ function VerificationDocumentsPanel({
                 >
                   Abrir
                 </button>
-                <button
-                  className="icon-action ghost"
-                  onClick={() => onDeleteDocument(document.id)}
-                  type="button"
-                >
-                  Remover
-                </button>
+                {!profileVerified ? (
+                  <button
+                    className="icon-action ghost"
+                    onClick={() => onDeleteDocument(document.id)}
+                    type="button"
+                  >
+                    Remover
+                  </button>
+                ) : null}
               </div>
             </div>
           ))
@@ -1697,6 +1703,12 @@ function VerificationDocumentsPanel({
           <EmptyState>Nenhum documento enviado.</EmptyState>
         )}
       </div>
+      {profileVerified ? (
+        <small className="form-note">
+          Perfil aprovado: os documentos ficam preservados para auditoria e não
+          podem ser removidos pelo usuário.
+        </small>
+      ) : null}
     </article>
   );
 }

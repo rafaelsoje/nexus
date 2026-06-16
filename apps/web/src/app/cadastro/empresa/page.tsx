@@ -66,8 +66,6 @@ export default function CompanyRegisterPage() {
           document: String(form.get("document")),
           phone: String(form.get("phone")),
           email: String(form.get("email")),
-          city: String(form.get("city")),
-          state: String(form.get("state")),
         }),
       });
       router.push("/dashboard/perfil#verificacao-documentos");
@@ -93,18 +91,10 @@ export default function CompanyRegisterPage() {
           <input name="responsibleName" required />
         </Field>
         <Field label="CNPJ">
-          <input name="document" />
+          <input name="document" required />
         </Field>
-        <div className="form-grid">
-          <Field label="Cidade">
-            <input name="city" />
-          </Field>
-          <Field label="UF">
-            <input name="state" maxLength={2} />
-          </Field>
-        </div>
         <Field label="Telefone">
-          <input name="phone" />
+          <input name="phone" required />
         </Field>
         <Field label="E-mail">
           <input name="email" type="email" required />
