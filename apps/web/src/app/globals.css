@@ -1711,6 +1711,37 @@ input.compact-checkbox {
   align-items: flex-start;
 }
 
+.audit-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.45rem 0 0;
+}
+
+.audit-metadata div {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  display: inline-flex;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.45rem 0.6rem;
+}
+
+.audit-metadata dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.audit-metadata dd {
+  color: var(--text);
+  font-size: 0.82rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .gateway-status-card {
   align-items: center;
   border: 1px solid var(--line);

@@ -257,22 +257,40 @@ function AuditLogRow({ log }: Readonly<{ log: AuditLog }>) {
   return (
     <div className="list-row audit-row">
       <div>
-        <strong>{formatAuditAction(log.action)}</strong>
+        <strong>{formatAuditTitle(log)}</strong>
         <span>
-          {formatAuditEntity(log.entity)}
-          {log.entityId ? ` - ${log.entityId}` : ""}
+          Registro: {formatAuditEntity(log.entity)}
         </span>
         <span>
-          {log.user?.name ?? "Sistema"} - {formatDate(log.createdAt)}
+          {formatAuditActor(log)} - {formatDate(log.createdAt)}
         </span>
         {log.user ? (
           <span>
-            {formatAuditRole(log.user.role)} - {log.user.email}
+            {formatAuditUserDetails(log)}
           </span>
         ) : null}
-        {log.metadata ? <code>{formatMetadata(log.metadata)}</code> : null}
+        {log.metadata ? <MetadataSummary metadata={log.metadata} /> : null}
       </div>
     </div>
+  );
+}
+
+function MetadataSummary({ metadata }: Readonly<{ metadata: unknown }>) {
+  const entries = getMetadataEntries(metadata);
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return (
+    <dl className="audit-metadata">
+      {entries.map(([key, value]) => (
+        <div key={key}>
+          <dt>{formatMetadataKey(key)}</dt>
+          <dd>{formatMetadataDisplayEntry(key, value)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -301,18 +319,28 @@ const auditActionLabels: Record<string, string> = {
   INVITATION_CANCELLED: "Convite cancelado",
   INVITATION_CREATED: "Convite criado",
   INVITATION_DECLINED: "Convite recusado",
+  MARKETPLACE_PAYMENT_CREATED: "Pagamento marketplace criado",
   PAYMENT_CREATED: "Pagamento criado",
   PAYMENT_MARKETPLACE_CREATED: "Pagamento marketplace criado",
   PAYMENT_SPLIT_BLOCKED_BY_CONTRACT_STATUS:
     "Split bloqueado pelo status do contrato",
   PAYMENT_SPLIT_BLOCKED_BY_DISPUTE: "Split bloqueado por contestação",
+  PAYMENT_SPLIT_REFUNDED: "Split de pagamento estornado",
   PAYMENT_SPLIT_RELEASED: "Split de pagamento liberado",
+  PAYMENT_SPLIT_UNBLOCKED: "Split de pagamento desbloqueado",
+  PAYMENT_CHARGEBACK_BLOCKED_SPLITS:
+    "Chargeback bloqueou splits de pagamento",
+  PAYMENT_REFUNDED_SPLITS: "Splits de pagamento estornados",
   PAYMENT_STATUS_UPDATED: "Status do pagamento atualizado",
+  PAYMENT_WEBHOOK_PROCESSED: "Webhook de pagamento processado",
   PAYMENT_WEBHOOK_REPROCESSED: "Webhook de pagamento reprocessado",
+  PAYOUT_REQUESTED: "Saque solicitado",
   PAYOUT_STATUS_UPDATED: "Status do saque atualizado",
   POST_EVENT_REVIEW_REMINDER_SENT: "Lembrete de avaliação enviado",
+  USER_LOGGED_IN: "Usuário entrou no sistema",
   USER_PASSWORD_CHANGED: "Senha alterada",
-  USER_SELF_ANONYMIZED: "Conta anonimizada pelo usuário",
+  USER_REGISTERED: "Usuário cadastrado",
+  USER_SELF_ANONYMIZED: "Conta excluída pelo usuário",
   USER_SELF_UPDATED: "Dados da própria conta atualizados",
   USER_STATUS_UPDATED: "Status do usuário atualizado",
   VERIFICATION_DOCUMENT_DELETED: "Documento de verificação excluído",
@@ -336,6 +364,7 @@ const auditEntityLabels: Record<string, string> = {
   Review: "Avaliação",
   User: "Usuário",
   VerificationDocument: "Documento de verificação",
+  Wallet: "Carteira",
 };
 
 const auditRoleLabels: Record<string, string> = {
@@ -345,52 +374,85 @@ const auditRoleLabels: Record<string, string> = {
 };
 
 const metadataKeyLabels: Record<string, string> = {
-  accessLevel: "nivelAcesso",
-  amountCents: "valorCentavos",
-  companyFeeCents: "taxaEmpresaCentavos",
-  contractId: "contratoId",
-  count: "total",
-  eventId: "eventoId",
-  freelancerFeeCents: "taxaProfissionalCentavos",
-  gatewayFeeCents: "taxaGatewayCentavos",
-  gatewayPaymentId: "pagamentoGatewayId",
-  gatewayTransactionId: "transacaoGatewayId",
-  isActive: "ativo",
-  message: "mensagem",
-  paymentId: "pagamentoId",
-  payoutId: "saqueId",
-  previousStatus: "statusAnterior",
-  reason: "motivo",
-  role: "perfil",
-  splitId: "splitId",
-  status: "status",
-  targetUserRole: "perfilDoUsuario",
-  transactionId: "transacaoId",
-  verificationDocumentsRemoved: "documentosVerificacaoRemovidos",
+  accessLevel: "Nível de acesso",
+  affectedSplits: "Splits afetados",
+  amountCents: "Valor",
+  amountToChargeCompanyCents: "Total cobrado da empresa",
+  blockedAt: "Bloqueado em",
+  blockedSplits: "Splits bloqueados",
+  category: "Categoria",
+  companyId: "Empresa",
+  companyFeeCents: "Taxa da empresa",
+  contractId: "Contrato",
+  contractIds: "Contratos",
+  creditedCompanyWallet: "Crédito na carteira da empresa",
+  count: "Total",
+  deadlineAt: "Prazo",
+  eventId: "Evento",
+  fields: "Campos alterados",
+  freelancerFeeCents: "Taxa do profissional",
+  freelancerId: "Profissional",
+  gatewayAmountCents: "Valor no gateway",
+  gatewayFeeCents: "Taxa do gateway",
+  gatewayPaymentId: "Pagamento no gateway",
+  gatewayTransactionId: "Transação no gateway",
+  grossAmountCents: "Valor bruto",
+  isActive: "Ativo",
+  kycStatus: "Status KYC",
+  message: "Mensagem",
+  mimeType: "Tipo do arquivo",
+  netAmountCents: "Valor líquido",
+  paymentId: "Pagamento",
+  payoutId: "Saque",
+  previousStatus: "Status anterior",
+  reason: "Motivo",
+  refunded: "Estornado",
+  refundAmountCents: "Valor estornado",
+  releasedAt: "Liberado em",
+  requestedAt: "Solicitado em",
+  resolution: "Resolução",
+  role: "Perfil",
+  sentAt: "Enviado em",
+  sizeBytes: "Tamanho do arquivo",
+  splitId: "Split",
+  splitIds: "Splits",
+  status: "Status",
+  targetUserRole: "Perfil do usuário",
+  transactionId: "Transação",
+  verificationDocumentsRemoved: "Documentos de verificação removidos",
+  webhookEventId: "Evento do webhook",
 };
 
 const metadataValueLabels: Record<string, string> = {
   ACCEPTED: "Aceito",
   ADMIN: "Administrador",
   CANCELLED: "Cancelado",
+  CHARGEBACK: "Chargeback",
   COMPANY: "Empresa",
   COMPLETED: "Concluído",
   CONFIRMED: "Confirmado",
+  CONTRACT_CANCELLED: "Contrato cancelado",
   DECLINED: "Recusado",
   DISPUTED: "Em contestação",
   FAILED: "Falhou",
   FINANCE: "Financeiro",
   FREELANCER: "Profissional",
   MANAGER: "Gerente",
-  OWNER: "Owner",
+  NO_SHOW: "Não compareceu",
+  NO_SHOW_REPORTED: "Falta reportada",
+  OWNER: "Dono",
   PAID: "Pago",
   PENDING: "Pendente",
   READONLY: "Somente leitura",
   REJECTED: "Reprovado",
   RELEASED: "Liberado",
+  REFUNDED: "Estornado",
   SUPPORT: "Suporte",
   VERIFICATION: "Verificação",
   VERIFIED: "Verificado",
+  document: "Documento",
+  identity: "Identidade",
+  image: "Imagem",
 };
 
 const auditFilterTerms: Record<string, Record<string, string>> = {
@@ -437,6 +499,14 @@ function normalizeAuditFilter(key: string, value: string) {
   return auditFilterTerms[key]?.[value.toLowerCase()] ?? value;
 }
 
+function formatAuditTitle(log: AuditLog) {
+  if (log.action === "USER_REGISTERED" && isDeletedUser(log.user)) {
+    return "Conta cadastrada (atualmente excluída)";
+  }
+
+  return formatAuditAction(log.action);
+}
+
 function formatAuditAction(action: string) {
   return auditActionLabels[action] ?? formatUnknownCode(action);
 }
@@ -449,43 +519,150 @@ function formatAuditRole(role: string) {
   return auditRoleLabels[role] ?? formatUnknownCode(role);
 }
 
+function formatAuditActor(log: AuditLog) {
+  if (!log.user) {
+    return "Sistema";
+  }
+
+  if (isDeletedUser(log.user)) {
+    return `Conta atualmente excluída: ${log.user.name}`;
+  }
+
+  return log.user.name;
+}
+
+function formatAuditUserDetails(log: AuditLog) {
+  if (!log.user) {
+    return "";
+  }
+
+  const role = formatAuditRole(log.user.role);
+
+  if (isDeletedUser(log.user)) {
+    return `${role} atualmente excluída - e-mail anonimizado: ${log.user.email}`;
+  }
+
+  return `${role} - ${log.user.email}`;
+}
+
+function isDeletedUser(user: AuditLog["user"]) {
+  return Boolean(user?.email.startsWith("deleted-"));
+}
+
 function formatDate(date: string) {
   return new Date(date).toLocaleString("pt-BR");
 }
 
-function formatMetadata(metadata: unknown) {
-  try {
-    return JSON.stringify(formatMetadataValue(metadata));
-  } catch {
-    return String(metadata);
+function getMetadataEntries(metadata: unknown): Array<[string, unknown]> {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return [["Detalhes", metadata]];
   }
+
+  return Object.entries(metadata);
 }
 
-function formatMetadataValue(value: unknown): unknown {
+function formatMetadataKey(key: string) {
+  return metadataKeyLabels[key] ?? formatUnknownCode(key);
+}
+
+function formatMetadataDisplayValue(value: unknown): string {
   if (Array.isArray(value)) {
-    return value.map((item) => formatMetadataValue(item));
+    return value.map((item) => formatMetadataDisplayValue(item)).join(", ");
   }
 
   if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        metadataKeyLabels[key] ?? key,
-        formatMetadataValue(item),
-      ]),
-    );
+    return Object.entries(value)
+      .map(
+        ([key, item]) =>
+          `${formatMetadataKey(key)}: ${formatMetadataDisplayEntry(key, item)}`,
+      )
+      .join("; ");
   }
 
   if (typeof value === "string") {
-    return metadataValueLabels[value] ?? value;
+    if (isIsoDateString(value)) {
+      return formatDate(value);
+    }
+
+    return metadataValueLabels[value] ?? formatIdentifier(value);
   }
 
-  return value;
+  if (typeof value === "boolean") {
+    return value ? "Sim" : "Não";
+  }
+
+  if (value === null || value === undefined) {
+    return "Não informado";
+  }
+
+  return String(value);
+}
+
+function formatMetadataDisplayEntry(key: string, value: unknown) {
+  if (typeof value === "number" && key.toLowerCase().endsWith("cents")) {
+    return formatCurrencyFromCents(value);
+  }
+
+  if (typeof value === "number" && key === "sizeBytes") {
+    return formatFileSize(value);
+  }
+
+  if (typeof value === "string" && key === "mimeType") {
+    return formatMimeType(value);
+  }
+
+  return formatMetadataDisplayValue(value);
+}
+
+function formatCurrencyFromCents(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    style: "currency",
+  }).format(value / 100);
+}
+
+function formatFileSize(value: number) {
+  const isMegaByte = value >= 1_048_576;
+  const unit = isMegaByte ? "MB" : "KB";
+  const divisor = isMegaByte ? 1_048_576 : 1024;
+
+  return new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: isMegaByte ? 1 : 0,
+  }).format(value / divisor) + ` ${unit}`;
+}
+
+function formatMimeType(value: string) {
+  const mimeLabels: Record<string, string> = {
+    "application/pdf": "PDF",
+    "image/jpeg": "JPG",
+    "image/png": "PNG",
+    "image/webp": "WebP",
+  };
+
+  return mimeLabels[value] ?? value;
+}
+
+function formatIdentifier(value: string) {
+  if (!isInternalId(value)) {
+    return value;
+  }
+
+  return `${value.slice(0, 8)}...`;
+}
+
+function isInternalId(value: string) {
+  return /^c[a-z0-9]{12,}$/i.test(value);
+}
+
+function isIsoDateString(value: string) {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value);
 }
 
 function formatUnknownCode(code: string) {
   return code
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .toLowerCase()
-    .split("_")
+    .split(/[_\s]+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
