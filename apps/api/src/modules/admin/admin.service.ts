@@ -52,7 +52,12 @@ export class AdminService {
     return this.prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: this.adminUserSelect(),
-    });
+    }).then((users) =>
+      users.map((user) => ({
+        ...user,
+        isArchived: this.isArchivedUser(user),
+      })),
+    );
   }
 
   async createAdminUser(dto: CreateAdminUserDto, audit: AuditContext) {
@@ -164,6 +169,10 @@ export class AdminService {
         },
         select: this.adminUserSelect(),
       });
+      const updatedWithArchiveStatus = {
+        ...updated,
+        isArchived: this.isArchivedUser(updated),
+      };
 
       await tx.auditLog.create({
         data: {
@@ -181,7 +190,7 @@ export class AdminService {
         },
       });
 
-      return updated;
+      return updatedWithArchiveStatus;
     });
   }
 
@@ -857,6 +866,10 @@ export class AdminService {
     } as const;
   }
 
+  private isArchivedUser(user: { email: string; isActive: boolean }) {
+    return !user.isActive && user.email.startsWith("deleted-");
+  }
+
   private generateTemporaryPassword() {
     return `Nexo@${randomBytes(4).toString("hex")}`;
   }
@@ -884,6 +897,8 @@ export class AdminService {
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
+        email: true,
+        isActive: true,
         role: true,
         adminProfile: { select: { accessLevel: true } },
       },
@@ -891,6 +906,10 @@ export class AdminService {
 
     if (!target) {
       throw new NotFoundException("User not found");
+    }
+
+    if (isActive && this.isArchivedUser(target)) {
+      throw new BadRequestException("Archived users cannot be reactivated");
     }
 
     if (target.role !== UserRole.ADMIN) {

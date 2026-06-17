@@ -443,6 +443,7 @@ export type AdminUser = {
   phone?: string;
   role: UserRole;
   isActive: boolean;
+  isArchived?: boolean;
   createdAt: string;
   adminProfile?: {
     accessLevel: AdminAccessLevel;

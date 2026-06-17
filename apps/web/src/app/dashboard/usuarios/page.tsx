@@ -8,7 +8,11 @@ import {
   useRequiredSession,
 } from "../../../components/dashboard-shell";
 import { ListPanel } from "../../../components/dashboard-widgets";
-import { EmptyState, StatusMessage } from "../../../components/ui";
+import {
+  EmptyState,
+  PaginationControls,
+  StatusMessage,
+} from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 import type { AdminUser } from "../../../lib/dashboard-types";
 
@@ -18,12 +22,21 @@ const roleLabels: Record<AdminUser["role"], string> = {
   FREELANCER: "Freelancer",
 };
 
+const statusLabels = {
+  ACTIVE: "Ativo",
+  ARCHIVED: "Arquivada",
+  INACTIVE: "Inativo",
+} as const;
+
+const usersPageSize = 10;
+
 export default function UsersPage() {
   const session = useRequiredSession();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,16 +45,25 @@ export default function UsersPage() {
     () => users.filter((user) => user.role !== "ADMIN"),
     [users],
   );
-  const activeUsers = useMemo(
-    () => platformUsers.filter((user) => user.isActive).length,
+  const visiblePlatformUsers = useMemo(
+    () => platformUsers.filter((user) => !user.isArchived),
     [platformUsers],
+  );
+  const activeUsers = useMemo(
+    () => visiblePlatformUsers.filter((user) => user.isActive).length,
+    [visiblePlatformUsers],
   );
   const companies = useMemo(
-    () => platformUsers.filter((user) => user.role === "COMPANY").length,
-    [platformUsers],
+    () => visiblePlatformUsers.filter((user) => user.role === "COMPANY").length,
+    [visiblePlatformUsers],
   );
   const freelancers = useMemo(
-    () => platformUsers.filter((user) => user.role === "FREELANCER").length,
+    () =>
+      visiblePlatformUsers.filter((user) => user.role === "FREELANCER").length,
+    [visiblePlatformUsers],
+  );
+  const archivedUsers = useMemo(
+    () => platformUsers.filter((user) => user.isArchived).length,
     [platformUsers],
   );
   const filteredUsers = useMemo(() => {
@@ -50,8 +72,13 @@ export default function UsersPage() {
     return platformUsers.filter((user) => {
       const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
       const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" ? user.isActive : !user.isActive);
+        statusFilter === "ALL"
+          ? !user.isArchived
+          : statusFilter === "ARCHIVED"
+            ? user.isArchived
+            : statusFilter === "ACTIVE"
+              ? user.isActive && !user.isArchived
+              : !user.isActive && !user.isArchived;
       const matchesSearch =
         !normalizedSearch ||
         [user.name, user.email, user.phone ?? ""].some((value) =>
@@ -61,6 +88,14 @@ export default function UsersPage() {
       return matchesRole && matchesStatus && matchesSearch;
     });
   }, [platformUsers, roleFilter, searchTerm, statusFilter]);
+  const paginatedUsers = useMemo(
+    () =>
+      filteredUsers.slice(
+        (currentPage - 1) * usersPageSize,
+        currentPage * usersPageSize,
+      ),
+    [currentPage, filteredUsers],
+  );
 
   const loadUsers = useCallback(async () => {
     setError("");
@@ -89,6 +124,18 @@ export default function UsersPage() {
 
     void loadUsers();
   }, [loadUsers, session]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [roleFilter, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPageSize));
+
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, filteredUsers.length]);
 
   async function updateUserStatus(userId: string, isActive: boolean) {
     setError("");
@@ -131,7 +178,7 @@ export default function UsersPage() {
           <section className="metrics">
             <article className="metric">
               <span>Total</span>
-              <strong>{platformUsers.length}</strong>
+              <strong>{visiblePlatformUsers.length}</strong>
             </article>
             <article className="metric">
               <span>Ativos</span>
@@ -144,6 +191,10 @@ export default function UsersPage() {
             <article className="metric">
               <span>Freelancers</span>
               <strong>{freelancers}</strong>
+            </article>
+            <article className="metric">
+              <span>Arquivadas</span>
+              <strong>{archivedUsers}</strong>
             </article>
           </section>
 
@@ -182,6 +233,7 @@ export default function UsersPage() {
                     <option value="ALL">Todos</option>
                     <option value="ACTIVE">Ativos</option>
                     <option value="INACTIVE">Inativos</option>
+                    <option value="ARCHIVED">Arquivadas</option>
                   </select>
                 </label>
                 <div className="filter-summary">
@@ -192,7 +244,7 @@ export default function UsersPage() {
             </article>
 
             <ListPanel icon={<UsersRound size={18} />} title="Usuários">
-              {filteredUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <div
                   className={`list-row ${user.isActive ? "" : "inactive-row"}`}
                   key={user.id}
@@ -201,7 +253,7 @@ export default function UsersPage() {
                     <strong>{user.name}</strong>
                     <span>
                       {user.email} - {roleLabels[user.role]} -{" "}
-                      {user.isActive ? "Ativo" : "Inativo"}
+                      {getUserStatusLabel(user)}
                     </span>
                     <span>
                       Cadastro em{" "}
@@ -210,21 +262,36 @@ export default function UsersPage() {
                     </span>
                   </div>
                   <div className="row-actions">
-                    <button
-                      className={
-                        user.isActive ? "icon-action ghost" : "icon-action"
-                      }
-                      onClick={() => updateUserStatus(user.id, !user.isActive)}
-                      type="button"
-                    >
-                      {user.isActive ? "Desativar" : "Ativar"}
-                    </button>
+                    {user.isArchived ? (
+                      <span className="status-pill">
+                        {statusLabels.ARCHIVED}
+                      </span>
+                    ) : (
+                      <button
+                        className={
+                          user.isActive ? "icon-action ghost" : "icon-action"
+                        }
+                        onClick={() =>
+                          updateUserStatus(user.id, !user.isActive)
+                        }
+                        type="button"
+                      >
+                        {user.isActive ? "Desativar" : "Ativar"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
               {!filteredUsers.length && !loading ? (
                 <EmptyState>Nenhum usuário encontrado.</EmptyState>
               ) : null}
+              <PaginationControls
+                itemLabel="usuários"
+                onPageChange={setCurrentPage}
+                page={currentPage}
+                pageSize={usersPageSize}
+                totalItems={filteredUsers.length}
+              />
             </ListPanel>
 
             <article className="panel">
@@ -234,7 +301,9 @@ export default function UsersPage() {
               </div>
               <p>
                 Esta tela lista apenas contas de empresas e freelancers. A
-                equipe interna da NEXO fica separada no menu do perfil.
+                equipe interna da NEXO fica separada no menu do perfil. Contas
+                arquivadas foram anonimizadas e permanecem apenas para histórico
+                operacional.
               </p>
             </article>
           </section>
@@ -242,4 +311,12 @@ export default function UsersPage() {
       )}
     </DashboardShell>
   );
+}
+
+function getUserStatusLabel(user: AdminUser) {
+  if (user.isArchived) {
+    return statusLabels.ARCHIVED;
+  }
+
+  return user.isActive ? statusLabels.ACTIVE : statusLabels.INACTIVE;
 }

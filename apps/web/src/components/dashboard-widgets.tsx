@@ -6,15 +6,17 @@ import { EmptyState } from "./ui";
 
 export function ListPanel({
   children,
+  className,
   icon,
   title,
 }: Readonly<{
   children: React.ReactNode;
+  className?: string;
   icon: React.ReactNode;
   title: string;
 }>) {
   return (
-    <article className="panel">
+    <article className={`panel${className ? ` ${className}` : ""}`}>
       <div className="panel-header">
         <h2>{title}</h2>
         {icon}

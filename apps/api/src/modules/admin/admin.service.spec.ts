@@ -17,6 +17,8 @@ describe("AdminService", () => {
     const prisma = {
       user: {
         findUnique: async () => ({
+          email: "user@nexo.local",
+          isActive: true,
           role: UserRole.FREELANCER,
           adminProfile: null,
         }),
@@ -52,6 +54,7 @@ describe("AdminService", () => {
     const result = await service.updateUserStatus("user-1", false, audit);
 
     assert.equal(result.isActive, false);
+    assert.equal(result.isArchived, false);
     assert.deepEqual(auditData, {
       userId: "admin-user",
       role: UserRole.ADMIN,
@@ -65,5 +68,29 @@ describe("AdminService", () => {
         isActive: false,
       },
     });
+  });
+
+  it("blocks reactivating archived users", async () => {
+    const prisma = {
+      user: {
+        findUnique: async () => ({
+          email: "deleted-user-1@nexo.local",
+          isActive: false,
+          role: UserRole.COMPANY,
+          adminProfile: null,
+        }),
+      },
+    };
+
+    const service = new AdminService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+
+    await assert.rejects(
+      () => service.updateUserStatus("user-1", true, audit),
+      /Archived users cannot be reactivated/,
+    );
   });
 });

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 export function Field({
   label,
@@ -51,6 +51,63 @@ export function StatusMessage({
     >
       {children}
     </div>
+  );
+}
+
+export function PaginationControls({
+  itemLabel = "itens",
+  onPageChange,
+  page,
+  pageSize,
+  totalItems,
+}: Readonly<{
+  itemLabel?: string;
+  onPageChange: (page: number) => void;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+}>) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  if (totalItems <= pageSize) {
+    return null;
+  }
+
+  const firstItem = (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, totalItems);
+
+  return (
+    <nav
+      aria-label={`Paginação de ${itemLabel}`}
+      className="pagination-controls"
+    >
+      <span>
+        {firstItem}-{lastItem} de {totalItems} {itemLabel}
+      </span>
+      <div>
+        <button
+          aria-label="Página anterior"
+          className="icon-action ghost"
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          type="button"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <strong>
+          {page}/{totalPages}
+        </strong>
+        <button
+          aria-label="Próxima página"
+          className="icon-action ghost"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          type="button"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </nav>
   );
 }
 

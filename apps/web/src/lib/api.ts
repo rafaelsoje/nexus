@@ -199,6 +199,8 @@ const apiMessageTranslations: Record<string, string> = {
     "É necessário manter ao menos um administrador owner ativo.",
   "Archived profiles cannot be reviewed":
     "Este perfil foi arquivado e não pode mais ser revisado.",
+  "Archived users cannot be reactivated":
+    "Contas arquivadas não podem ser reativadas.",
   "Invalid refresh token": "Sua sessão expirou. Entre novamente.",
   "Invalid or expired reset token": "Token inválido ou expirado.",
   "Company profile is required": "Complete o perfil da empresa para continuar.",
