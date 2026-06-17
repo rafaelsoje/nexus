@@ -187,6 +187,7 @@ export class AdminService {
 
   listCompanies() {
     return this.prisma.companyProfile.findMany({
+      where: { user: { isActive: true } },
       orderBy: { createdAt: "desc" },
       include: {
         user: { select: { id: true, name: true, email: true, isActive: true } },
@@ -198,6 +199,7 @@ export class AdminService {
 
   listFreelancers() {
     return this.prisma.freelancerProfile.findMany({
+      where: { user: { isActive: true } },
       orderBy: { createdAt: "desc" },
       include: {
         user: {
@@ -414,6 +416,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
+      await this.assertProfileIsActive(tx, "company", id);
       await this.assertVerificationRequirements(tx, "company", id, status);
       const updated = await tx.companyProfile.update({
         where: { id },
@@ -457,6 +460,7 @@ export class AdminService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       const rejectionMessage = this.prepareVerificationMessage(status, message);
+      await this.assertProfileIsActive(tx, "freelancer", id);
       await this.assertVerificationRequirements(tx, "freelancer", id, status);
       const updated = await tx.freelancerProfile.update({
         where: { id },
@@ -509,6 +513,35 @@ export class AdminService {
     }
 
     return trimmedMessage;
+  }
+
+  private async assertProfileIsActive(
+    tx: Prisma.TransactionClient,
+    profileType: "company" | "freelancer",
+    profileId: string,
+  ) {
+    const profile =
+      profileType === "company"
+        ? await tx.companyProfile.findUnique({
+            where: { id: profileId },
+            select: { user: { select: { isActive: true } } },
+          })
+        : await tx.freelancerProfile.findUnique({
+            where: { id: profileId },
+            select: { user: { select: { isActive: true } } },
+          });
+
+    if (!profile) {
+      throw new NotFoundException(
+        profileType === "company"
+          ? "Company profile not found"
+          : "Freelancer profile not found",
+      );
+    }
+
+    if (!profile.user.isActive) {
+      throw new BadRequestException("Archived profiles cannot be reviewed");
+    }
   }
 
   private async assertVerificationRequirements(

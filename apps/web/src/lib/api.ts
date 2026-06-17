@@ -197,6 +197,8 @@ const apiMessageTranslations: Record<string, string> = {
     "Você não pode desativar o seu próprio usuário administrador.",
   "At least one active owner admin is required":
     "É necessário manter ao menos um administrador owner ativo.",
+  "Archived profiles cannot be reviewed":
+    "Este perfil foi arquivado e não pode mais ser revisado.",
   "Invalid refresh token": "Sua sessão expirou. Entre novamente.",
   "Invalid or expired reset token": "Token inválido ou expirado.",
   "Company profile is required": "Complete o perfil da empresa para continuar.",

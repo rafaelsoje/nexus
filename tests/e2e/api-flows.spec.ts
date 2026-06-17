@@ -649,6 +649,22 @@ test.describe.serial("NEXO e2e API flows", () => {
     expect(anonymizedUser?.email).toContain("deleted-");
     expect(anonymizedUser?.name).toContain("Conta excluída");
 
+    const activeCompanies = await get<CompanyProfile[]>(
+      request,
+      admin,
+      "/api/admin/companies",
+    );
+    expect(activeCompanies.some((item) => item.id === profile.id)).toBeFalsy();
+
+    await expectStatus(
+      request,
+      admin,
+      "PATCH",
+      `/api/admin/companies/${profile.id}/verification`,
+      [400],
+      { status: "PENDING" },
+    );
+
     const anonymizedProfile = await prisma.companyProfile.findUnique({
       where: { id: profile.id },
       select: {
