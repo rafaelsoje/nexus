@@ -140,6 +140,8 @@ test.describe.serial("NEXO e2e API flows", () => {
       name: "E2E Contratacao Completa",
     });
 
+    await createFreelancerGatewayAccount(request, freelancer);
+
     await post(request, company, "/api/wallet/top-up", {
       amountCents: 200000,
       description: "Carga e2e contratacao completa",
